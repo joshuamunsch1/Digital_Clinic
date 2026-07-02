@@ -1,0 +1,69 @@
+// Linden Clinic — data model.
+// Provider is SQLite for zero-config local dev. To deploy on Postgres,
+// change `provider` to "postgresql" and set DATABASE_URL accordingly,
+// then run `npm run db:push`. JSON payloads are stored as TEXT (String)
+// so the schema is identical across SQLite and Postgres.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Therapists and the clinic director. Patients log in by their own id.
+model User {
+  id        String    @id @default(cuid())
+  name      String
+  title     String
+  role      String // "therapist" | "director"
+  patients  Patient[] @relation("TherapistPatients")
+  createdAt DateTime  @default(now())
+}
+
+model Patient {
+  id             String          @id @default(cuid())
+  name           String
+  color          String
+  status         String // "assessment" | "interview" | "therapy"
+  therapistId    String?
+  therapist      User?           @relation("TherapistPatients", fields: [therapistId], references: [id])
+  demographics   String          @default("{}") // JSON object
+  assessmentDate DateTime?
+  diagnosisText  String?
+  diagnosisDate  DateTime?
+  diagnosisBy    String?
+  entries        WellbeingEntry[]
+  dips           DipsSubmission?
+  createdAt      DateTime        @default(now())
+}
+
+model WellbeingEntry {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  session   Int
+  type      String // "baseline" | "session"
+  date      DateTime
+  scores    String // JSON object { mood, calm, sleep, energy, social, coping }
+  note      String   @default("")
+}
+
+/// One completed DIPS anxiety intake per patient, stored as the raw answers
+/// plus the serialized FHIR R4 QuestionnaireResponse and its delivery status.
+model DipsSubmission {
+  id               String   @id @default(cuid())
+  patientId        String   @unique
+  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  lang             String
+  completedAt      DateTime
+  answers          String // JSON (per-module answers)
+  fhir             String // JSON (FHIR QuestionnaireResponse)
+  submissionStatus String // "sent" | "local" | "sending"
+  httpStatus       Int?
+  endpoint         String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
