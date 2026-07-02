@@ -1,0 +1,406 @@
+{
+  "version": 1,
+  "generatedFrom": "Analysis of the PTPS clinic's Daten_SPSS folder (.sav data + .sps scoring syntax) and web research, 2026-07-02. See docs/legacy-system-reference.md for prose context and docs/target-data-model.md for how this maps onto the Instrument/Scale Prisma models.",
+  "howToReadThis": "itemSchemaStatus tells you how much you can trust an entry to seed directly: 'complete' = item list + every scale formula verified against the legacy .sps syntax, safe to seed as-is. 'partial' = scale list and rater/population/cadence verified, but the item-to-scale mapping and/or exact formula was not fully extracted (too many items, or the source syntax file didn't exist) -- item ids are illustrative placeholders, not verified. 'not_extracted' = only the instrument's identity/purpose is known; item and scale detail still needs to be sourced from the clinic or the instrument's published manual before this can drive real scoring. Do not silently treat 'partial'/'not_extracted' entries as verified in generated code -- surface the gap.",
+  "instruments": [
+    {
+      "id": "pstb_adult",
+      "name": "Berner Patienten- und Therapeutenstundenbogen 2000 (Patientenstundenbogen)",
+      "abbreviation": "PSTB",
+      "population": "adult",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "every_session",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "I1", "reverseScored": false},
+        {"id": "I2", "reverseScored": false},
+        {"id": "I3", "reverseScored": false},
+        {"id": "I4", "reverseScored": false},
+        {"id": "I5", "reverseScored": false},
+        {"id": "I6", "reverseScored": false},
+        {"id": "I7", "reverseScored": false},
+        {"id": "I8", "reverseScored": true},
+        {"id": "I9", "reverseScored": false},
+        {"id": "I10", "reverseScored": false},
+        {"id": "I11", "reverseScored": false},
+        {"id": "I12", "reverseScored": true},
+        {"id": "I13", "reverseScored": false},
+        {"id": "I14", "reverseScored": true},
+        {"id": "I15", "reverseScored": false},
+        {"id": "I16", "reverseScored": false},
+        {"id": "I17", "reverseScored": false},
+        {"id": "I18", "reverseScored": false},
+        {"id": "I19", "reverseScored": true},
+        {"id": "I20", "reverseScored": false},
+        {"id": "I21", "reverseScored": false},
+        {"id": "I22", "reverseScored": false}
+      ],
+      "scales": [
+        {"key": "Therapiebeziehung", "label": "Therapeutic relationship", "formula": {"type": "mean", "items": ["I1", "I7", "I9"]}},
+        {"key": "Selbstwerterfahrungen", "label": "Self-worth experiences", "formula": {"type": "mean", "items": ["I5", "I10", "I16"]}},
+        {"key": "Bewaeltigungserfahrungen", "label": "Coping experiences", "formula": {"type": "mean", "items": ["I11", "I13", "I18"]}},
+        {"key": "Klaerungserfahrungen", "label": "Clarification experiences", "formula": {"type": "mean", "items": ["I2", "I3", "I6"]}},
+        {"key": "Therapiefortschritte", "label": "Therapy progress", "formula": {"type": "mean", "items": ["I4"]}},
+        {"key": "Aufgehobensein", "label": "Sense of containment / being held", "formula": {"type": "mean", "items": ["I8", "I12", "I14", "I19"]}},
+        {"key": "Direktivitaet_Kontrollerfahrungen", "label": "Directiveness / control experiences", "formula": {"type": "mean", "items": ["I20", "I21", "I22"]}},
+        {"key": "Problemaktualisierung", "label": "Problem activation", "formula": {"type": "mean", "items": ["I15", "I17"]}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/Patientenstundenbogen/Patientenstundenbogen.sav + Syntax_PSTB.sps. Items I8/I12/I14/I19 are stored 'unrecoded' and reverse-scored before computing Aufgehobensein. Published reference: Flueckiger/Regli et al., 'Der Berner Patienten- und Therapeutenstundenbogen 2000', Zeitschrift fuer Klinische Psychologie und Psychotherapie 39(2)."
+    },
+    {
+      "id": "sbkj_child",
+      "name": "Kinderstundenbogen (SBKJ) -- child/adolescent analogue of PSTB",
+      "abbreviation": "SBKJ",
+      "population": "child_adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "every_session",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "I1_Beziehung", "reverseScored": false},
+        {"id": "I2_Selbstvertrauen", "reverseScored": false},
+        {"id": "I3_Problemloesen", "reverseScored": false},
+        {"id": "I4", "reverseScored": false},
+        {"id": "I5", "reverseScored": false},
+        {"id": "I6_Mitentscheiden", "reverseScored": false},
+        {"id": "I7_Eltern_helfen_mit", "reverseScored": false}
+      ],
+      "scales": [
+        {"key": "Therapiebeziehung", "label": "Therapeutic relationship", "formula": {"type": "mean", "items": ["I1_Beziehung", "I2_Selbstvertrauen"]}},
+        {"key": "Therapiebezogene_Selbstwirksamkeit", "label": "Therapy-related self-efficacy", "formula": {"type": "mean", "items": ["I3_Problemloesen", "I4", "I5", "I6_Mitentscheiden"]}},
+        {"key": "SBKJ_I7_Eltern_helfen_mit", "label": "Parents help out (single item)", "formula": {"type": "mean", "items": ["I7_Eltern_helfen_mit"]}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/Patientenstundenbogen/Kinderstundenbogen.sav + Syntax_SBKJ.sps. Item labels I4/I5 unnamed beyond number in source syntax -- confirm full item wording with clinic before building a patient-facing form."
+    },
+    {
+      "id": "bdi_fs",
+      "name": "Beck Depression Inventory -- Fast Screen",
+      "abbreviation": "BDI-FS",
+      "population": "adult",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {"note": "No fixed interval documented; administered repeatedly at clinical discretion"},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "BDI1_Traurigkeit", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI2_Pessimismus", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI3_Versagen", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI4_Freudeverlust", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI5_Selbstablehnung", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI6_Selbstkritik", "reverseScored": false, "scaleMax": 3},
+        {"id": "BDI7_Suizid", "reverseScored": false, "scaleMax": 3}
+      ],
+      "scales": [
+        {
+          "key": "BDI_FS_total",
+          "label": "BDI-FS total score",
+          "formula": {"type": "sum", "items": ["BDI1_Traurigkeit", "BDI2_Pessimismus", "BDI3_Versagen", "BDI4_Freudeverlust", "BDI5_Selbstablehnung", "BDI6_Selbstkritik", "BDI7_Suizid"], "missingTolerance": 1},
+          "normBands": [
+            {"min": 0, "max": 3, "label": "minimal"},
+            {"min": 4, "max": 6, "label": "mild"},
+            {"min": 7, "max": 9, "label": "moderate"},
+            {"min": 10, "max": 21, "label": "severe"}
+          ]
+        },
+        {"key": "BDI_FS_Suiziditem", "label": "Suicide item (safety flag)", "formula": {"type": "mean", "items": ["BDI7_Suizid"]}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/BDI_FS/BDI-FS.sav + Syntax_BDI-FS.sps. The suicide item (item 7) is tracked separately as a clinical safety flag in the legacy Excel export, in addition to contributing to the total."
+    },
+    {
+      "id": "dikj",
+      "name": "Depressionsinventar fuer Kinder und Jugendliche",
+      "abbreviation": "DIKJ",
+      "population": "child_adolescent_8_16",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": [{"id": "DIKJ1", "reverseScored": false}, "...29 items total, DIKJ1 through DIKJ29, plus a practice item (DIKJBeispiel) that is not scored"],
+      "scales": [
+        {"key": "Gesamtrohwert", "label": "DIKJ total raw score", "formula": {"type": "prorated_sum", "items": ["DIKJ1", "DIKJ2", "DIKJ3", "DIKJ4", "DIKJ5", "DIKJ6", "DIKJ7", "DIKJ8", "DIKJ9", "DIKJ10", "DIKJ11", "DIKJ12", "DIKJ13", "DIKJ14", "DIKJ15", "DIKJ16", "DIKJ17", "DIKJ18", "DIKJ19", "DIKJ20", "DIKJ21", "DIKJ22", "DIKJ23", "DIKJ24", "DIKJ25", "DIKJ26", "DIKJ27", "DIKJ28", "DIKJ29"], "totalItems": 29, "note": "raw sum scaled to sum/(29-n_missing)*29, then truncated (not rounded)"}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/DIKJ/DIKJ.sav + DIKJ_Syntax.sps. Published: Stiensmeier-Pelster, Schuermann & Duda, 3rd ed. 2014, Hogrefe. Item text is a licensed, copyrighted item bank -- do not reproduce; only the scoring formula is captured here."
+    },
+    {
+      "id": "sdq_self_11_17",
+      "name": "Strengths and Difficulties Questionnaire -- self-report",
+      "abbreviation": "SDQ",
+      "population": "adolescent_11_17",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "SDQ1", "reverseScored": false}, {"id": "SDQ2", "reverseScored": false}, {"id": "SDQ3", "reverseScored": false},
+        {"id": "SDQ4", "reverseScored": false}, {"id": "SDQ5", "reverseScored": false}, {"id": "SDQ6", "reverseScored": false},
+        {"id": "SDQ7", "reverseScored": true}, {"id": "SDQ8", "reverseScored": false}, {"id": "SDQ9", "reverseScored": false},
+        {"id": "SDQ10", "reverseScored": false}, {"id": "SDQ11", "reverseScored": true}, {"id": "SDQ12", "reverseScored": false},
+        {"id": "SDQ13", "reverseScored": false}, {"id": "SDQ14", "reverseScored": true}, {"id": "SDQ15", "reverseScored": false},
+        {"id": "SDQ16", "reverseScored": false}, {"id": "SDQ17", "reverseScored": false}, {"id": "SDQ18", "reverseScored": false},
+        {"id": "SDQ19", "reverseScored": false}, {"id": "SDQ20", "reverseScored": false}, {"id": "SDQ21", "reverseScored": true},
+        {"id": "SDQ22", "reverseScored": false}, {"id": "SDQ23", "reverseScored": false}, {"id": "SDQ24", "reverseScored": false},
+        {"id": "SDQ25", "reverseScored": true}
+      ],
+      "scales": [
+        {"key": "EmoProbl", "label": "Emotional problems", "formula": {"type": "sum", "items": ["SDQ3", "SDQ8", "SDQ13", "SDQ16", "SDQ24"]}},
+        {"key": "VerhProbl", "label": "Conduct problems", "formula": {"type": "sum", "items": ["SDQ5", "SDQ7", "SDQ12", "SDQ18", "SDQ22"]}},
+        {"key": "Hyperak", "label": "Hyperactivity/inattention", "formula": {"type": "sum", "items": ["SDQ2", "SDQ10", "SDQ15", "SDQ21", "SDQ25"]}},
+        {"key": "VerhProblGleich", "label": "Peer relationship problems", "formula": {"type": "sum", "items": ["SDQ6", "SDQ11", "SDQ14", "SDQ19", "SDQ23"]}},
+        {"key": "Prosoz", "label": "Prosocial behavior", "formula": {"type": "sum", "items": ["SDQ1", "SDQ4", "SDQ9", "SDQ17", "SDQ20"]}},
+        {"key": "GesProbl", "label": "Total Difficulties Score", "formula": {"type": "custom", "expression": "EmoProbl + VerhProbl + Hyperak + VerhProblGleich", "note": "sum of the four problem subscales, excludes Prosoz"}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_11_17_Selbstbeurteilung.sav + Syntax_SDQ.sps. Reverse-scored items 7/11/14/21/25 (raw 0-2 recoded to 2-0) before subscale sums. Parent-report variants (ages 2-4 and 4-17) use the same subscale/formula structure with a 'Bezug'/'Bezugsperson' rater field -- see sdq_parent_* entries below."
+    },
+    {
+      "id": "sdq_parent_4_17",
+      "name": "Strengths and Difficulties Questionnaire -- parent-report",
+      "abbreviation": "SDQ",
+      "population": "child_adolescent_4_17",
+      "raterRole": "parent",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": "identical structure to sdq_self_11_17 (25 items, same reverse-scored set)",
+      "scales": "identical formulas to sdq_self_11_17",
+      "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_4-17_Fremdbeurteilung.sav. Has a 'Bezug' column recording which relation is rating (mother/father/teacher)."
+    },
+    {
+      "id": "sdq_parent_2_4",
+      "name": "Strengths and Difficulties Questionnaire -- parent-report, early childhood",
+      "abbreviation": "SDQ",
+      "population": "child_2_4",
+      "raterRole": "parent",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": "identical structure to sdq_self_11_17",
+      "scales": "identical formulas to sdq_self_11_17",
+      "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_2-4_Fremdbeurteilung.sav. Also embedded as the sole instrument in the Standarddiagnostik 'Kleinkinder bis 5 Jahre' battery."
+    },
+    {
+      "id": "psc_short_self",
+      "name": "Pediatric Symptom Checklist (clinic 5-item short form) -- self-report",
+      "abbreviation": "PSC",
+      "population": "child",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "PSC1_Traurigkeit", "responseType": "categorical", "options": ["nie", "manchmal", "oft"], "valueMap": {"nie": 0, "manchmal": 1, "oft": 2}},
+        {"id": "PSC2", "responseType": "categorical", "options": ["nie", "manchmal", "oft"], "valueMap": {"nie": 0, "manchmal": 1, "oft": 2}},
+        {"id": "PSC3", "responseType": "categorical", "options": ["nie", "manchmal", "oft"], "valueMap": {"nie": 0, "manchmal": 1, "oft": 2}},
+        {"id": "PSC4", "responseType": "categorical", "options": ["nie", "manchmal", "oft"], "valueMap": {"nie": 0, "manchmal": 1, "oft": 2}},
+        {"id": "PSC5_Sorgen", "responseType": "categorical", "options": ["nie", "manchmal", "oft"], "valueMap": {"nie": 0, "manchmal": 1, "oft": 2}}
+      ],
+      "scales": [
+        {"key": "Gesamtscore", "label": "PSC total score", "formula": {"type": "sum", "items": ["PSC1_Traurigkeit", "PSC2", "PSC3", "PSC4", "PSC5_Sorgen"], "note": "sums the numeric-recoded (0/1/2) values"}}
+      ],
+      "sourceNotes": "IMPORTANT: this is NOT the standard published PSC-17 or PSC-35 -- it is a clinic-specific 5-item ultra-short screener. Legacy files: Daten_SPSS/Pediatric Symptom Checklist/*.sav (both currently 0 rows -- structurally defined but unused in the sampled export). Confirm with clinic whether this should be replaced with the standard PSC-17 in the new system."
+    },
+    {
+      "id": "fgg",
+      "name": "Fragebogen zu Gedanken und Gefuehlen",
+      "abbreviation": "FGG",
+      "population": "adult_adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {"note": "screening / therapy-planning tool for borderline-specific cognition"},
+      "itemSchemaStatus": "complete",
+      "items": [{"id": "GG1", "note": "37 items total, GG1-GG37, in the long form used by this clinic; a validated 14-item short form (FGG-14) also exists in the literature"}],
+      "scales": [
+        {"key": "GG_Mean", "label": "Overall mean", "formula": {"type": "mean", "items": ["GG1", "...GG37"]}},
+        {"key": "Index_WP1", "label": "Ambivalence index, pair 1", "formula": {"type": "custom", "expression": "(GG9 * GG25) / (abs(GG9 - GG25) + 1)"}},
+        {"key": "Index_WP2", "label": "Ambivalence index, pair 2", "formula": {"type": "custom", "expression": "(GG11 * GG29) / (abs(GG11 - GG29) + 1)"}},
+        {"key": "Index_WP3", "label": "Ambivalence index, pair 3", "formula": {"type": "custom", "expression": "(GG24 * GG27) / (abs(GG24 - GG27) + 1)"}},
+        {"key": "Index_WP4", "label": "Ambivalence index, pair 4", "formula": {"type": "custom", "expression": "(GG10 * GG36) / (abs(GG10 - GG36) + 1)"}},
+        {"key": "IWD", "label": "Index fuer widerspruchsvolles Denken (contradictory-thinking index)", "formula": {"type": "mean", "items": ["Index_WP1", "Index_WP2", "Index_WP3", "Index_WP4"]}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/FGG/FGG.sav + SyntaxFGG.sps. Published: Renneberg, Schmidt-Rathjens, Hippin, Backenstrass & Fydrich, 'Fragebogen zu Gedanken und Gefuehlen (FGG)', Zeitschrift fuer Klinische Psychologie und Psychotherapie 39(3), 2010."
+    },
+    {
+      "id": "edeq8",
+      "name": "Eating Disorder Examination Questionnaire, 8-item short form",
+      "abbreviation": "EDE-Q8",
+      "population": "adult_adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post", "postF"]},
+      "itemSchemaStatus": "complete",
+      "items": [
+        {"id": "EDEQ1", "reverseScored": false}, {"id": "EDEQ2", "reverseScored": false}, {"id": "EDEQ3", "reverseScored": false},
+        {"id": "EDEQ4", "reverseScored": false}, {"id": "EDEQ5", "reverseScored": false}, {"id": "EDEQ6", "reverseScored": false},
+        {"id": "EDEQ7", "reverseScored": false}, {"id": "EDEQ8", "reverseScored": false}
+      ],
+      "scales": [
+        {"key": "EDEQ_restrainteating", "label": "Restraint", "formula": {"type": "mean", "items": ["EDEQ1", "EDEQ2"]}},
+        {"key": "EDEQ_weightconcern", "label": "Weight concern", "formula": {"type": "mean", "items": ["EDEQ5", "EDEQ7"]}},
+        {"key": "EDEQ_shapeconcern", "label": "Shape concern", "formula": {"type": "mean", "items": ["EDEQ4", "EDEQ8"]}},
+        {"key": "EDEQ_eatingconcern", "label": "Eating concern", "formula": {"type": "mean", "items": ["EDEQ3", "EDEQ6"]}},
+        {"key": "EDEQ_total", "label": "Global score", "formula": {"type": "mean", "items": ["EDEQ_restrainteating", "EDEQ_weightconcern", "EDEQ_shapeconcern", "EDEQ_eatingconcern"]}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/WBQ und EDEQ-8/EDE-Q8.sav + Syntax_EDE-Q8.sps. Also embedded as the eating-disorder subscale within the adult/adolescent Standarddiagnostik and Essstoerungsdiagnostik batteries."
+    },
+    {
+      "id": "wbq",
+      "name": "Binge-eating episode and compensatory-behavior frequency questionnaire (WBQ)",
+      "abbreviation": "WBQ",
+      "population": "adult_adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post", "postF"]},
+      "itemSchemaStatus": "partial",
+      "items": [{"id": "WBQ1..WBQ14C_Andere", "note": "~14 raw items covering binge-episode counts and compensatory behaviors; exact item list not fully extracted"}],
+      "scales": [
+        {"key": "WBQ4A_Anzahl_Essanfaelle", "label": "Number of objective binge episodes", "formula": {"type": "custom", "note": "conditional pass-through/count logic, zeroed when WBQ2/WBQ3 = 0 -- exact rule found in Standarddiagnostik/Essstoerungsdiagnostik syntax, not fully transcribed"}},
+        {"key": "WBQ4B_Anzahl", "label": "Number of subjective binge episodes (variant)", "formula": {"type": "custom", "note": "see above"}},
+        {"key": "WBQ4C_Anzahl", "label": "Number of binge episodes (variant)", "formula": {"type": "custom", "note": "see above"}},
+        {"key": "WBQ13_Anzahl_Kompensation", "label": "Compensatory behavior frequency", "formula": {"type": "custom", "expression": "max of the compensatory-behavior-frequency items"}}
+      ],
+      "sourceNotes": "Legacy files: Daten_SPSS/WBQ und EDEQ-8/WBQ.sav + Syntax_WBQ.sps (simplified pass-through only), with the fuller conditional logic living in the Standarddiagnostik/Essstoerungsdiagnostik syntax files instead. Could NOT confirm this against a specific published/standardized instrument -- may be clinic-internal. Confirm source and exact scoring with the clinic before treating as authoritative."
+    },
+    {
+      "id": "conners3_self_short",
+      "name": "Conners 3 -- self-report, short form",
+      "abbreviation": "Conners 3",
+      "population": "adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "periodic",
+      "cadenceConfig": {"note": "diagnostic workup + periodic monitoring, e.g. around medication changes"},
+      "itemSchemaStatus": "partial",
+      "items": [{"id": "C3KS_I1..I61", "note": "61 raw columns, prefix C3KS_I*; full item-to-scale mapping not transcribed"}],
+      "scales": [
+        {"key": "Rohwert_UA", "label": "Inattention (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_HI", "label": "Hyperactivity/Impulsivity (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_LP", "label": "Learning Problems (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_AT", "label": "Aggressive/Defiant Behavior (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_FB", "label": "Family Relations (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_PE", "label": "Positive Impression (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}},
+        {"key": "Rohwert_NE", "label": "Negative Impression (raw)", "formula": {"type": "sum", "items": "not fully transcribed"}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/Conners3/Selbstbeurteilung (Kurzversion, C3KS_I* prefix, 61 cols). Long self-report form, parent long form (Fremdbeurteilung-Eltern, 250 cols) and teacher long form (Fremdbeurteilung-Lehrperson, 281 cols) exist as separate .sav files with additional scales: Inconsistency Index, Impairment ratings, Conners 3 Index (C3_AI), DSM-IV-TR scales (DSM_UA/HI/K/SV/OT), ICD-10 scales (ICD_AS/SV/HKSV). Full item-level detail needs sourcing from the Conners 3 manual (Christiane Conners, Hogrefe/MHS) -- treat as licensed content, do not attempt to reproduce items."
+    },
+    {
+      "id": "cbcl_parent",
+      "name": "Child Behavior Checklist (Achenbach)",
+      "abbreviation": "CBCL",
+      "population": "child_school_age",
+      "raterRole": "parent",
+      "instrumentType": "likert_battery",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post"]},
+      "itemSchemaStatus": "partial",
+      "items": [{"id": "CBCL_*", "note": "~120 items; full mapping not transcribed"}],
+      "scales": [
+        {"key": "CBCL_INT", "label": "Internalizing", "formula": {"type": "custom", "note": "aggregate of AD/RD/KB/SP syndrome scales -- exact formula not transcribed"}},
+        {"key": "CBCL_EXT", "label": "Externalizing", "formula": {"type": "custom", "note": "aggregate of DP/AP/RV/AV syndrome scales -- exact formula not transcribed"}},
+        {"key": "CBCL_GEMISCHT", "label": "Mixed", "formula": {"type": "custom", "note": "not transcribed"}},
+        {"key": "CBCL_TOT", "label": "Total problems", "formula": {"type": "custom", "note": "not transcribed"}}
+      ],
+      "sourceNotes": "Legacy file: Daten_SPSS/Standarddiagnostik/Unter_und_Mittelstufe_Eltern.sav. Published: Achenbach System of Empirically Based Assessment (ASEBA); German adaptation via Hogrefe/Arbeitsgruppe Deutsche Child Behavior Checklist. Licensed item bank, not reproduced here."
+    },
+    {
+      "id": "ysr_self",
+      "name": "Youth Self-Report (Achenbach) -- self-report analogue of CBCL",
+      "abbreviation": "YSR",
+      "population": "adolescent",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post", "postF"]},
+      "itemSchemaStatus": "not_extracted",
+      "items": "not transcribed -- embedded within the adolescent Standarddiagnostik/Essstoerungsdiagnostik batteries, same syndrome-scale structure as CBCL",
+      "scales": "same aggregate structure as CBCL (INT/EXT/GEMISCHT/TOT) plus activity/competence scales",
+      "sourceNotes": "Legacy files: Daten_SPSS/Standarddiagnostik/Adoleszenz.sav, Daten_SPSS/Essstoerungsdiagnostik/ES_Adoleszenz.sav (YSR* prefix). Same ASEBA family as CBCL."
+    },
+    {
+      "id": "scid5_spq",
+      "name": "SCID-5-SPQ -- DSM-5 personality-disorder screening questionnaire",
+      "abbreviation": "SCID-5-SPQ",
+      "population": "adult",
+      "raterRole": "self",
+      "instrumentType": "structured_interview",
+      "cadenceType": "intake_once",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "not_extracted",
+      "items": [{"id": "SPQ1..SPQ106", "note": "106 yes/no items, no scoring syntax found in legacy system -- items are reviewed individually to focus the follow-up SCID-5-PD structured interview, not summed into a norm-referenced score"}],
+      "scales": [],
+      "sourceNotes": "Legacy file: Daten_SPSS/SCID-5-SPQ/SCID-5-SPQ.sav, no matching .sps syntax exists. Recommend modeling as instrumentType 'structured_interview' (like the existing DIPS engine) rather than 'likert_battery', since there's no scale/trajectory to chart -- its purpose is a one-time screening checklist read by a clinician, not a repeated-measures outcome."
+    },
+    {
+      "id": "somatik",
+      "name": "Somatik battery: SOMS-7T (somatoform symptom screening) + TAS-20 (Toronto Alexithymia Scale)",
+      "abbreviation": "SOMS-7T / TAS-20",
+      "population": "adult",
+      "raterRole": "self",
+      "instrumentType": "likert_battery",
+      "cadenceType": "intake_once",
+      "cadenceConfig": {},
+      "itemSchemaStatus": "not_extracted",
+      "items": [{"id": "SOMS7T1...", "note": "132 SOMS-7T items + 20 TAS-20 items; no scoring syntax exists in the legacy system"}],
+      "scales": [],
+      "sourceNotes": "Legacy file: Daten_SPSS/Somatik/Somatik.sav, no matching .sps syntax. Scoring formulas need to come from the published SOMS and TAS-20 manuals, not from this codebase -- currently only raw items are stored by the clinic."
+    },
+    {
+      "id": "srs_caregiver",
+      "name": "Social Responsiveness Scale",
+      "abbreviation": "SRS",
+      "population": "child",
+      "raterRole": "caregiver",
+      "instrumentType": "likert_battery",
+      "cadenceType": "intake_once",
+      "cadenceConfig": {"note": "rarely used in this clinic -- handled entirely on paper (scanned PDF), not part of the digital pipeline at all"},
+      "itemSchemaStatus": "not_extracted",
+      "items": "not transcribed -- ~65 items, source is a scanned/OCR'd paper form, not an SPSS file",
+      "scales": [
+        {"key": "SB", "label": "Soziale Bewusstheit (Social Awareness)", "formula": {"type": "sum", "items": "not transcribed"}},
+        {"key": "SK", "label": "Soziale Kognition (Social Cognition)", "formula": {"type": "sum", "items": "not transcribed"}},
+        {"key": "SKO", "label": "Soziale Kommunikation (Social Communication)", "formula": {"type": "sum", "items": "not transcribed"}},
+        {"key": "SM", "label": "Soziale Motivation (Social Motivation)", "formula": {"type": "sum", "items": "not transcribed"}},
+        {"key": "AM", "label": "Autistische Manierismen (Restricted/Repetitive Behavior)", "formula": {"type": "sum", "items": "not transcribed"}}
+      ],
+      "sourceNotes": "Source: Western Psychological Services / Hogrefe German adaptation. Reported as T-values against reference norms, not raw sums, in the published manual -- the legacy clinic's paper forms include a norm-conversion table not captured here."
+    },
+    {
+      "id": "adult_composite_battery",
+      "name": "Standarddiagnostik / Essstoerungsdiagnostik -- adult composite battery",
+      "abbreviation": "n/a (a bundle, not a single instrument)",
+      "population": "adult",
+      "raterRole": "self",
+      "instrumentType": "composite",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post", "postF"]},
+      "itemSchemaStatus": "not_extracted",
+      "items": [],
+      "scales": [],
+      "sourceNotes": "Not a single instrument -- represents the bundle of BSI + BDI-FS + SIAS + PHQ-4 + IIP-64 + DERS + EDE-Q8 + IHS (+ full EDE/DEBQ/WBQ for the eating-disorder variant) administered together at each wave. Model this in the app as a 'battery' concept (a named group of Instrument ids due at the same wave) rather than its own Instrument row -- BSI/SIAS/PHQ-4/IIP-64/DERS/IHS component instruments still need their own catalog entries with item/scale detail sourced from their respective published manuals (Franke 2000 for BSI; Stangier/Heidenreich for SIAS-D; Loewe et al. for PHQ-4; Horowitz et al./German IIP-64; Ehring et al.\/Izadpanah et al. for German DERS; Forkmann et al. for the German INQ) before they can drive real scoring -- only their existence, rater, and cadence are confirmed here."
+    },
+    {
+      "id": "adolescent_composite_battery",
+      "name": "Standarddiagnostik -- adolescent composite battery",
+      "abbreviation": "n/a (a bundle, not a single instrument)",
+      "population": "adolescent",
+      "raterRole": "self",
+      "instrumentType": "composite",
+      "cadenceType": "wave",
+      "cadenceConfig": {"waves": ["pre", "zm", "post", "postF"]},
+      "itemSchemaStatus": "not_extracted",
+      "items": [],
+      "scales": [],
+      "sourceNotes": "Bundle of YSR + BDI-FS + SIAS + TAIK + PHQ-4 + FRKJ + FEEL-KJ + EDE-Q8. FRKJ (Lohaus & Nussbeck, FRKJ 8-16, Hogrefe) has 10 six-item subscales (Empathie, Selbstwirksamkeit, Selbstwertschaetzung, Kohaerenzsinn, Optimismus, Selbstkontrolle, elterliche Unterstuetzung, autoritative Erziehung, Peer-Integration, Schul-Integration) all scored as raw item sums, high = more resources. FEEL-KJ (ages 10-19) scores 15 emotion-specific strategy scales (adaptive: problem-oriented action, distraction, mood enhancement, acceptance, forgetting, reappraisal, cognitive problem-solving; maladaptive: giving up, aggressive behavior, withdrawal, self-deprecation, perseveration; plus expression, social support, emotion control) separately for anger/fear/sadness -- item-level detail for both not transcribed. TAIK (adolescent alcoholism inventory) could not be confirmed against a specific published source."
+    }
+  ]
+}
