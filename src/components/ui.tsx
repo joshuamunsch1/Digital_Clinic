@@ -1,9 +1,9 @@
 "use client";
 import React from "react";
 import { C } from "@/lib/theme";
-import { composite } from "@/lib/wellbeing";
 import { tr, T, LANGS, type Lang } from "@/lib/i18n";
 import type { Patient, PatientStatus } from "@/lib/types";
+import { checkinSeries, CHECKIN_PRIMARY_SCALE } from "@/lib/types";
 
 export function Card({ children, className = "", style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return <div className={`rounded-xl ${className}`} style={{ background: C.surface, border: `1px solid ${C.line}`, ...style }}>{children}</div>;
@@ -38,9 +38,9 @@ export function Stat({ label, value }: { label: string; value: React.ReactNode }
 }
 
 export function TrendArrow({ patient }: { patient: Patient }) {
-  const e = patient.entries;
-  if (e.length < 2) return <span style={{ color: C.muted }}>–</span>;
-  const d = composite(e[e.length - 1].scores) - composite(e[e.length - 2].scores);
+  const series = checkinSeries(patient).map((r) => r.scores[CHECKIN_PRIMARY_SCALE]).filter((v) => v !== undefined);
+  if (series.length < 2) return <span style={{ color: C.muted }}>–</span>;
+  const d = series[series.length - 1] - series[series.length - 2];
   if (d > 2) return <span style={{ color: C.spruce }}>▲</span>;
   if (d < -2) return <span style={{ color: C.danger }}>▼</span>;
   return <span style={{ color: C.muted }}>►</span>;
@@ -107,17 +107,6 @@ function ScaleButtons({ count, value, onChange, w = 30, h = 30 }: { count: numbe
 
 export const Sev03 = ({ value, onChange }: { value?: number; onChange: (v: number) => void }) => <ScaleButtons count={4} value={value} onChange={onChange} />;
 export const Scale08 = ({ value, onChange }: { value?: number; onChange: (v: number) => void }) => <ScaleButtons count={9} value={value} onChange={onChange} />;
-
-export function ScaleInput({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <ScaleButtons count={11} value={value ?? undefined} onChange={onChange} h={32} />
-      <div className="flex justify-between text-xs mt-1" style={{ color: C.muted, maxWidth: 350 }}>
-        <span>0 · not at all</span><span>10 · very much</span>
-      </div>
-    </div>
-  );
-}
 
 export function LeafMark({ size = 34 }: { size?: number }) {
   return (

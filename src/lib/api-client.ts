@@ -9,7 +9,7 @@ import type {
   SessionUser,
   LoginRoster,
 } from "./types";
-import type { Scores } from "./wellbeing";
+import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -29,6 +29,34 @@ const post = (url: string, body?: unknown) =>
 const patch = (url: string, body: unknown) =>
   fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+export interface SubmitResponsePayload {
+  instrumentId: string;
+  rawAnswers: RawAnswers;
+  respondentRole?: string;
+  sessionNumber?: number | null;
+  wave?: string | null;
+  occurredAt?: string;
+  note?: string;
+}
+
+export interface ImportCsvPayload {
+  instrumentId: string;
+  csv: string;
+  respondentRole?: string;
+  wave?: string | null;
+  sessionNumber?: number | null;
+  occurredAt?: string;
+}
+
+export interface CreateInvitationPayload {
+  instrumentId: string;
+  respondentRole?: string;
+  email?: string;
+  wave?: string;
+  sessionNumber?: number;
+  surveyId?: string;
+}
+
 export const api = {
   getSession: () => fetch("/api/auth").then((r) => handle<{ user: SessionUser | null }>(r)),
   getRoster: () => fetch("/api/roster").then((r) => handle<LoginRoster>(r)),
@@ -39,6 +67,10 @@ export const api = {
   getPatient: (id: string) => fetch(`/api/patients/${id}`).then((r) => handle<{ patient: Patient }>(r)),
   registerPatient: (name: string) => post("/api/patients", { name }).then((r) => handle<{ patient: Patient }>(r)),
 
+  getInstruments: () => fetch("/api/instruments").then((r) => handle<{ instruments: InstrumentDef[] }>(r)),
+  linkInstrumentSurvey: (id: string, limesurveySurveyId: string | null) =>
+    patch(`/api/instruments/${id}`, { limesurveySurveyId }).then((r) => handle<{ instrument: InstrumentDef }>(r)),
+
   submitAssessment: (
     id: string,
     demo: Demographics,
@@ -48,11 +80,32 @@ export const api = {
   resendDips: (id: string) =>
     fetch(`/api/patients/${id}/assessment`, { method: "PUT" }).then((r) => handle<{ patient: Patient }>(r)),
 
-  submitWellbeing: (id: string, scores: Scores, note: string) =>
-    post(`/api/patients/${id}/wellbeing`, { scores, note }).then((r) => handle<{ patient: Patient }>(r)),
+  submitResponse: (id: string, payload: SubmitResponsePayload) =>
+    post(`/api/patients/${id}/responses`, payload).then((r) =>
+      handle<{ patient: Patient; skippedScales: { key: string; reason: string }[] }>(r),
+    ),
+
+  importCsv: (id: string, payload: ImportCsvPayload) =>
+    post(`/api/patients/${id}/import`, payload).then((r) =>
+      handle<{ patient: Patient; imported: number; warnings: string[] }>(r),
+    ),
+
+  createInvitation: (id: string, payload: CreateInvitationPayload) =>
+    post(`/api/patients/${id}/invitations`, payload).then((r) => handle<{ patient: Patient }>(r)),
+
+  remindInvitation: (invitationId: string) =>
+    patch(`/api/invitations/${invitationId}`, { action: "remind" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  syncLimesurvey: (patientId?: string) =>
+    post("/api/limesurvey/sync", patientId ? { patientId } : {}).then((r) =>
+      handle<{ checked: number; imported: number; pending: number; errors: string[] }>(r),
+    ),
 
   saveDiagnosis: (id: string, text: string) =>
     patch(`/api/patients/${id}`, { action: "diagnose", text }).then((r) => handle<{ patient: Patient }>(r)),
+
+  savePatientEmail: (id: string, email: string) =>
+    patch(`/api/patients/${id}`, { action: "contact", email }).then((r) => handle<{ patient: Patient }>(r)),
 
   assignTherapist: (id: string, therapistId: string | null) =>
     patch(`/api/patients/${id}`, { action: "assign", therapistId }).then((r) => handle<{ patient: Patient }>(r)),

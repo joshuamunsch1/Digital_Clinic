@@ -2,19 +2,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { C } from "@/lib/theme";
 import { api } from "@/lib/api-client";
-import type { ClinicData, Patient, Role, SessionUser, LoginRoster  } from "@/lib/types";
+import type { ClinicData, Patient, Role, SessionUser, LoginRoster } from "@/lib/types";
 import { GhostButton, LeafMark } from "./ui";
 import { Login } from "./Login";
-import { PatientHome } from "./PatientHome";
+import { PatientHome, type PatientTask } from "./PatientHome";
 import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
-import { WellbeingForm } from "./WellbeingForm";
+import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { PatientDetail } from "./PatientDetail";
 
 type View =
   | { name: "home" }
   | { name: "form-assessment" }
-  | { name: "form-wellbeing" }
+  | { name: "form-instrument"; instrumentId: string }
   | { name: "patient-detail"; patientId: string };
 
 export function AppShell() {
@@ -100,10 +100,10 @@ export function AppShell() {
     }
   };
 
-  const submitWellbeing = async (patientId: string, scores: Parameters<typeof api.submitWellbeing>[1], note: string) => {
+  const submitResponse = async (patientId: string, payload: Parameters<typeof api.submitResponse>[1]) => {
     setBusy(true);
     try {
-      await api.submitWellbeing(patientId, scores, note);
+      await api.submitResponse(patientId, payload);
       await refresh();
       setJustSubmitted(true);
       setView({ name: "home" });
@@ -112,6 +112,14 @@ export function AppShell() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /// Merge a fresh patient payload returned by an API call into clinic state
+  /// (used by the patient-detail panels), then refresh in the background so
+  /// instrument metadata stays current too.
+  const patientUpdated = (p: Patient) => {
+    setData((prev) => (prev ? { ...prev, patients: prev.patients.map((x) => (x.id === p.id ? p : x)) } : prev));
+    void refresh();
   };
 
   const saveDiagnosis = async (id: string, text: string) => { await api.saveDiagnosis(id, text); await refresh(); };
@@ -134,6 +142,14 @@ export function AppShell() {
   const detailPatient = view.name === "patient-detail" ? data?.patients.find((p) => p.id === view.patientId) ?? null : null;
   const roleLabel = { patient: "Patient", therapist: "Therapist", director: "Clinic director" }[user.role];
   const therapists = data?.therapists ?? [];
+  const instruments = data?.instruments ?? [];
+  const formInstrument =
+    view.name === "form-instrument" ? instruments.find((i) => i.id === view.instrumentId) ?? null : null;
+
+  const startPatientTask = (t: PatientTask) => {
+    setJustSubmitted(false);
+    setView(t.kind === "assessment" ? { name: "form-assessment" } : { name: "form-instrument", instrumentId: t.instrumentId });
+  };
 
   return (
     <div className="min-h-screen" style={{ background: C.bg, color: C.ink }}>
@@ -159,20 +175,25 @@ export function AppShell() {
         {data == null && <p className="text-sm text-center" style={{ color: C.muted }}>Loading…</p>}
 
         {user.role === "patient" && currentPatient && view.name === "home" && (
-          <PatientHome patient={currentPatient} therapist={therapists.find((t) => t.id === currentPatient.therapistId)} justSubmitted={justSubmitted} onStartForm={(f) => { setJustSubmitted(false); setView({ name: `form-${f}` as View["name"] } as View); }} />
+          <PatientHome patient={currentPatient} therapist={therapists.find((t) => t.id === currentPatient.therapistId)} instruments={instruments} justSubmitted={justSubmitted} onStartTask={startPatientTask} />
         )}
         {user.role === "patient" && currentPatient && view.name === "form-assessment" && (
           <AssessmentForm onCancel={() => setView({ name: "home" })} onSubmit={(payload) => submitAssessment(currentPatient.id, payload)} />
         )}
-        {user.role === "patient" && currentPatient && view.name === "form-wellbeing" && (
-          <WellbeingForm patient={currentPatient} onCancel={() => setView({ name: "home" })} onSubmit={({ scores, note }) => submitWellbeing(currentPatient.id, scores, note)} />
+        {user.role === "patient" && currentPatient && formInstrument && (
+          <InstrumentForm
+            instrument={formInstrument}
+            busy={busy}
+            onCancel={() => setView({ name: "home" })}
+            onSubmit={(payload) => submitResponse(currentPatient.id, payload)}
+          />
         )}
 
         {(user.role === "therapist" || user.role === "director") && data && view.name === "home" && (
           <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient} />
         )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
-          <PatientDetail patient={detailPatient} user={user} therapists={therapists} onBack={() => setView({ name: "home" })} onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} />
+          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments} onBack={() => setView({ name: "home" })} onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">

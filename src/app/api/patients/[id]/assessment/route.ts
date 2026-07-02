@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { patientFromRow } from "@/lib/serialize";
+import { PATIENT_INCLUDE, patientFromRow, type DipsMeta } from "@/lib/serialize";
+import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { toFHIR } from "@/lib/dips/fhir";
 import { endpointLabel, relay } from "@/lib/server-dips";
-import type { Demographics, DipsAnswers } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, type Demographics, type DipsAnswers } from "@/lib/types";
 import type { Lang } from "@/lib/i18n";
 
-// Submit a completed intake: store demographics, build + persist the FHIR
-// QuestionnaireResponse, optionally relay it, advance status to "interview".
+// Submit a completed intake: store demographics, persist the interview as a
+// ResponseInstance of the DIPS instrument (FHIR QuestionnaireResponse in meta),
+// optionally relay it, advance status to "interview".
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -20,33 +22,35 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  const inst = await loadInstrument(DIPS_INSTRUMENT_ID);
+  if (!inst) return NextResponse.json({ error: "DIPS instrument is not seeded" }, { status: 500 });
+
   const fhir = toFHIR(
     { id: patient.id, name: patient.name, demographics: demo },
     { answers: dips.answers, lang: dips.lang, completedAt: dips.completedAt },
   );
   const r = await relay(fhir);
-
-  const dipsData = {
+  const meta: DipsMeta = {
     lang: dips.lang,
-    completedAt: new Date(dips.completedAt),
-    answers: JSON.stringify(dips.answers),
-    fhir: JSON.stringify(fhir),
-    submissionStatus: r.status,
-    httpStatus: r.httpStatus ?? null,
-    endpoint: endpointLabel(),
+    fhir,
+    submission: { status: r.status, endpoint: endpointLabel(), httpStatus: r.httpStatus, at: dips.completedAt },
   };
 
+  // intake_once: replace any previous intake rather than accumulating
+  await prisma.responseInstance.deleteMany({ where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID } });
+  await createResponse(inst, {
+    patientId: params.id,
+    respondentRole: "self",
+    rawAnswers: dips.answers,
+    occurredAt: new Date(dips.completedAt),
+    meta: meta as unknown as Record<string, unknown>,
+  });
   await prisma.patient.update({
     where: { id: params.id },
-    data: {
-      demographics: JSON.stringify(demo),
-      assessmentDate: new Date(),
-      status: "interview",
-      dips: { upsert: { create: dipsData, update: dipsData } },
-    },
+    data: { demographics: JSON.stringify(demo), assessmentDate: new Date(), status: "interview" },
   });
 
-  const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: { entries: true, dips: true } });
+  const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   return NextResponse.json({ patient: patientFromRow(updated!) });
 }
 
@@ -54,13 +58,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 export async function PUT(_req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const sub = await prisma.dipsSubmission.findUnique({ where: { patientId: params.id } });
-  if (!sub) return NextResponse.json({ error: "no submission" }, { status: 404 });
-  const r = await relay(JSON.parse(sub.fhir));
-  await prisma.dipsSubmission.update({
-    where: { patientId: params.id },
-    data: { submissionStatus: r.status, httpStatus: r.httpStatus ?? null },
+  const row = await prisma.responseInstance.findFirst({
+    where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID },
   });
-  const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: { entries: true, dips: true } });
+  if (!row) return NextResponse.json({ error: "no submission" }, { status: 404 });
+  const meta = JSON.parse(row.meta) as DipsMeta;
+  if (!meta.fhir) return NextResponse.json({ error: "no stored FHIR payload" }, { status: 400 });
+  const r = await relay(meta.fhir as Parameters<typeof relay>[0]);
+  meta.submission = {
+    status: r.status,
+    endpoint: endpointLabel(),
+    httpStatus: r.httpStatus,
+    at: meta.submission?.at,
+  };
+  await prisma.responseInstance.update({ where: { id: row.id }, data: { meta: JSON.stringify(meta) } });
+  const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   return NextResponse.json({ patient: patientFromRow(updated!) });
 }

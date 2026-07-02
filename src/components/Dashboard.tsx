@@ -1,8 +1,8 @@
 "use client";
 import React, { useState } from "react";
 import { C } from "@/lib/theme";
-import { composite } from "@/lib/wellbeing";
 import type { ClinicData, SessionUser } from "@/lib/types";
+import { latestCheckinIndex } from "@/lib/types";
 import { Card, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow } from "./ui";
 import { GlobalChart } from "./charts";
 
@@ -16,9 +16,8 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
   const patients = isDirector ? data.patients : data.patients.filter((p) => p.therapistId === user.id);
   const inTherapy = patients.filter((p) => p.status === "therapy");
   const awaiting = patients.filter((p) => p.status === "interview");
-  const avgIdx = inTherapy.length
-    ? Math.round(inTherapy.reduce((s, p) => s + composite(p.entries[p.entries.length - 1].scores), 0) / inTherapy.length)
-    : "—";
+  const withIdx = inTherapy.map(latestCheckinIndex).filter((v): v is number => v !== null);
+  const avgIdx = withIdx.length ? Math.round(withIdx.reduce((s, v) => s + v, 0) / withIdx.length) : "—";
   const [newName, setNewName] = useState("");
   return (
     <div className="max-w-5xl mx-auto">
@@ -39,7 +38,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
           {patients.length === 0 && <p className="text-sm" style={{ color: C.muted }}>No patients assigned to you yet.</p>}
           {patients.map((p) => {
             const t = data.therapists.find((x) => x.id === p.therapistId);
-            const last = p.entries[p.entries.length - 1];
+            const last = latestCheckinIndex(p);
             return (
               <button key={p.id} type="button" onClick={() => onOpenPatient(p.id)} className="w-full text-left rounded-lg px-3 py-3 flex items-center gap-3 flex-wrap" style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, cursor: "pointer" }}>
                 <span className="rounded-full shrink-0" style={{ width: 11, height: 11, background: p.color }} />
@@ -47,7 +46,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
                 <StatusBadge status={p.status} />
                 <span className="text-xs" style={{ color: C.muted }}>{isDirector ? (t ? t.name : "Unassigned") : ""}{!t && isDirector && <strong style={{ color: C.amber }}> ← assign</strong>}</span>
                 <span className="ml-auto text-sm font-bold flex items-center gap-1" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-                  {last ? <>{composite(last.scores)} <TrendArrow patient={p} /></> : <span style={{ color: C.muted }}>—</span>}
+                  {last !== null ? <>{last} <TrendArrow patient={p} /></> : <span style={{ color: C.muted }}>—</span>}
                 </span>
               </button>
             );

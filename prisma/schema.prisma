@@ -3,6 +3,10 @@
 // change `provider` to "postgresql" and set DATABASE_URL accordingly,
 // then run `npm run db:push`. JSON payloads are stored as TEXT (String)
 // so the schema is identical across SQLite and Postgres.
+//
+// Generic instrument engine (see docs/target-data-model.md): a questionnaire
+// is data (Instrument + Scale rows), a filled-out questionnaire is a
+// ResponseInstance, and its computed scores are ScaleScore rows.
 
 datasource db {
   provider = "sqlite"
@@ -24,46 +28,122 @@ model User {
 }
 
 model Patient {
-  id             String          @id @default(cuid())
+  id             String             @id @default(cuid())
   name           String
+  email          String? // used for LimeSurvey invitations
   color          String
   status         String // "assessment" | "interview" | "therapy"
   therapistId    String?
-  therapist      User?           @relation("TherapistPatients", fields: [therapistId], references: [id])
-  demographics   String          @default("{}") // JSON object
+  therapist      User?              @relation("TherapistPatients", fields: [therapistId], references: [id])
+  demographics   String             @default("{}") // JSON object
   assessmentDate DateTime?
   diagnosisText  String?
   diagnosisDate  DateTime?
   diagnosisBy    String?
-  entries        WellbeingEntry[]
-  dips           DipsSubmission?
-  createdAt      DateTime        @default(now())
+  responses      ResponseInstance[]
+  invitations    QuestionnaireInvitation[]
+  createdAt      DateTime           @default(now())
 }
 
-model WellbeingEntry {
-  id        String   @id @default(cuid())
-  patientId String
-  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  session   Int
-  type      String // "baseline" | "session"
-  date      DateTime
-  scores    String // JSON object { mood, calm, sleep, energy, social, coping }
-  note      String   @default("")
+/// A questionnaire definition: items, scales, scoring, rater, cadence.
+/// One row per instrument (and per rater variant), e.g. "bdi_fs", "sdq_parent_4_17".
+/// definitionStatus mirrors itemSchemaStatus in docs/instrument-catalog.json:
+/// only "complete" instruments can be rendered as forms and scored — "partial" /
+/// "not_extracted" rows exist so the catalog is visible in the app, with the gap
+/// surfaced instead of silently guessed at.
+model Instrument {
+  id                 String             @id // stable slug, e.g. "bdi_fs"
+  name               String
+  abbreviation       String
+  population         String // "adult" | "adolescent_11_17" | "child_2_4" | ...
+  raterRole          String // default rater: "self" | "parent" | "teacher" | "caregiver" | "clinician"
+  instrumentType     String // "likert_battery" | "structured_interview"
+  cadenceType        String // "every_session" | "wave" | "periodic" | "intake_once"
+  cadenceConfig      String             @default("{}") // JSON, e.g. {"waves":["pre","zm","post","postF"]}
+  definitionStatus   String             @default("complete") // "complete" | "partial" | "not_extracted"
+  itemSchema         String             @default("[]") // JSON: ItemDef[] (see src/lib/instruments/types.ts)
+  sourceNotes        String             @default("")
+  limesurveySurveyId String? // LimeSurvey survey id for this instrument, once linked
+  limesurveyMapping  String             @default("{}") // JSON { lsQuestionCode: itemId } when LS codes differ from item ids
+  scales             Scale[]
+  responses          ResponseInstance[]
+  invitations        QuestionnaireInvitation[]
+  createdAt          DateTime           @default(now())
 }
 
-/// One completed DIPS anxiety intake per patient, stored as the raw answers
-/// plus the serialized FHIR R4 QuestionnaireResponse and its delivery status.
-model DipsSubmission {
-  id               String   @id @default(cuid())
-  patientId        String   @unique
-  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  lang             String
-  completedAt      DateTime
-  answers          String // JSON (per-module answers)
-  fhir             String // JSON (FHIR QuestionnaireResponse)
-  submissionStatus String // "sent" | "local" | "sending"
-  httpStatus       Int?
-  endpoint         String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+/// One computed sub-score for an instrument (e.g. BDI_FS_total, or PSTB's
+/// Therapiebeziehung). formula is interpreted by the scoring engine, not by Prisma.
+model Scale {
+  id           String       @id @default(cuid())
+  instrumentId String
+  instrument   Instrument   @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  key          String // "BDI_FS_total"
+  label        String
+  formula      String // JSON FormulaDef: { type: "sum"|"mean"|"prorated_sum"|"custom", items, missingTolerance?, expression? }
+  normBands    String? // JSON: [{ min, max, label }] — reference bands on charts
+  range        String? // JSON: { min, max } — theoretical score range (chart y-axis)
+  sortOrder    Int          @default(0) // evaluation + display order (later scales may reference earlier keys)
+  scores       ScaleScore[]
+
+  @@unique([instrumentId, key])
+}
+
+/// One filled-out questionnaire: a patient, an instrument, an occasion, a rater.
+model ResponseInstance {
+  id             String       @id @default(cuid())
+  patientId      String
+  patient        Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  instrumentId   String
+  instrument     Instrument   @relation(fields: [instrumentId], references: [id])
+  respondentRole String // "self" | "mother" | "father" | "parent" | "teacher" | ...
+  sessionNumber  Int? // set when instrument.cadenceType == "every_session" (0 = baseline)
+  wave           String? // "pre" | "zm" | "post" | "postF", when cadenceType == "wave"
+  occurredAt     DateTime
+  rawAnswers     String // JSON: { itemId: value }
+  status         String       @default("complete") // "complete" | "partial"
+  source         String       @default("in_app") // "in_app" | "limesurvey" | "csv_import" | "manual_entry" | "seed"
+  note           String       @default("") // free-text note from the respondent (check-in comment)
+  meta           String       @default("{}") // JSON extras (e.g. DIPS: lang, fhir payload, relay status)
+  scaleScores    ScaleScore[]
+  createdAt      DateTime     @default(now())
+
+  @@index([patientId, instrumentId])
+}
+
+/// Denormalized computed score per (response, scale) — what trajectory charts and
+/// tables query directly, so they never re-run the formula.
+model ScaleScore {
+  id                 String           @id @default(cuid())
+  responseInstanceId String
+  responseInstance   ResponseInstance @relation(fields: [responseInstanceId], references: [id], onDelete: Cascade)
+  scaleId            String
+  scale              Scale            @relation(fields: [scaleId], references: [id])
+  value              Float
+
+  @@unique([responseInstanceId, scaleId])
+}
+
+/// A tracked "please fill this out" link sent (or to be sent) to a respondent via
+/// LimeSurvey. See docs/limesurvey-integration.md.
+model QuestionnaireInvitation {
+  id             String     @id @default(cuid())
+  patientId      String
+  patient        Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  instrumentId   String
+  instrument     Instrument @relation(fields: [instrumentId], references: [id])
+  respondentRole String     @default("self")
+  email          String
+  surveyId       String? // LimeSurvey survey id used
+  token          String? // LimeSurvey participant token
+  tokenId        String? // LimeSurvey participant tid (needed for invite/remind calls)
+  url            String? // direct tokenised survey URL
+  status         String     @default("created") // "created" | "invited" | "reminded" | "completed" | "error"
+  context        String     @default("{}") // JSON { wave?, sessionNumber? } applied when the response is imported
+  sentAt         DateTime?
+  remindedAt     DateTime?
+  completedAt    DateTime?
+  responseId     String? // ResponseInstance id once imported
+  lastError      String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
