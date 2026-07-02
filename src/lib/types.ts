@@ -2,9 +2,19 @@
 import type { Lang } from "./i18n";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
-export type Role = "patient" | "therapist" | "director";
+export type Role = "patient" | "therapist" | "director" | "admin";
 export type PatientStatus = "assessment" | "interview" | "therapy";
 export type SubmissionStatus = "sent" | "local" | "sending";
+
+export const DISORDER_CATEGORIES = [
+  "anxiety",
+  "depression",
+  "eating_disorder",
+  "adhd",
+  "burnout",
+  "other",
+] as const;
+export type DisorderCategory = (typeof DISORDER_CATEGORIES)[number];
 
 export interface SessionUser {
   role: Role;
@@ -96,6 +106,7 @@ export interface Patient {
   email: string | null;
   color: string;
   status: PatientStatus;
+  disorderCategory: string | null;
   therapistId: string | null;
   demographics: Demographics;
   responses: ResponseRecord[];
@@ -113,34 +124,68 @@ export interface ClinicData {
   instruments: InstrumentDef[];
 }
 
-export interface RosterPatient { id: string; name: string; status: PatientStatus; }
-export interface RosterUser { id: string; name: string; title: string; }
-export interface LoginRoster {
-  patients: RosterPatient[];
-  therapists: RosterUser[];
-  directors: RosterUser[];
-}
-
 // --- shared helpers over the generic model ------------------------------------
 
 export const DIPS_INSTRUMENT_ID = "dips_anxiety_intake";
-export const CHECKIN_INSTRUMENT_ID = "wellbeing_checkin";
-export const CHECKIN_PRIMARY_SCALE = "wellbeing_index";
+/// The every-session process measure (Berner Patientenstundenbogen) and its
+/// headline scale for dashboards. Scores run −3..+3.
+export const SESSION_INSTRUMENT_ID = "pstb_adult";
+export const SESSION_PRIMARY_SCALE = "Therapiefortschritte";
 
 export function responsesFor(patient: Patient, instrumentId: string): ResponseRecord[] {
   return patient.responses.filter((r) => r.instrumentId === instrumentId);
 }
 
-/// The patient's session check-in trajectory (the dashboard's primary metric).
-export function checkinSeries(patient: Patient): ResponseRecord[] {
-  return responsesFor(patient, CHECKIN_INSTRUMENT_ID)
+/// The patient's session-questionnaire trajectory (the dashboard's primary metric).
+export function sessionSeries(patient: Patient): ResponseRecord[] {
+  return responsesFor(patient, SESSION_INSTRUMENT_ID)
     .filter((r) => r.sessionNumber !== null)
     .sort((a, b) => (a.sessionNumber ?? 0) - (b.sessionNumber ?? 0));
 }
 
-export function latestCheckinIndex(patient: Patient): number | null {
-  const series = checkinSeries(patient);
+export function latestSessionScore(patient: Patient): number | null {
+  const series = sessionSeries(patient);
   const last = series[series.length - 1];
-  const v = last?.scores[CHECKIN_PRIMARY_SCALE];
-  return typeof v === "number" ? Math.round(v) : null;
+  const v = last?.scores[SESSION_PRIMARY_SCALE];
+  return typeof v === "number" ? v : null;
+}
+
+export const fmtScore = (v: number) => (Math.round(v * 10) / 10).toString();
+
+/// A clinical safety alert raised by a scale's `alert` rule on the patient's
+/// LATEST response of that instrument (e.g. BDI-FS suicide item >= 1).
+export interface ActiveAlert {
+  instrumentId: string;
+  instrumentAbbr: string;
+  scaleKey: string;
+  scaleLabel: string;
+  value: number;
+  occurredAt: string;
+  message: string;
+}
+
+export function activeAlerts(patient: Patient, instruments: InstrumentDef[]): ActiveAlert[] {
+  const alerts: ActiveAlert[] = [];
+  for (const inst of instruments) {
+    const flagged = inst.scales.filter((s) => s.alert);
+    if (!flagged.length) continue;
+    const responses = responsesFor(patient, inst.id);
+    if (!responses.length) continue;
+    const latest = responses[responses.length - 1]; // patient.responses is occurredAt-sorted
+    for (const s of flagged) {
+      const v = latest.scores[s.key];
+      if (typeof v === "number" && v >= s.alert!.gte) {
+        alerts.push({
+          instrumentId: inst.id,
+          instrumentAbbr: inst.abbreviation,
+          scaleKey: s.key,
+          scaleLabel: s.label,
+          value: v,
+          occurredAt: latest.occurredAt,
+          message: s.alert!.message,
+        });
+      }
+    }
+  }
+  return alerts;
 }

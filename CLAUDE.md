@@ -20,9 +20,21 @@ patient's scores plotted over time ("trajectories") per questionnaire.
 trajectory charts/score tables (`src/components/charts.tsx`), and a LimeSurvey
 RemoteControl-2 integration with invitation/reminder tracking, completion sync and a
 manual CSV-import fallback (`src/lib/limesurvey.ts`, `docs/limesurvey-integration.md`).
-The old hard-coded `WellbeingEntry`/`DipsSubmission` tables are gone (hard cutover; the
-6-dim wellbeing check-in survives as the seeded `wellbeing_checkin` instrument, and DIPS
+The old hard-coded `WellbeingEntry`/`DipsSubmission` tables are gone (hard cutover; DIPS
 intakes are `ResponseInstance` rows with the FHIR payload in `meta`).
+
+**Batch 2 (same day)**: real e-mail+password auth (scrypt + HMAC-signed sessions,
+`src/lib/password.ts`/`auth.ts`) with public patient self-registration; an `admin` role
+(assignment only — `patientLiteFromRow` strips clinical data); disorder-category
+filtering; a director scores matrix + per-patient `SummaryStrip`; data-driven scale
+`alert` (BDI-FS suicide item) and `rci` reliable-change markers
+(`src/lib/instruments/rci.ts` — BDI/SDQ rci values are PLACEHOLDERS, flagged in notes);
+DE (default)/FR/EN UI via `UI` dict in `i18n.ts` + `LangContext.tsx`; staff-only network
+gate (`src/lib/network.ts`, `ALLOWED_NETWORK_CIDRS`). The session measure is now the
+real **PSTB** — 22 German items (clinic-provided BSTB-PT.pdf), verified −3..+3 scale,
+reverse items I8/I12/I14/I19 (the PDF's "items 10/11 umgepolt" note refers to the
+therapist form); `wellbeing_checkin` was removed. Validated instrument wording stays
+German in all UI languages.
 
 ## Reference documents
 

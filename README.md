@@ -34,15 +34,49 @@ npm run db:seed             # instrument catalog + fictional demo patients
 npm run dev                 # http://localhost:3000
 ```
 
-Open http://localhost:3000 and pick a role to sign in (mock):
+Open http://localhost:3000 and sign in with e-mail + password (all seeded
+demo accounts, also listed behind "Show demo accounts" on the login page):
 
-- **Patient** — e.g. *Nina Graf* (new → intake) or *Mara Vogel* (in therapy → check-ins)
-- **Therapist** — e.g. *Dr. Anna Keller* (sees their caseload)
-- **Clinic director** — *Dr. Margrit Steiner* (all patients, assignment, registration)
+| Role | E-mail | Password |
+| --- | --- | --- |
+| Clinic director | `margrit.steiner@linden-clinic.ch` | `director2026` |
+| Administrator | `kurt.iseli@linden-clinic.ch` | `admin2026` |
+| Therapists | `anna.keller@` / `lukas.brunner@` / `sofia.ricci@linden-clinic.ch` | `therapist2026` |
+| Patients (all 8) | e.g. `mara.vogel@example.org`, `tim.berger@example.org` | `patient2026` |
 
-*Mara Vogel* has a completed sample intake, session check-ins and a falling
-BDI-FS series (trajectory with norm bands); *Tim Berger* has SDQ self- and
-parent-report data showing the multi-rater view.
+New patients can **self-register** from the login page (name, e-mail,
+password, optional personal details) — they appear in the director's and
+administrator's "new registrations — unassigned" list. The UI is available in
+**German (default), French and English** (switcher on the login page and in
+the header).
+
+Demo data worth clicking: *Mara Vogel* (PSTB session trajectory, falling
+BDI-FS with norm bands + RCI change markers, completed DIPS intake),
+*Camille Perret* (EDE-Q8 pre/zm/post waves, worsening BDI-FS that trips the
+**suicide-item safety flag**), *Tim Berger* (SDQ self- vs. mother-report,
+DIKJ series), *Jonas Wyss* (FGG).
+
+## Authentication, roles & network restriction
+
+- **Login** is e-mail + password for everyone (scrypt-hashed, HMAC-signed
+  session cookie — `src/lib/password.ts`, `src/lib/auth.ts`). Patients
+  self-register via the public `POST /api/register`.
+- **Roles**: `patient` (own data only — the clinic API returns just their own
+  record), `therapist` (their caseload), `director` (everything, incl. the
+  clinic-wide questionnaire-scores matrix), `admin` (**assignment only**: sees
+  patient lists, registration status and the disorder-category chip, can
+  assign therapists — but never scores, trajectories, diagnoses or DIPS).
+- **Network restriction** (`src/lib/network.ts`): when
+  `ALLOWED_NETWORK_CIDRS` is set, staff sessions can only read/write clinic
+  data from those IPv4 ranges (university network / VPN placeholder). Patients
+  can register, log in and submit their own questionnaires from anywhere;
+  `/api/limesurvey/notify` stays reachable for LimeSurvey callbacks. Note:
+  the check trusts `x-forwarded-for`, so in production the app must run behind
+  a trusted reverse proxy that overwrites that header.
+- The every-session measure is the real **Berner Patientenstundenbogen
+  (PSTB)** — 22 German items on a −3…+3 scale (wording supplied by the
+  clinic), scored into its 8 published scales. The validated German item text
+  is shown regardless of UI language.
 
 ## The data model
 
@@ -146,8 +180,9 @@ All endpoints require a session cookie except `POST /api/auth`,
 | Method & path | Purpose |
 | --- | --- |
 | `GET /api/auth` | Current session |
-| `POST /api/auth` | Mock login `{ role, id }` |
+| `POST /api/auth` | Login `{ email, password }` |
 | `DELETE /api/auth` | Logout |
+| `POST /api/register` | Public patient self-registration |
 | `GET /api/clinic` | Full clinic data (patients + therapists + instruments) |
 | `GET /api/instruments` | Instrument definitions |
 | `PATCH /api/instruments/:id` | Link an instrument to a LimeSurvey survey |
@@ -198,16 +233,18 @@ See `.env.example`.
 | `FHIR_RELAY_URL` | Optional external FHIR server to forward intake submissions to |
 | `LIMESURVEY_URL` | Base URL of the LimeSurvey installation (optional) |
 | `LIMESURVEY_USERNAME` / `LIMESURVEY_PASSWORD` | RemoteControl API credentials |
+| `ALLOWED_NETWORK_CIDRS` | Staff data access restricted to these IPv4 CIDRs (blank = unrestricted) |
 | `COOKIE_SECURE` | `"true"` to mark the session cookie Secure (HTTPS only) |
-| `SESSION_SECRET` | Reserved for real session signing (mock auth does not yet sign) |
+| `SESSION_SECRET` | Signs the session cookie — set a strong value in any deployment |
 
 ## Security & compliance
 
 This scaffold is intentionally minimal. Before any real-world use:
 
-- **Replace mock auth.** `src/lib/auth.ts` stores an unsigned, base64 session
-  cookie and the login route trusts the posted id. Swap in a real identity
-  provider (e.g. Auth.js / OIDC), enforce per-row authorization, and sign/encrypt sessions.
+- **Harden auth further.** Passwords are scrypt-hashed and sessions are
+  HMAC-signed with expiry, but there is no session store/revocation, rate
+  limiting, e-mail verification or password reset. For production, prefer a
+  real identity provider (e.g. Auth.js / OIDC) and set a strong `SESSION_SECRET`.
 - **Encrypt PHI at rest** and in transit; restrict and rotate database credentials.
 - **Add audit logging** for every read/write of patient data.
 - **Review data handling** against GDPR and the Swiss revDSG — including the

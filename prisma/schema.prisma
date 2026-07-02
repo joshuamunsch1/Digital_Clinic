@@ -17,22 +17,27 @@ generator client {
   provider = "prisma-client-js"
 }
 
-/// Therapists and the clinic director. Patients log in by their own id.
+/// Clinic staff: therapists, the clinic director, and administrators
+/// (administration can assign patients but never sees clinical data).
 model User {
-  id        String    @id @default(cuid())
-  name      String
-  title     String
-  role      String // "therapist" | "director"
-  patients  Patient[] @relation("TherapistPatients")
-  createdAt DateTime  @default(now())
+  id           String    @id @default(cuid())
+  name         String
+  title        String
+  role         String // "therapist" | "director" | "admin"
+  email        String    @unique
+  passwordHash String
+  patients     Patient[] @relation("TherapistPatients")
+  createdAt    DateTime  @default(now())
 }
 
 model Patient {
   id             String             @id @default(cuid())
   name           String
-  email          String? // used for LimeSurvey invitations
+  email          String?            @unique // login + LimeSurvey invitations
+  passwordHash   String? // set when the patient registered themselves (or was given credentials)
   color          String
   status         String // "assessment" | "interview" | "therapy"
+  disorderCategory String? // "anxiety" | "depression" | "eating_disorder" | "adhd" | "burnout" | "other" — set at diagnosis
   therapistId    String?
   therapist      User?              @relation("TherapistPatients", fields: [therapistId], references: [id])
   demographics   String             @default("{}") // JSON object
@@ -82,6 +87,7 @@ model Scale {
   formula      String // JSON FormulaDef: { type: "sum"|"mean"|"prorated_sum"|"custom", items, missingTolerance?, expression? }
   normBands    String? // JSON: [{ min, max, label }] — reference bands on charts
   range        String? // JSON: { min, max } — theoretical score range (chart y-axis)
+  meta         String  @default("{}") // JSON: { higherIsBetter?, alert?: {gte,message}, rci?: {reliability,sd,note} }
   sortOrder    Int          @default(0) // evaluation + display order (later scales may reference earlier keys)
   scores       ScaleScore[]
 

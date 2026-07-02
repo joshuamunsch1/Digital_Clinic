@@ -20,6 +20,7 @@ interface ScaleRow {
   formula: string;
   normBands: string | null;
   range: string | null;
+  meta: string;
   sortOrder: number;
 }
 interface InstrumentRow {
@@ -79,6 +80,7 @@ interface PatientRow {
   email: string | null;
   color: string;
   status: string;
+  disorderCategory: string | null;
   therapistId: string | null;
   demographics: string;
   assessmentDate: Date | null;
@@ -127,6 +129,7 @@ export function instrumentFromRow(row: InstrumentRow): InstrumentDef {
           formula: parse<ScaleDef["formula"]>(s.formula, { type: "custom" }),
           normBands: parse(s.normBands, undefined as ScaleDef["normBands"]),
           range: parse(s.range, undefined as ScaleDef["range"]),
+          ...parse<Pick<ScaleDef, "higherIsBetter" | "alert" | "rci">>(s.meta, {}),
           sortOrder: s.sortOrder,
         }),
       ),
@@ -195,6 +198,7 @@ export function patientFromRow(p: PatientRow): Patient {
     email: p.email,
     color: p.color,
     status: p.status as Patient["status"],
+    disorderCategory: p.disorderCategory,
     therapistId: p.therapistId,
     demographics: parse<Demographics>(p.demographics, {}),
     responses: responses.map(responseFromRow),
@@ -205,6 +209,27 @@ export function patientFromRow(p: PatientRow): Patient {
       p.diagnosisText && p.diagnosisDate
         ? { text: p.diagnosisText, date: p.diagnosisDate.toISOString(), by: p.diagnosisBy || "" }
         : null,
+  };
+}
+
+/// Administration view of a patient: assignment-relevant fields only — no
+/// responses, scores, DIPS, diagnosis text or demographics detail. The disorder
+/// category IS included (clinic decision: needed for specialty-based assignment).
+export function patientLiteFromRow(p: PatientRow): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    color: p.color,
+    status: p.status as Patient["status"],
+    disorderCategory: p.disorderCategory,
+    therapistId: p.therapistId,
+    demographics: {},
+    responses: [],
+    invitations: [],
+    assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
+    dips: null,
+    diagnosis: null,
   };
 }
 

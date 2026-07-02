@@ -5,9 +5,7 @@ import type {
   Demographics,
   DipsAnswers,
   Patient,
-  Role,
   SessionUser,
-  LoginRoster,
 } from "./types";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
@@ -57,10 +55,19 @@ export interface CreateInvitationPayload {
   surveyId?: string;
 }
 
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  password: string;
+  demographics: Demographics;
+}
+
 export const api = {
   getSession: () => fetch("/api/auth").then((r) => handle<{ user: SessionUser | null }>(r)),
-  getRoster: () => fetch("/api/roster").then((r) => handle<LoginRoster>(r)),
-  login: (role: Role, id: string) => post("/api/auth", { role, id }).then((r) => handle<{ user: SessionUser }>(r)),
+  login: (email: string, password: string) =>
+    post("/api/auth", { email, password }).then((r) => handle<{ user: SessionUser }>(r)),
+  register: (payload: RegisterRequest) =>
+    post("/api/register", payload).then((r) => handle<{ user: SessionUser }>(r)),
   logout: () => fetch("/api/auth", { method: "DELETE" }).then((r) => handle<{ ok: boolean }>(r)),
 
   getClinic: () => fetch("/api/clinic").then((r) => handle<ClinicData>(r)),
@@ -101,8 +108,8 @@ export const api = {
       handle<{ checked: number; imported: number; pending: number; errors: string[] }>(r),
     ),
 
-  saveDiagnosis: (id: string, text: string) =>
-    patch(`/api/patients/${id}`, { action: "diagnose", text }).then((r) => handle<{ patient: Patient }>(r)),
+  saveDiagnosis: (id: string, text: string, category: string) =>
+    patch(`/api/patients/${id}`, { action: "diagnose", text, category }).then((r) => handle<{ patient: Patient }>(r)),
 
   savePatientEmail: (id: string, email: string) =>
     patch(`/api/patients/${id}`, { action: "contact", email }).then((r) => handle<{ patient: Patient }>(r)),

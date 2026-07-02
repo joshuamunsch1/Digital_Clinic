@@ -3,7 +3,8 @@ import React from "react";
 import { C } from "@/lib/theme";
 import { tr, T, LANGS, type Lang } from "@/lib/i18n";
 import type { Patient, PatientStatus } from "@/lib/types";
-import { checkinSeries, CHECKIN_PRIMARY_SCALE } from "@/lib/types";
+import { sessionSeries, SESSION_PRIMARY_SCALE } from "@/lib/types";
+import { useT } from "./LangContext";
 
 export function Card({ children, className = "", style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return <div className={`rounded-xl ${className}`} style={{ background: C.surface, border: `1px solid ${C.line}`, ...style }}>{children}</div>;
@@ -19,10 +20,11 @@ export function SectionTitle({ children, sub }: { children: React.ReactNode; sub
 }
 
 export function StatusBadge({ status }: { status: PatientStatus }) {
+  const t = useT();
   const map: Record<PatientStatus, { label: string; bg: string; fg: string }> = {
-    assessment: { label: "Assessment due", bg: C.amberSoft, fg: C.amber },
-    interview: { label: "Awaiting intake interview", bg: C.blueSoft, fg: C.blue },
-    therapy: { label: "In therapy", bg: C.spruceSoft, fg: C.spruce },
+    assessment: { label: t("statusAssessment"), bg: C.amberSoft, fg: C.amber },
+    interview: { label: t("statusInterview"), bg: C.blueSoft, fg: C.blue },
+    therapy: { label: t("statusTherapy"), bg: C.spruceSoft, fg: C.spruce },
   };
   const s = map[status];
   return <span className="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>;
@@ -37,18 +39,32 @@ export function Stat({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
+// Session-progress trend (PSTB Therapiefortschritte, −3..+3): ±0.5 = movement.
 export function TrendArrow({ patient }: { patient: Patient }) {
-  const series = checkinSeries(patient).map((r) => r.scores[CHECKIN_PRIMARY_SCALE]).filter((v) => v !== undefined);
+  const series = sessionSeries(patient).map((r) => r.scores[SESSION_PRIMARY_SCALE]).filter((v) => v !== undefined);
   if (series.length < 2) return <span style={{ color: C.muted }}>–</span>;
   const d = series[series.length - 1] - series[series.length - 2];
-  if (d > 2) return <span style={{ color: C.spruce }}>▲</span>;
-  if (d < -2) return <span style={{ color: C.danger }}>▼</span>;
+  if (d > 0.5) return <span style={{ color: C.spruce }}>▲</span>;
+  if (d < -0.5) return <span style={{ color: C.danger }}>▼</span>;
   return <span style={{ color: C.muted }}>►</span>;
 }
 
-export function PrimaryButton({ children, onClick, disabled, small }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; small?: boolean }) {
+/// Generic mini trend for any score series (direction-aware coloring).
+export function MiniTrend({ values, higherIsBetter = true }: { values: number[]; higherIsBetter?: boolean }) {
+  if (values.length < 2) return <span style={{ color: C.muted }}>–</span>;
+  const prev = values[values.length - 2];
+  const last = values[values.length - 1];
+  const span = Math.max(...values) - Math.min(...values);
+  const eps = span > 0 ? span * 0.05 : 0.001;
+  if (Math.abs(last - prev) <= eps) return <span style={{ color: C.muted }}>►</span>;
+  const up = last > prev;
+  const good = up === higherIsBetter;
+  return <span style={{ color: good ? C.spruce : C.danger }}>{up ? "▲" : "▼"}</span>;
+}
+
+export function PrimaryButton({ children, onClick, disabled, small, submit }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; small?: boolean; submit?: boolean }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={`rounded-lg font-semibold ${small ? "px-3 py-1.5 text-sm" : "px-5 py-2.5 text-sm"}`}
+    <button type={submit ? "submit" : "button"} onClick={onClick} disabled={disabled} className={`rounded-lg font-semibold ${small ? "px-3 py-1.5 text-sm" : "px-5 py-2.5 text-sm"}`}
       style={{ background: disabled ? C.line : C.spruce, color: disabled ? C.muted : "#fff", cursor: disabled ? "not-allowed" : "pointer" }}>
       {children}
     </button>

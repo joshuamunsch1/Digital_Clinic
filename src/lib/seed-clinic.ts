@@ -1,22 +1,30 @@
 // Reusable seeding routine (used by prisma/seed.ts and the /api/seed reset route).
-// Seeds the instrument catalog (docs/instrument-catalog.json + clinic-internal
-// instruments) and fictional demo patients whose questionnaire data lives in the
-// generic ResponseInstance/ScaleScore model.
+// Seeds the instrument catalog (docs/instrument-catalog.json + the DIPS intake),
+// staff accounts (director / administrator / therapists) and fictional demo
+// patients whose questionnaire data lives in the generic model. Demo passwords
+// are listed in src/lib/demo.ts and the README.
 import type { PrismaClient } from "@prisma/client";
 import {
+  ADMIN,
+  BDI_FS_ALERT_SERIES,
   BDI_FS_SERIES,
+  DEMO_PASSWORDS,
   DEMO_PATIENTS,
+  DIKJ_SERIES,
   DIRECTOR,
+  EDEQ8_SERIES,
+  FGG_SERIES,
   SAMPLE_ANSWERS,
   SDQ_SERIES,
   THERAPISTS,
-  checkinsFor,
+  pstbSessionsFor,
 } from "./demo";
 import { toFHIR } from "./dips/fhir";
 import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
 import { isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
-import { CHECKIN_INSTRUMENT_ID, DIPS_INSTRUMENT_ID } from "./types";
+import { hashPassword } from "./password";
+import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
 
 interface SeededInstrument {
   def: InstrumentDef;
@@ -43,6 +51,10 @@ async function seedInstruments(prisma: PrismaClient): Promise<Map<string, Seeded
     });
     const scaleIds: Record<string, string> = {};
     for (const s of def.scales) {
+      const meta: Record<string, unknown> = {};
+      if (s.higherIsBetter !== undefined) meta.higherIsBetter = s.higherIsBetter;
+      if (s.alert) meta.alert = s.alert;
+      if (s.rci) meta.rci = s.rci;
       const row = await prisma.scale.create({
         data: {
           instrumentId: def.id,
@@ -51,6 +63,7 @@ async function seedInstruments(prisma: PrismaClient): Promise<Map<string, Seeded
           formula: JSON.stringify(s.formula),
           normBands: s.normBands ? JSON.stringify(s.normBands) : null,
           range: s.range ? JSON.stringify(s.range) : null,
+          meta: JSON.stringify(meta),
           sortOrder: s.sortOrder,
         },
       });
@@ -109,40 +122,59 @@ export async function seedClinic(prisma: PrismaClient) {
   await prisma.patient.deleteMany();
   await prisma.user.deleteMany();
 
-  for (const u of [...THERAPISTS, DIRECTOR]) {
-    await prisma.user.create({ data: { id: u.id, name: u.name, title: u.title, role: u.role } });
+  const staff = [
+    ...THERAPISTS.map((t) => ({ ...t, password: DEMO_PASSWORDS.therapist })),
+    { ...DIRECTOR, password: DEMO_PASSWORDS.director },
+    { ...ADMIN, password: DEMO_PASSWORDS.admin },
+  ];
+  for (const u of staff) {
+    await prisma.user.create({
+      data: {
+        id: u.id,
+        name: u.name,
+        title: u.title,
+        role: u.role,
+        email: u.email,
+        passwordHash: hashPassword(u.password),
+      },
+    });
   }
 
   const instruments = await seedInstruments(prisma);
-  const checkin = instruments.get(CHECKIN_INSTRUMENT_ID)!;
+  const pstb = instruments.get(SESSION_INSTRUMENT_ID)!;
   const dips = instruments.get(DIPS_INSTRUMENT_ID)!;
   const bdi = instruments.get("bdi_fs")!;
   const sdqSelf = instruments.get("sdq_self_11_17")!;
   const sdqParent = instruments.get("sdq_parent_4_17")!;
+  const edeq8 = instruments.get("edeq8")!;
+  const fgg = instruments.get("fgg")!;
+  const dikj = instruments.get("dikj")!;
   const now = Date.now();
 
   for (const p of DEMO_PATIENTS) {
-    const checkins = checkinsFor(p.levels);
+    const sessions = pstbSessionsFor(p.levels);
     await prisma.patient.create({
       data: {
         id: p.id,
         name: p.name,
         email: p.email,
+        passwordHash: hashPassword(DEMO_PASSWORDS.patient),
         color: p.color,
         status: p.status,
+        disorderCategory: p.disorderCategory,
         therapistId: p.therapistId,
         demographics: JSON.stringify(p.demographics),
-        assessmentDate: checkins.length ? new Date(checkins[0].date) : null,
+        assessmentDate: sessions.length ? new Date(sessions[0].date) : null,
         diagnosisText: p.diagnosis,
         diagnosisDate: p.diagnosis ? new Date("2026-03-10T09:00:00.000Z") : null,
         diagnosisBy: p.diagnosis ? "Intake interview" : null,
       },
     });
 
-    for (const e of checkins) {
+    for (const e of sessions) {
       await createScoredResponse(prisma, {
         patientId: p.id,
-        instrument: checkin,
+        instrument: pstb,
         respondentRole: "self",
         sessionNumber: e.session,
         occurredAt: new Date(e.date),
@@ -151,14 +183,23 @@ export async function seedClinic(prisma: PrismaClient) {
       });
     }
 
-    if (p.hasBdiSeries) {
-      for (const b of BDI_FS_SERIES) {
+    const simpleSeries: { flag: boolean | undefined; instrument: SeededInstrument; series: { daysAgo: number; answers: RawAnswers; wave?: string }[] }[] = [
+      { flag: p.hasBdiSeries, instrument: bdi, series: BDI_FS_SERIES },
+      { flag: p.hasBdiAlertSeries, instrument: bdi, series: BDI_FS_ALERT_SERIES },
+      { flag: p.hasEdeq8Series, instrument: edeq8, series: EDEQ8_SERIES },
+      { flag: p.hasFggSeries, instrument: fgg, series: FGG_SERIES },
+      { flag: p.hasDikjSeries, instrument: dikj, series: DIKJ_SERIES },
+    ];
+    for (const { flag, instrument, series } of simpleSeries) {
+      if (!flag) continue;
+      for (const s of series) {
         await createScoredResponse(prisma, {
           patientId: p.id,
-          instrument: bdi,
+          instrument,
           respondentRole: "self",
-          occurredAt: new Date(now - b.daysAgo * 864e5),
-          rawAnswers: b.answers,
+          wave: s.wave,
+          occurredAt: new Date(now - s.daysAgo * 864e5),
+          rawAnswers: s.answers,
         });
       }
     }

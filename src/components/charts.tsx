@@ -6,9 +6,19 @@ import {
 } from "recharts";
 import { C, PALETTE } from "@/lib/theme";
 import { fmtDate } from "@/lib/format";
-import type { InstrumentDef } from "@/lib/instruments/types";
+import { trCategory } from "@/lib/i18n";
+import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
+import { classifyChange } from "@/lib/instruments/rci";
 import type { Patient, ResponseRecord } from "@/lib/types";
-import { checkinSeries, CHECKIN_PRIMARY_SCALE } from "@/lib/types";
+import {
+  DIPS_INSTRUMENT_ID,
+  DISORDER_CATEGORIES,
+  SESSION_INSTRUMENT_ID,
+  fmtScore,
+  responsesFor,
+} from "@/lib/types";
+import { useLang, useT } from "./LangContext";
+import { MiniTrend } from "./ui";
 
 interface TipPayload { dataKey: string; name: string; value: number; color?: string; stroke?: string }
 export function ChartTip({ active, payload, label }: { active?: boolean; payload?: TipPayload[]; label?: string | number }) {
@@ -51,13 +61,15 @@ export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasi
 /// The generalized "Verlauf" chart: any instrument's scale scores across a
 /// patient's response history. One toggle chip per scale; when several raters
 /// have filled the same instrument (e.g. SDQ self + mother) each rater gets a
-/// line style. Norm bands are shaded when exactly one scale is shown.
+/// line style. Norm bands are shaded and RCI change markers (▲/▼ vs. the first
+/// measurement) are drawn when exactly one scale is shown.
 export function TrajectoryChart({ instrument, responses, height = 280, initialScales }: {
   instrument: InstrumentDef;
   responses: ResponseRecord[];
   height?: number;
   initialScales?: string[];
 }) {
+  const t = useT();
   const scales = instrument.scales;
   const scored = useMemo(
     () => responses.filter((r) => Object.keys(r.scores).length > 0),
@@ -89,7 +101,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
   }, [scored, instrument]);
 
   if (!scored.length)
-    return <p className="text-sm" style={{ color: C.muted }}>No scored responses yet.</p>;
+    return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
 
   const colorOf = (key: string) => PALETTE[Math.max(0, scales.findIndex((s) => s.key === key)) % PALETTE.length];
   const visibleScales = scales.filter((s) => visible.has(s.key));
@@ -97,6 +109,38 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     (s) => s.range && visibleScales[0].range && s.range.min === visibleScales[0].range.min && s.range.max === visibleScales[0].range.max,
   ) ? visibleScales[0].range : undefined;
   const bands = visibleScales.length === 1 ? visibleScales[0].normBands : undefined;
+
+  // RCI markers: only when a single scale with rci parameters is displayed.
+  const rciScale: ScaleDef | undefined =
+    visibleScales.length === 1 && visibleScales[0].rci ? visibleScales[0] : undefined;
+  const baselines = new Map<string, number>(); // seriesKey -> first value
+  if (rciScale) {
+    for (const role of roles) {
+      const seriesKey = `${rciScale.key}|${role}`;
+      for (const row of rows) {
+        const v = (row as Record<string, number | string>)[seriesKey];
+        if (typeof v === "number") { baselines.set(seriesKey, v); break; }
+      }
+    }
+  }
+  const rciDot = (seriesKey: string, color: string) =>
+    function RciDot(props: { cx?: number; cy?: number; payload?: Record<string, number | string>; index?: number }) {
+      const { cx, cy, payload } = props;
+      if (cx === undefined || cy === undefined || !payload) return <g key={`d${props.index}`} />;
+      const v = payload[seriesKey];
+      const baseline = baselines.get(seriesKey);
+      if (typeof v !== "number" || baseline === undefined || !rciScale)
+        return <circle key={`d${props.index}`} cx={cx} cy={cy} r={3} fill={color} />;
+      const cls = classifyChange(rciScale, baseline, v);
+      if (cls === "unchanged") return <circle key={`d${props.index}`} cx={cx} cy={cy} r={3} fill={color} />;
+      const good = cls === "improved";
+      const fill = good ? C.spruce : C.danger;
+      // triangle up (improved) / down (deteriorated)
+      const points = good
+        ? `${cx},${cy - 5.5} ${cx - 5},${cy + 3.5} ${cx + 5},${cy + 3.5}`
+        : `${cx},${cy + 5.5} ${cx - 5},${cy - 3.5} ${cx + 5},${cy - 3.5}`;
+      return <polygon key={`d${props.index}`} points={points} fill={fill} stroke="#fff" strokeWidth={1} />;
+    };
 
   return (
     <div>
@@ -118,7 +162,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
             <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
             <YAxis
-              domain={sharedRange ? [sharedRange.min, sharedRange.max] : [0, "auto"]}
+              domain={sharedRange ? [sharedRange.min, sharedRange.max] : ["auto", "auto"]}
               tick={{ fontSize: 11, fill: C.muted }} stroke={C.line}
             />
             <Tooltip content={<ChartTip />} />
@@ -128,28 +172,33 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
             ))}
             {instrument.cadenceType === "every_session" && rows.length > 1 && rows[0].label === "B" && (
               <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
-                label={{ value: "therapy begins", position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
+                label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
             )}
             {visibleScales.flatMap((s) =>
-              roles.map((role, ri) => (
-                <Line
-                  key={`${s.key}|${role}`}
-                  dataKey={`${s.key}|${role}`}
-                  name={multiRole ? `${s.label} (${role})` : s.label}
-                  stroke={colorOf(s.key)}
-                  strokeWidth={ri === 0 ? 2.5 : 1.8}
-                  strokeDasharray={ROLE_DASHES[ri % ROLE_DASHES.length]}
-                  dot={{ r: 3, fill: colorOf(s.key), strokeWidth: 0 }}
-                  connectNulls type="monotone" isAnimationActive={false}
-                />
-              )),
+              roles.map((role, ri) => {
+                const seriesKey = `${s.key}|${role}`;
+                const color = colorOf(s.key);
+                return (
+                  <Line
+                    key={seriesKey}
+                    dataKey={seriesKey}
+                    name={multiRole ? `${s.label} (${role})` : s.label}
+                    stroke={color}
+                    strokeWidth={ri === 0 ? 2.5 : 1.8}
+                    strokeDasharray={ROLE_DASHES[ri % ROLE_DASHES.length]}
+                    dot={rciScale && s.key === rciScale.key ? rciDot(seriesKey, color) : { r: 3, fill: color, strokeWidth: 0 }}
+                    connectNulls type="monotone" isAnimationActive={false}
+                  />
+                );
+              }),
             )}
           </LineChart>
         </ResponsiveContainer>
       </div>
+      {rciScale && <p className="text-xs mt-1" style={{ color: C.muted }}>{t("rciLegend")}</p>}
       {multiRole && (
         <p className="text-xs mt-1" style={{ color: C.muted }}>
-          Line styles distinguish raters: {roles.map((r, i) => `${i === 0 ? "solid" : i === 1 ? "dashed" : "dotted"} = ${r}`).join(" · ")}.
+          {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${r}`).join(" · ")}
         </p>
       )}
     </div>
@@ -159,6 +208,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
 /// The transposed per-patient score table (rows = scales, columns = occasions) —
 /// same shape as the legacy per-patient xlsx export.
 export function ScoreTable({ instrument, responses }: { instrument: InstrumentDef; responses: ResponseRecord[] }) {
+  const t = useT();
   const scored = responses.filter((r) => Object.keys(r.scores).length > 0);
   if (!scored.length) return null;
   const cols = scored
@@ -170,7 +220,7 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
       <table className="text-xs" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>
-            <th className="text-left pr-4 py-1" style={{ color: C.muted, fontWeight: 600 }}>Scale</th>
+            <th className="text-left pr-4 py-1" style={{ color: C.muted, fontWeight: 600 }}>{t("scaleCol")}</th>
             {cols.map(({ r, occ }) => (
               <th key={r.id} className="text-right px-2 py-1 whitespace-nowrap" style={{ color: C.muted, fontWeight: 600 }}>
                 {occ.label}{multiRole ? ` · ${r.respondentRole}` : ""}
@@ -200,63 +250,202 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
   );
 }
 
-/// Clinic-wide overview: one line per patient, using the session check-in's
-/// primary scale (wellbeing index).
-export function GlobalChart({ patients }: { patients: Patient[] }) {
-  const chartable = patients
-    .map((p) => ({ p, series: checkinSeries(p).filter((r) => r.scores[CHECKIN_PRIMARY_SCALE] !== undefined) }))
-    .filter((x) => x.series.length > 0);
+/// Clinic-wide overview: one line per patient, with switchable instrument,
+/// scale, and disorder-category filter (e.g. only eating-disorder patients'
+/// EDE-Q8 trajectories). Occasions are aligned across patients per cadence:
+/// sessions (B/S1…), waves (pre/zm/post/postF), or measurement index (M1…Mn)
+/// for periodic instruments — the legacy report convention.
+export function GlobalChart({ patients, instruments }: { patients: Patient[]; instruments: InstrumentDef[] }) {
+  const t = useT();
+  const { lang } = useLang();
+
+  const available = useMemo(
+    () =>
+      instruments.filter(
+        (i) =>
+          i.id !== DIPS_INSTRUMENT_ID &&
+          i.scales.length > 0 &&
+          patients.some((p) => responsesFor(p, i.id).some((r) => Object.keys(r.scores).length > 0)),
+      ),
+    [instruments, patients],
+  );
+  const [instId, setInstId] = useState(SESSION_INSTRUMENT_ID);
+  const inst = available.find((i) => i.id === instId) ?? available[0];
+  const [scaleKey, setScaleKey] = useState<string | null>(null);
+  const scale = inst?.scales.find((s) => s.key === scaleKey) ?? inst?.scales[0];
+  const [cat, setCat] = useState<string>("all");
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setHidden((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const maxS = useMemo(
-    () => Math.max(1, ...chartable.flatMap((x) => x.series.map((r) => r.sessionNumber ?? 0))),
-    [chartable],
+
+  const presentCategories = useMemo(
+    () => DISORDER_CATEGORIES.filter((c) => patients.some((p) => p.disorderCategory === c)),
+    [patients],
   );
+
+  const chartable = useMemo(() => {
+    if (!inst || !scale) return [];
+    return patients
+      .filter((p) => cat === "all" || p.disorderCategory === cat)
+      .map((p) => {
+        const series = responsesFor(p, inst.id)
+          .filter((r) => typeof r.scores[scale.key] === "number")
+          .map((r) => ({ r, occ: occasionOf(inst, r) }))
+          .sort((a, b) => a.occ.order - b.occ.order)
+          // periodic instruments: align patients by measurement index (M1..Mn)
+          .map(({ r, occ }, idx) =>
+            inst.cadenceType === "every_session" || inst.cadenceType === "wave"
+              ? { value: r.scores[scale.key], label: occ.label, order: occ.order }
+              : { value: r.scores[scale.key], label: `M${idx + 1}`, order: idx },
+          );
+        return { p, series };
+      })
+      .filter((x) => x.series.length > 0);
+  }, [patients, inst, scale, cat]);
+
   const rows = useMemo(() => {
-    const out: Record<string, number>[] = [];
-    for (let s = 0; s <= maxS; s++) {
-      const row: Record<string, number> = { session: s };
-      chartable.forEach(({ p, series }) => {
-        const r = series.find((x) => x.sessionNumber === s);
-        if (r) row[p.id] = Math.round(r.scores[CHECKIN_PRIMARY_SCALE]);
-      });
-      out.push(row);
+    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number> }>();
+    for (const { p, series } of chartable) {
+      for (const pt of series) {
+        let row = byOccasion.get(pt.label);
+        if (!row) { row = { label: pt.label, order: pt.order, values: {} }; byOccasion.set(pt.label, row); }
+        row.values[p.id] = pt.value;
+      }
     }
-    return out;
-  }, [chartable, maxS]);
-  if (!chartable.length)
-    return <p className="text-sm" style={{ color: C.muted }}>No patient data yet. Charts appear once session check-ins are submitted.</p>;
+    return Array.from(byOccasion.values())
+      .sort((a, b) => a.order - b.order)
+      .map((r) => ({ label: r.label, ...r.values }));
+  }, [chartable]);
+
+  if (!available.length)
+    return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
+  if (!inst || !scale) return null;
+
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {chartable.map(({ p, series }) => {
-          const on = !hidden.has(p.id);
-          const last = Math.round(series[series.length - 1].scores[CHECKIN_PRIMARY_SCALE]);
-          return (
-            <button key={p.id} type="button" onClick={() => toggle(p.id)} aria-pressed={on} className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
-              style={{ background: on ? C.surface : C.surfaceAlt, border: `1px solid ${on ? p.color : C.line}`, color: on ? C.ink : C.muted, opacity: on ? 1 : 0.55 }}>
-              <span className="rounded-full" style={{ width: 9, height: 9, background: on ? p.color : "transparent", border: `2px solid ${p.color}` }} />
-              {p.name}<span style={{ color: C.muted, fontVariantNumeric: "tabular-nums" }}>{last}</span>
+      <div className="flex items-end gap-3 flex-wrap mb-3">
+        <label className="block">
+          <span className="text-xs font-semibold block mb-1" style={{ color: C.muted }}>{t("instrumentLabel")}</span>
+          <select style={{ ...inputSelectStyle, minWidth: 180 }} value={inst.id} onChange={(e) => { setInstId(e.target.value); setScaleKey(null); setHidden(new Set()); }}>
+            {available.map((i) => <option key={i.id} value={i.id}>{i.abbreviation} — {i.name.length > 46 ? i.name.slice(0, 46) + "…" : i.name}</option>)}
+          </select>
+        </label>
+        {inst.scales.length > 1 && (
+          <label className="block">
+            <span className="text-xs font-semibold block mb-1" style={{ color: C.muted }}>{t("scaleCol")}</span>
+            <select style={{ ...inputSelectStyle, minWidth: 160 }} value={scale.key} onChange={(e) => setScaleKey(e.target.value)}>
+              {inst.scales.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </label>
+        )}
+        {presentCategories.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pb-0.5">
+            <button type="button" onClick={() => setCat("all")} aria-pressed={cat === "all"} className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={{ background: cat === "all" ? C.spruce : C.surfaceAlt, color: cat === "all" ? "#fff" : C.muted, border: `1px solid ${cat === "all" ? C.spruce : C.line}`, cursor: "pointer" }}>
+              {t("allDisorders")}
             </button>
-          );
-        })}
-      </div>
-      <div style={{ width: "100%", height: 300 }}>
-        <ResponsiveContainer>
-          <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
-            <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="session" type="number" domain={[0, maxS]} ticks={Array.from({ length: maxS + 1 }, (_, i) => i)} tickFormatter={(s: number) => (s === 0 ? "B" : `S${s}`)} tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
-            <Tooltip content={<ChartTip />} />
-            <ReferenceLine x={0.5} stroke={C.muted} strokeDasharray="4 4" label={{ value: "therapy begins", position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
-            {chartable.filter(({ p }) => !hidden.has(p.id)).map(({ p }) => (
-              <Line key={p.id} dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: p.color }} connectNulls type="monotone" isAnimationActive={false} />
+            {presentCategories.map((c) => (
+              <button key={c} type="button" onClick={() => setCat(c)} aria-pressed={cat === c} className="rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: cat === c ? C.spruce : C.surfaceAlt, color: cat === c ? "#fff" : C.muted, border: `1px solid ${cat === c ? C.spruce : C.line}`, cursor: "pointer" }}>
+                {trCategory(c, lang)}
+              </button>
             ))}
-          </LineChart>
-        </ResponsiveContainer>
+          </div>
+        )}
       </div>
-      <p className="text-xs mt-1" style={{ color: C.muted }}>Wellbeing index 0–100 (session check-in). B = pre-therapy baseline. Click a patient to show or hide their line.</p>
+      {!chartable.length ? (
+        <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {chartable.map(({ p, series }) => {
+              const on = !hidden.has(p.id);
+              const last = series[series.length - 1].value;
+              return (
+                <button key={p.id} type="button" onClick={() => toggle(p.id)} aria-pressed={on} className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
+                  style={{ background: on ? C.surface : C.surfaceAlt, border: `1px solid ${on ? p.color : C.line}`, color: on ? C.ink : C.muted, opacity: on ? 1 : 0.55 }}>
+                  <span className="rounded-full" style={{ width: 9, height: 9, background: on ? p.color : "transparent", border: `2px solid ${p.color}` }} />
+                  {p.name}<span style={{ color: C.muted, fontVariantNumeric: "tabular-nums" }}>{fmtScore(last)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ width: "100%", height: 300 }}>
+            <ResponsiveContainer>
+              <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
+                <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+                <YAxis
+                  domain={scale.range ? [scale.range.min, scale.range.max] : ["auto", "auto"]}
+                  tick={{ fontSize: 11, fill: C.muted }} stroke={C.line}
+                />
+                <Tooltip content={<ChartTip />} />
+                {scale.normBands?.map((b, i) => (
+                  <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
+                    label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
+                ))}
+                {inst.cadenceType === "every_session" && rows.length > 1 && rows[0].label === "B" && (
+                  <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
+                    label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
+                )}
+                {chartable.filter(({ p }) => !hidden.has(p.id)).map(({ p }) => (
+                  <Line key={p.id} dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: p.color }} connectNulls type="monotone" isAnimationActive={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs mt-1" style={{ color: C.muted }}>{scale.label}{scale.range ? ` · ${scale.range.min}–${scale.range.max}` : ""}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+const inputSelectStyle: React.CSSProperties = {
+  padding: "6px 10px", borderRadius: 8, fontSize: 13,
+  border: `1px solid ${C.line}`, background: C.surface, color: C.ink,
+};
+
+/// Cross-instrument summary strip: one pill per instrument with scored data —
+/// latest primary-scale value, mini trend, and a fill bar normalized to the
+/// scale's range (green = clinically favourable direction).
+export function SummaryStrip({ patient, instruments }: { patient: Patient; instruments: InstrumentDef[] }) {
+  const items = instruments
+    .map((inst) => {
+      const primary = inst.scales[0];
+      if (!primary) return null;
+      const values = responsesFor(patient, inst.id)
+        .map((r) => r.scores[primary.key])
+        .filter((v): v is number => typeof v === "number");
+      if (!values.length) return null;
+      const last = values[values.length - 1];
+      const range = primary.range;
+      const pct = range && range.max > range.min ? Math.round(((last - range.min) / (range.max - range.min)) * 100) : null;
+      const higherIsBetter = primary.higherIsBetter ?? true;
+      const goodness = pct === null ? null : higherIsBetter ? pct : 100 - pct; // 100 = best
+      return { inst, primary, values, last, pct, goodness, higherIsBetter };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map(({ inst, primary, values, last, pct, goodness, higherIsBetter }) => (
+        <div key={inst.id} className="rounded-lg px-3 py-2" style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, minWidth: 150 }}
+          title={`${inst.name} — ${primary.label}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold" style={{ color: C.ink }}>{inst.abbreviation}</span>
+            <span className="text-xs font-bold flex items-center gap-1" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>
+              {fmtScore(last)} <MiniTrend values={values} higherIsBetter={higherIsBetter} />
+            </span>
+          </div>
+          <div className="text-xs truncate" style={{ color: C.muted, maxWidth: 170 }}>{primary.label}</div>
+          {pct !== null && goodness !== null && (
+            <div className="mt-1 rounded-full" style={{ height: 5, background: C.line }}>
+              <div className="rounded-full" style={{ height: 5, width: `${pct}%`, background: goodness >= 50 ? C.spruce : goodness >= 25 ? C.amber : C.danger }} />
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

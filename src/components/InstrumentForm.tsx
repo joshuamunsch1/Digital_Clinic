@@ -8,6 +8,7 @@ import { C } from "@/lib/theme";
 import type { InstrumentDef, ItemDef, RawAnswers } from "@/lib/instruments/types";
 import type { SubmitResponsePayload } from "@/lib/api-client";
 import { Card, Field, GhostButton, PrimaryButton, SectionTitle, inputStyle } from "./ui";
+import { useT } from "./LangContext";
 
 const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"];
 
@@ -64,6 +65,7 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
   onCancel: () => void;
   busy?: boolean;
 }) {
+  const t = useT();
   const [answers, setAnswers] = useState<RawAnswers>({});
   const [note, setNote] = useState("");
   const [role, setRole] = useState(instrument.raterRole === "self" ? "self" : instrument.raterRole);
@@ -92,28 +94,25 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
       <SectionTitle sub={instrument.name}>{instrument.abbreviation}</SectionTitle>
       {assumedRange && (
         <Card className="p-3 mb-3" style={{ background: C.amberSoft, border: `1px solid ${C.amber}` }}>
-          <p className="text-xs" style={{ color: C.amber }}>
-            Note: the response scale shown for this instrument is an assumption (the legacy data did not record it).
-            Verify against the instrument manual before clinical use.
-          </p>
+          <p className="text-xs" style={{ color: C.amber }}>{t("rangeAssumedNote")}</p>
         </Card>
       )}
       {clinicianMode && (
         <Card className="p-4 mb-4">
           <div className="flex gap-3 flex-wrap">
-            <Field label="Rated by">
+            <Field label={t("ratedBy")}>
               <select style={{ ...inputStyle, width: "auto", minWidth: 140 }} value={role} onChange={(e) => setRole(e.target.value)}>
                 {RATER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </Field>
             {isWave && (
-              <Field label="Measurement wave">
+              <Field label={t("waveLabel")}>
                 <select style={{ ...inputStyle, width: "auto", minWidth: 120 }} value={wave} onChange={(e) => setWave(e.target.value)}>
                   {(instrument.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"]).map((w) => <option key={w} value={w}>{w}</option>)}
                 </select>
               </Field>
             )}
-            <Field label="Date administered">
+            <Field label={t("dateAdministered")}>
               <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
           </div>
@@ -134,16 +133,16 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
             </div>
           ))}
           {instrument.cadenceType === "every_session" && !clinicianMode && (
-            <Field label="Anything from this week you'd like your therapist to know? (optional)">
+            <Field label={t("sessionNote")}>
               <textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
           )}
         </div>
       </Card>
       <div className="flex gap-3 items-center">
-        <PrimaryButton disabled={!ready || busy} onClick={submit}>{busy ? "Saving…" : "Submit"}</PrimaryButton>
-        <GhostButton onClick={onCancel}>Back</GhostButton>
-        {!ready && <span className="text-xs" style={{ color: C.muted }}>Please answer every item.</span>}
+        <PrimaryButton disabled={!ready || busy} onClick={submit}>{busy ? t("savingBtn") : t("submitBtn")}</PrimaryButton>
+        <GhostButton onClick={onCancel}>{t("backBtn")}</GhostButton>
+        {!ready && <span className="text-xs" style={{ color: C.muted }}>{t("answerAllItems")}</span>}
       </div>
     </div>
   );

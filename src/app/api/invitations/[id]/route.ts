@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { remindParticipant } from "@/lib/limesurvey";
+import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 
 /// PATCH { action: "remind" } — send a reminder e-mail for an open invitation.
@@ -9,6 +10,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const restricted = staffNetworkGuard(s, req);
+  if (restricted) return restricted;
   const body = (await req.json()) as { action: string };
   if (body.action !== "remind") return NextResponse.json({ error: "unknown action" }, { status: 400 });
 

@@ -1,22 +1,25 @@
 // Server-side catalog loader: normalizes docs/instrument-catalog.json into
-// typed InstrumentDefs for seeding, plus the two clinic-internal instruments
-// (the wellbeing check-in and the DIPS anxiety intake) that are defined in code
-// because their full wording is ours to store.
+// typed InstrumentDefs for seeding, plus the clinic-internal DIPS intake that is
+// defined in code.
 //
 // The catalog file is honest about what was verified (itemSchemaStatus:
 // complete/partial/not_extracted) and has documented irregularities that are
 // normalized HERE, explicitly per instrument, rather than guessed at generically:
+// - PSTB gets its 22 German item texts from the clinic-provided BSTB-PT.pdf
+//   (2026-07-02) with the verified −3..+3 response scale
 // - DIKJ lists one item + a prose note -> expand to DIKJ1..DIKJ29
 // - FGG lists one item + a prose note -> expand to GG1..GG37; GG_Mean's item
 //   list contains a "...GG37" placeholder -> expanded
 // - the SDQ parent variants say "identical structure to sdq_self_11_17" -> cloned
 // - partial/not_extracted entries keep their scale labels but are not scoreable
 //
-// Response ranges: the legacy export did not record item response ranges for
-// every instrument. Where the published instrument's range is standard knowledge
-// (BDI-FS 0-3, SDQ 0-2, DIKJ 0-2, EDE-Q 0-6) it is set directly; where it is NOT
-// verified (PSTB, SBKJ, FGG) items carry rangeAssumed: true and the UI shows the
-// assumption instead of silently trusting it.
+// Response ranges: PSTB is verified (−3..+3, from the PDF); BDI-FS 0-3, SDQ 0-2,
+// DIKJ 0-2 and EDE-Q 0-6 are the published standards; SBKJ and FGG are NOT
+// verified — their items carry rangeAssumed: true and the UI shows the assumption.
+//
+// RCI parameters (reliability/sd) on BDI-FS and SDQ are PLACEHOLDERS to
+// demonstrate the reliable-change mechanism — each carries a note saying so and
+// must be replaced with values from the manuals before clinical interpretation.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -64,7 +67,7 @@ interface Range { min: number; max: number; assumed?: boolean }
 
 /// Item response ranges per instrument (see file header for verification status).
 const RANGES: Record<string, Range> = {
-  pstb_adult: { min: 0, max: 6, assumed: true },
+  pstb_adult: { min: -3, max: 3 }, // verified from BSTB-PT.pdf
   sbkj_child: { min: 0, max: 6, assumed: true },
   bdi_fs: { min: 0, max: 3 },
   dikj: { min: 0, max: 2 },
@@ -93,8 +96,8 @@ function expandIds(prefix: string, from: number, to: number): { id: string }[] {
   return Array.from({ length: to - from + 1 }, (_, i) => ({ id: `${prefix}${from + i}` }));
 }
 
-function normalizeFormula(raw: RawScale["formula"], fixups?: { items?: string[] }): FormulaDef {
-  const items = fixups?.items ?? (Array.isArray(raw.items) ? (raw.items as string[]) : undefined);
+function normalizeFormula(raw: RawScale["formula"], itemsFixup?: string[]): FormulaDef {
+  const items = itemsFixup ?? (Array.isArray(raw.items) ? (raw.items as string[]) : undefined);
   switch (raw.type) {
     case "sum":
       if (!items) return { type: "custom", note: raw.note ?? "item list not transcribed" };
@@ -110,16 +113,56 @@ function normalizeFormula(raw: RawScale["formula"], fixups?: { items?: string[] 
   }
 }
 
-function normalizeScales(raw: RawScale[], fixups: Record<string, { items?: string[]; range?: { min: number; max: number } }> = {}, ranges: Record<string, { min: number; max: number }> = {}): ScaleDef[] {
+interface ScaleOpts {
+  /// replacement item lists per scale key (e.g. FGG's "...GG37" placeholder)
+  items?: Record<string, string[]>;
+  /// per-scale extra fields merged in (range, higherIsBetter, alert, rci, …)
+  overrides?: Record<string, Partial<ScaleDef>>;
+  /// extra fields applied to every scale (per-scale overrides win)
+  defaults?: Partial<ScaleDef>;
+}
+
+function normalizeScales(raw: RawScale[], opts: ScaleOpts = {}): ScaleDef[] {
   return raw.map((s, i) => ({
     key: s.key,
     label: s.label,
-    formula: normalizeFormula(s.formula, fixups[s.key]),
+    formula: normalizeFormula(s.formula, opts.items?.[s.key]),
     normBands: s.normBands,
-    range: fixups[s.key]?.range ?? ranges[s.key],
     sortOrder: i,
+    ...opts.defaults,
+    ...opts.overrides?.[s.key],
   }));
 }
+
+// --- PSTB item wording (clinic-provided BSTB-PT.pdf, Patientenstundenbogen) -----
+// Validated German instrument wording — shown in German in every UI language.
+// Reverse-scored items are I8/I12/I14/I19 per the legacy SPSS syntax; the PDF's
+// "items 10/11 reversed" note applies to the Therapeutenstundenbogen that
+// follows in the same file (its items 10/11 are the negatively-worded ones).
+const PSTB_TEXT: Record<string, string> = {
+  I1: "Heute habe ich mich in der Beziehung zum Therapeuten wohlgefühlt.",
+  I2: "Ich habe das Gefühl, dass ich mich selbst und meine Probleme besser verstehe.",
+  I3: "Heute sind wir dem Kern meiner Probleme näher gekommen.",
+  I4: "Heute sind wir in der Therapie wirklich vorwärtsgekommen.",
+  I5: "Der Therapeut lässt mich spüren, wo meine Stärken liegen.",
+  I6: "Heute ist mir klarer geworden, weshalb ich gegenüber bestimmten Menschen gerade so und nicht anders reagiere.",
+  I7: "Der Therapeut und ich verstehen einander.",
+  I8: "Ich finde, der Therapeut müsste meinen Gefühlen mehr Beachtung schenken.",
+  I9: "Ich glaube, der Therapeut ist wirklich an meinem Wohlergehen interessiert.",
+  I10: "Im Moment fühle ich mich durch den Therapeuten darin unterstützt, wie ich gerne sein möchte.",
+  I11: "Ich traue mir jetzt mehr zu, meine Probleme aus eigener Kraft zu lösen.",
+  I12: "Ich finde die Sichtweise des Therapeuten von meinen Problemen zu einfach.",
+  I13: "Ich weiss jetzt besser, was ich will.",
+  I14: "Heute hatte ich das Gefühl, der Therapeut denkt etwas anderes über mich, als er mir sagt.",
+  I15: "Heute war ich gefühlsmässig stark beteiligt.",
+  I16: "Ich spüre, dass der Therapeut mich wertschätzt.",
+  I17: "Was wir heute gemacht haben, ging mir sehr nahe.",
+  I18: "Ich fühle mich jetzt Situationen besser gewachsen, denen ich mich bisher nicht gewachsen gefühlt habe.",
+  I19: "Ich glaube, ein anderes therapeutisches Vorgehen wäre für mich besser geeignet.",
+  I20: "Ich habe den Verlauf der Sitzung aktiv mitgestalten können.",
+  I21: "Ich kann selber entscheiden, was in der Therapie besprochen wird.",
+  I22: "Der Therapeut lässt mich in der Therapie meinen eigenen Weg gehen.",
+};
 
 // --- per-instrument normalization ------------------------------------------------
 
@@ -141,10 +184,44 @@ function normalizeEntry(raw: RawInstrument, all: RawInstrument[]): InstrumentDef
   const range = RANGES[raw.id];
 
   switch (raw.id) {
+    case "pstb_adult": {
+      const r = RANGES.pstb_adult;
+      const items: ItemDef[] = (raw.items as { id: string; reverseScored?: boolean }[]).map((it) => ({
+        id: it.id,
+        label: prettyLabel(it.id),
+        text: PSTB_TEXT[it.id],
+        responseType: "likert" as const,
+        min: r.min,
+        max: r.max,
+        minLabel: "überhaupt nicht",
+        maxLabel: "ja, ganz genau",
+        reverseScored: it.reverseScored || undefined,
+      }));
+      const scales = normalizeScales(raw.scales as RawScale[], {
+        defaults: { range: { min: r.min, max: r.max }, higherIsBetter: true },
+      });
+      // Therapiefortschritte is the clinic's headline session metric — put it
+      // first so the summary strip / scores matrix (which use the first scale)
+      // agree with the dashboard.
+      const ordered = [
+        ...scales.filter((s) => s.key === "Therapiefortschritte"),
+        ...scales.filter((s) => s.key !== "Therapiefortschritte"),
+      ].map((s, i) => ({ ...s, sortOrder: i }));
+      return {
+        ...base,
+        items,
+        scales: ordered,
+        sourceNotes:
+          base.sourceNotes +
+          " Item wording added 2026-07-02 from clinic-provided BSTB-PT.pdf (Patientenstundenbogen); response scale verified -3..+3. The PDF's 'items 10/11 reversed' note refers to the Therapeutenstundenbogen; patient-form reverse items remain I8/I12/I14/I19 per legacy syntax — confirm with clinic.",
+      };
+    }
     case "dikj": {
       // Catalog stores one sample item + a prose note; the real battery is DIKJ1..29.
       const items = likertItems(expandIds("DIKJ", 1, 29), range);
-      const scales = normalizeScales(raw.scales as RawScale[], { Gesamtrohwert: { range: { min: 0, max: 58 } } });
+      const scales = normalizeScales(raw.scales as RawScale[], {
+        overrides: { Gesamtrohwert: { range: { min: 0, max: 58 }, higherIsBetter: false } },
+      });
       return { ...base, items, scales };
     }
     case "fgg": {
@@ -154,7 +231,9 @@ function normalizeEntry(raw: RawInstrument, all: RawInstrument[]): InstrumentDef
       const items = likertItems(expandIds("GG", 1, 37), r);
       const allIds = items.map((i) => i.id);
       const scales = normalizeScales(raw.scales as RawScale[], {
-        GG_Mean: { items: allIds, range: { min: r.min, max: r.max } },
+        items: { GG_Mean: allIds },
+        defaults: { higherIsBetter: false },
+        overrides: { GG_Mean: { range: { min: r.min, max: r.max } } },
       });
       return { ...base, items, scales };
     }
@@ -179,7 +258,40 @@ function normalizeEntry(raw: RawInstrument, all: RawInstrument[]): InstrumentDef
         options: it.options,
         valueMap: it.valueMap,
       }));
-      const scales = normalizeScales(raw.scales as RawScale[], { Gesamtscore: { range: { min: 0, max: 10 } } });
+      const scales = normalizeScales(raw.scales as RawScale[], {
+        overrides: { Gesamtscore: { range: { min: 0, max: 10 }, higherIsBetter: false } },
+      });
+      return { ...base, items, scales };
+    }
+    case "bdi_fs": {
+      const items = likertItems(raw.items as { id: string; reverseScored?: boolean; scaleMax?: number }[], range);
+      const scales = normalizeScales(raw.scales as RawScale[], {
+        defaults: { higherIsBetter: false },
+        overrides: {
+          BDI_FS_total: {
+            range: { min: 0, max: 21 },
+            rci: {
+              reliability: 0.85,
+              sd: 4.5,
+              note: "PLACEHOLDER psychometrics to demonstrate the RCI mechanism — replace with reliability/SD from the German BDI-FS manual before clinical interpretation.",
+            },
+          },
+          BDI_FS_Suiziditem: {
+            range: { min: 0, max: 3 },
+            alert: {
+              gte: 1,
+              message: "BDI-FS suicide item endorsed (item 7 ≥ 1) — review with the patient promptly.",
+            },
+          },
+        },
+      });
+      return { ...base, items, scales };
+    }
+    case "edeq8": {
+      const items = likertItems(raw.items as { id: string; reverseScored?: boolean }[], range);
+      const scales = normalizeScales(raw.scales as RawScale[], {
+        defaults: { range: { min: 0, max: 6 }, higherIsBetter: false },
+      });
       return { ...base, items, scales };
     }
     default: {
@@ -194,84 +306,42 @@ function normalizeEntry(raw: RawInstrument, all: RawInstrument[]): InstrumentDef
             range,
           )
         : [];
-      const scaleRanges: Record<string, { min: number; max: number }> = {};
-      if (raw.id === "bdi_fs") {
-        scaleRanges["BDI_FS_total"] = { min: 0, max: 21 };
-        scaleRanges["BDI_FS_Suiziditem"] = { min: 0, max: 3 };
+      const scaleRanges: Record<string, Partial<ScaleDef>> = {};
+      if (raw.id === "sbkj_child" && range) {
+        for (const s of raw.scales as RawScale[])
+          scaleRanges[s.key] = { range: { min: range.min, max: range.max }, higherIsBetter: true };
       }
-      if ((raw.id === "pstb_adult" || raw.id === "sbkj_child") && range) {
-        for (const s of raw.scales as RawScale[]) scaleRanges[s.key] = { min: range.min, max: range.max };
-      }
-      if (raw.id === "edeq8") {
-        for (const s of raw.scales as RawScale[]) scaleRanges[s.key] = { min: 0, max: 6 };
-      }
-      const scales = Array.isArray(raw.scales) ? normalizeScales(raw.scales as RawScale[], {}, scaleRanges) : [];
+      const scales = Array.isArray(raw.scales)
+        ? normalizeScales(raw.scales as RawScale[], { overrides: scaleRanges })
+        : [];
       return { ...base, items, scales };
     }
   }
 }
 
 function sdqScales(raw: RawScale[]): ScaleDef[] {
+  const sub = { range: { min: 0, max: 10 }, higherIsBetter: false };
   return normalizeScales(raw, {
-    EmoProbl: { range: { min: 0, max: 10 } },
-    VerhProbl: { range: { min: 0, max: 10 } },
-    Hyperak: { range: { min: 0, max: 10 } },
-    VerhProblGleich: { range: { min: 0, max: 10 } },
-    Prosoz: { range: { min: 0, max: 10 } },
-    GesProbl: { range: { min: 0, max: 40 } },
+    overrides: {
+      EmoProbl: sub,
+      VerhProbl: sub,
+      Hyperak: sub,
+      VerhProblGleich: sub,
+      Prosoz: { range: { min: 0, max: 10 }, higherIsBetter: true },
+      GesProbl: {
+        range: { min: 0, max: 40 },
+        higherIsBetter: false,
+        rci: {
+          reliability: 0.8,
+          sd: 5.8,
+          note: "PLACEHOLDER psychometrics to demonstrate the RCI mechanism — replace with reliability/SD from the SDQ norms before clinical interpretation.",
+        },
+      },
+    },
   });
 }
 
-// --- clinic-internal instruments (full wording is ours; safe to store) -----------
-
-const WELLBEING_ITEMS: { id: string; label: string; text: string }[] = [
-  { id: "mood", label: "Mood", text: "How would you rate your overall mood?" },
-  { id: "calm", label: "Calmness", text: "How calm and relaxed have you felt?" },
-  { id: "sleep", label: "Sleep", text: "How well have you been sleeping?" },
-  { id: "energy", label: "Energy", text: "How much energy have you had in daily life?" },
-  { id: "social", label: "Connection", text: "How connected have you felt to the people around you?" },
-  { id: "coping", label: "Coping", text: "How confident have you felt in handling your difficulties?" },
-];
-
-export const WELLBEING_CHECKIN: InstrumentDef = {
-  id: "wellbeing_checkin",
-  name: "Post-session wellbeing check-in",
-  abbreviation: "Check-in",
-  population: "all",
-  raterRole: "self",
-  instrumentType: "likert_battery",
-  cadenceType: "every_session",
-  cadenceConfig: {},
-  definitionStatus: "complete",
-  items: WELLBEING_ITEMS.map((d) => ({
-    id: d.id,
-    label: d.label,
-    text: d.text,
-    responseType: "likert" as const,
-    min: 0,
-    max: 10,
-    minLabel: "not at all",
-    maxLabel: "very much",
-  })),
-  scales: [
-    {
-      key: "wellbeing_index",
-      label: "Wellbeing index",
-      formula: { type: "custom", expression: "(mood + calm + sleep + energy + social + coping) / 6 * 10" },
-      range: { min: 0, max: 100 },
-      sortOrder: 0,
-    },
-    ...WELLBEING_ITEMS.map((d, i) => ({
-      key: d.id,
-      label: d.label,
-      formula: { type: "mean" as const, items: [d.id] },
-      range: { min: 0, max: 10 },
-      sortOrder: i + 1,
-    })),
-  ],
-  sourceNotes:
-    "Clinic-internal 6-dimension check-in (the original Linden Clinic WellbeingEntry, now expressed as a generic instrument). Kept alongside PSTB/SBKJ until the clinic decides which session measure to use — PSTB is the real clinical equivalent but its licensed item wording is not stored here.",
-};
+// --- clinic-internal instrument -------------------------------------------------
 
 export const DIPS_INTAKE: InstrumentDef = {
   id: "dips_anxiety_intake",
@@ -289,11 +359,13 @@ export const DIPS_INTAKE: InstrumentDef = {
     "Adapted from DIPS Open Access (Margraf et al., 2021). Rendered by the dedicated structured-interview engine (src/lib/dips), not the generic likert renderer; the completed interview is stored as a ResponseInstance with the FHIR QuestionnaireResponse in meta.",
 };
 
-/// All instrument definitions to seed: normalized catalog + clinic-internal ones.
+/// All instrument definitions to seed: normalized catalog + the DIPS intake.
+/// (The former clinic-internal wellbeing_checkin was replaced by the real PSTB
+/// on 2026-07-02 per clinic decision.)
 export function loadInstrumentDefs(): InstrumentDef[] {
   const catalog = readCatalog();
   const normalized = catalog
     .map((raw) => normalizeEntry(raw, catalog))
     .filter((d): d is InstrumentDef => d !== null);
-  return [WELLBEING_CHECKIN, DIPS_INTAKE, ...normalized];
+  return [DIPS_INTAKE, ...normalized];
 }

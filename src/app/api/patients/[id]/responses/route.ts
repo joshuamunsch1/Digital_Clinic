@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { isFillable, type RawAnswers } from "@/lib/instruments/types";
@@ -9,9 +10,13 @@ import { isFillable, type RawAnswers } from "@/lib/instruments/types";
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  // patients can only submit for themselves
+  // patients can only submit for themselves (and may do so from any network);
+  // staff manual entry requires the clinic network
   if (s.role === "patient" && s.id !== params.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (s.role === "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const restricted = staffNetworkGuard(s, req);
+  if (restricted) return restricted;
 
   const body = (await req.json()) as {
     instrumentId: string;

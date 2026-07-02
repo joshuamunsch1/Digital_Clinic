@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { addParticipant, inviteParticipant, limesurveyConfig, surveyUrl } from "@/lib/limesurvey";
 
@@ -11,6 +12,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const restricted = staffNetworkGuard(s, req);
+  if (restricted) return restricted;
 
   const body = (await req.json()) as {
     instrumentId: string;

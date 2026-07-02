@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow, type DipsMeta } from "@/lib/serialize";
 import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { toFHIR } from "@/lib/dips/fhir";
@@ -14,6 +15,10 @@ import type { Lang } from "@/lib/i18n";
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (s.role === "patient" && s.id !== params.id)
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const restricted = staffNetworkGuard(s, req);
+  if (restricted) return restricted;
 
   const { demo, dips } = (await req.json()) as {
     demo: Demographics;
@@ -55,9 +60,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 }
 
 // Resend a stored submission to the FHIR relay.
-export async function PUT(_req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const restricted = staffNetworkGuard(s, req);
+  if (restricted) return restricted;
   const row = await prisma.responseInstance.findFirst({
     where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID },
   });

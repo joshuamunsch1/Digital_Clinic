@@ -46,6 +46,15 @@ export interface ScaleDef {
   normBands?: NormBand[];
   /// Theoretical score range, when known — fixes the y-axis of trajectory charts.
   range?: { min: number; max: number };
+  /// Direction of clinical improvement (true = higher scores are better).
+  /// Drives trend-arrow coloring and the patient summary strip.
+  higherIsBetter?: boolean;
+  /// Clinical safety alert: when the LATEST value of this scale is >= gte,
+  /// the UI shows a warning banner (e.g. BDI-FS suicide item).
+  alert?: { gte: number; message: string };
+  /// Reliable Change Index parameters (Jacobson & Truax): SEdiff = sd·√2·√(1−r).
+  /// Values marked "placeholder" in note MUST be verified against the manual.
+  rci?: { reliability: number; sd: number; note?: string };
   sortOrder: number;
 }
 

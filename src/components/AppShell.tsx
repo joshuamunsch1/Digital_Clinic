@@ -2,14 +2,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { C } from "@/lib/theme";
 import { api } from "@/lib/api-client";
-import type { ClinicData, Patient, Role, SessionUser, LoginRoster } from "@/lib/types";
+import type { ClinicData, Patient, SessionUser } from "@/lib/types";
 import { GhostButton, LeafMark } from "./ui";
-import { Login } from "./Login";
+import { Login, type RegisterPayload } from "./Login";
 import { PatientHome, type PatientTask } from "./PatientHome";
 import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { PatientDetail } from "./PatientDetail";
+import { LangProvider, LangSwitcher, useT } from "./LangContext";
 
 type View =
   | { name: "home" }
@@ -18,6 +19,15 @@ type View =
   | { name: "patient-detail"; patientId: string };
 
 export function AppShell() {
+  return (
+    <LangProvider>
+      <Shell />
+    </LangProvider>
+  );
+}
+
+function Shell() {
+  const t = useT();
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [data, setData] = useState<ClinicData | null>(null);
@@ -25,25 +35,16 @@ export function AppShell() {
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [networkBlocked, setNetworkBlocked] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const d = await api.getClinic();
       setData(d);
-    } catch {
+      setNetworkBlocked(false);
+    } catch (e) {
       setData(null);
-    }
-  }, []);
-
-  // Login screen needs the patient/therapist lists too; fetch them unauthenticated-friendly
-  // by attempting a clinic fetch once a session exists, else a lightweight public list.
-  const [loginData, setLoginData] = useState<LoginRoster | null>(null);
-  const loadLoginData = useCallback(async () => {
-    try {
-      const d = await api.getRoster();
-      setLoginData(d);
-    } catch {
-      setLoginData({ patients: [], therapists: [], directors: [] });
+      setNetworkBlocked((e as Error).message === "network_restricted");
     }
   }, []);
 
@@ -54,25 +55,34 @@ export function AppShell() {
         if (u) {
           setUser(u);
           await refresh();
-        } else {
-          await loadLoginData();
         }
       } finally {
         setBooting(false);
       }
     })();
-  }, [refresh, loadLoginData]);
+  }, [refresh]);
 
-  const doLogin = async (role: Role, id: string) => {
+  const doLogin = async (email: string, password: string) => {
     setBusy(true);
     try {
-      const { user: u } = await api.login(role, id);
+      const { user: u } = await api.login(email, password);
       setUser(u);
       setView({ name: "home" });
       setJustSubmitted(false);
       await refresh();
-    } catch (e) {
-      alert("Sign-in failed: " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRegister = async (payload: RegisterPayload) => {
+    setBusy(true);
+    try {
+      const { user: u } = await api.register(payload);
+      setUser(u);
+      setView({ name: "home" });
+      setJustSubmitted(false);
+      await refresh();
     } finally {
       setBusy(false);
     }
@@ -82,8 +92,8 @@ export function AppShell() {
     await api.logout();
     setUser(null);
     setData(null);
+    setNetworkBlocked(false);
     setView({ name: "home" });
-    await loadLoginData();
   };
 
   const submitAssessment = async (patientId: string, payload: AssessmentPayload) => {
@@ -94,7 +104,7 @@ export function AppShell() {
       setJustSubmitted(true);
       setView({ name: "home" });
     } catch (e) {
-      alert("Could not submit: " + (e as Error).message);
+      alert("✗ " + (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -108,7 +118,7 @@ export function AppShell() {
       setJustSubmitted(true);
       setView({ name: "home" });
     } catch (e) {
-      alert("Could not submit: " + (e as Error).message);
+      alert("✗ " + (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -122,9 +132,12 @@ export function AppShell() {
     void refresh();
   };
 
-  const saveDiagnosis = async (id: string, text: string) => { await api.saveDiagnosis(id, text); await refresh(); };
+  const saveDiagnosis = async (id: string, text: string, category: string) => {
+    await api.saveDiagnosis(id, text, category);
+    await refresh();
+  };
   const assignTherapist = async (id: string, therapistId: string | null) => { await api.assignTherapist(id, therapistId); await refresh(); };
-  const registerPatient = async (name: string) => { await api.registerPatient(name); await refresh(); await loadLoginData(); };
+  const registerPatient = async (name: string) => { await api.registerPatient(name); await refresh(); };
   const resendDips = async (id: string) => { await api.resendDips(id); await refresh(); };
   const resetDemo = async () => {
     await api.resetDemo();
@@ -133,23 +146,30 @@ export function AppShell() {
   };
 
   if (booting)
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg }}><p className="text-sm" style={{ color: C.muted }}>Loading clinic data…</p></div>;
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg }}><p className="text-sm" style={{ color: C.muted }}>{t("loadingClinic")}</p></div>;
 
   if (!user)
-    return <Login roster={loginData ?? { patients: [], therapists: [], directors: [] }} onLogin={doLogin} busy={busy} />;
+    return <Login onLogin={doLogin} onRegister={doRegister} busy={busy} />;
 
   const currentPatient = user.role === "patient" ? data?.patients.find((p) => p.id === user.id) ?? null : null;
   const detailPatient = view.name === "patient-detail" ? data?.patients.find((p) => p.id === view.patientId) ?? null : null;
-  const roleLabel = { patient: "Patient", therapist: "Therapist", director: "Clinic director" }[user.role];
+  const roleLabel = {
+    patient: t("rolePatient"),
+    therapist: t("roleTherapist"),
+    director: t("roleDirector"),
+    admin: t("roleAdmin"),
+  }[user.role];
   const therapists = data?.therapists ?? [];
   const instruments = data?.instruments ?? [];
   const formInstrument =
     view.name === "form-instrument" ? instruments.find((i) => i.id === view.instrumentId) ?? null : null;
 
-  const startPatientTask = (t: PatientTask) => {
+  const startPatientTask = (task: PatientTask) => {
     setJustSubmitted(false);
-    setView(t.kind === "assessment" ? { name: "form-assessment" } : { name: "form-instrument", instrumentId: t.instrumentId });
+    setView(task.kind === "assessment" ? { name: "form-assessment" } : { name: "form-instrument", instrumentId: task.instrumentId });
   };
+
+  const isStaff = user.role !== "patient";
 
   return (
     <div className="min-h-screen" style={{ background: C.bg, color: C.ink }}>
@@ -159,23 +179,29 @@ export function AppShell() {
           <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ background: C.spruceSoft, color: C.spruce }}>{roleLabel}</span>
           <span className="text-sm" style={{ color: C.muted }}>{user.name}</span>
           <div className="ml-auto flex items-center gap-2">
+            <LangSwitcher compact />
             {confirmReset ? (
               <>
-                <button type="button" onClick={resetDemo} className="text-xs font-bold px-3 py-1.5 rounded-lg" style={{ background: C.danger, color: "#fff", border: "none", cursor: "pointer" }}>Confirm reset</button>
-                <GhostButton small onClick={() => setConfirmReset(false)}>Cancel</GhostButton>
+                <button type="button" onClick={resetDemo} className="text-xs font-bold px-3 py-1.5 rounded-lg" style={{ background: C.danger, color: "#fff", border: "none", cursor: "pointer" }}>{t("confirmReset")}</button>
+                <GhostButton small onClick={() => setConfirmReset(false)}>{t("cancel")}</GhostButton>
               </>
             ) : (
-              <GhostButton small onClick={() => setConfirmReset(true)}>Reset demo data</GhostButton>
+              <GhostButton small onClick={() => setConfirmReset(true)}>{t("resetDemo")}</GhostButton>
             )}
-            <GhostButton small onClick={doLogout}>Sign out</GhostButton>
+            <GhostButton small onClick={doLogout}>{t("signOut")}</GhostButton>
           </div>
         </div>
       </header>
       <main className="px-4 py-6">
-        {data == null && <p className="text-sm text-center" style={{ color: C.muted }}>Loading…</p>}
+        {networkBlocked && isStaff && (
+          <div className="max-w-3xl mx-auto mb-4 rounded-xl p-4" style={{ background: C.amberSoft, border: `1px solid ${C.amber}` }}>
+            <p className="text-sm font-semibold" style={{ color: C.amber }}>{t("networkRestricted")}</p>
+          </div>
+        )}
+        {data == null && !networkBlocked && <p className="text-sm text-center" style={{ color: C.muted }}>{t("loading")}</p>}
 
         {user.role === "patient" && currentPatient && view.name === "home" && (
-          <PatientHome patient={currentPatient} therapist={therapists.find((t) => t.id === currentPatient.therapistId)} instruments={instruments} justSubmitted={justSubmitted} onStartTask={startPatientTask} />
+          <PatientHome patient={currentPatient} therapist={therapists.find((th) => th.id === currentPatient.therapistId)} instruments={instruments} justSubmitted={justSubmitted} onStartTask={startPatientTask} />
         )}
         {user.role === "patient" && currentPatient && view.name === "form-assessment" && (
           <AssessmentForm onCancel={() => setView({ name: "home" })} onSubmit={(payload) => submitAssessment(currentPatient.id, payload)} />
@@ -189,7 +215,7 @@ export function AppShell() {
           />
         )}
 
-        {(user.role === "therapist" || user.role === "director") && data && view.name === "home" && (
+        {isStaff && data && view.name === "home" && (
           <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient} />
         )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
@@ -197,7 +223,7 @@ export function AppShell() {
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">
-        <p className="text-xs" style={{ color: C.muted }}>Prototype with fictional demo data · DIPS Open Access content for demonstration · not for real patient records</p>
+        <p className="text-xs" style={{ color: C.muted }}>{t("loginFooter")}</p>
       </footer>
     </div>
   );
