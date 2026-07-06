@@ -36,6 +36,55 @@ reverse items I8/I12/I14/I19 (the PDF's "items 10/11 umgepolt" note refers to th
 therapist form); `wellbeing_checkin` was removed. Validated instrument wording stays
 German in all UI languages.
 
+**Batch 3 (2026-07-03)**: **SBKJ-P** (child/adolescent session form) brought to the same
+fidelity as PSTB — real 7-item German wording + verified 0..6 scale from In-Albon et al.
+(2021), replacing placeholder ids/assumed range (`catalog.ts` `sbkj_child` case).
+**Per-session therapist attribution** added: `ResponseInstance.conductedById` (mirrors
+the legacy PSTB Hilfsskript's `TherapeutIn` column), defaulted server-side from the
+patient's current `therapistId`, overridable via a "conducted by" picker in
+`InstrumentForm` clinician mode for `every_session` instruments, surfaced in
+`PatientDetail`'s response list. Full audit of every legacy `.sps`/`.R` data-processing
+script against this codebase's coverage — see `docs/pipeline-coverage.md` — surfaced
+exact formulas for BSI/IIP-64/DERS/SIAS/PHQ-4/YSR/FRKJ/FEEL-KJ/TAIK/full-EDE/DEBQ/WBQ
+(none yet wired into the catalog — still `partial`/`not_extracted`/absent, but no longer
+a research gap) plus several legacy `.sps` scoring bugs *not* to replicate (`BSI_GSI`
+SUM-vs-MEAN, `TAIK_6` double-counted, EDE completeness-guard threshold, `WBQ` raw-column
+naming inconsistency — all documented in `legacy-system-reference.md`). One latent bug
+fixed: `cbcl_parent`'s placeholder item id didn't match the "keep partial entries inert"
+filter and would have rendered one bogus fillable field.
+
+**Batch 4 (2026-07-03)**: `docs/outcome-prediction.md` — summary of Wolfgang Lutz's
+patient-focused research (ETR, failure boundaries, nearest neighbors, Trier Treatment
+Navigator, sudden gains) with a staged analytics roadmap and a data-collection
+checklist (treatment-end/dropout labels, intake predictors, patient codes, session
+log — all still TODO). One data change shipped: **PHQ-4 seeded as a second
+every-session instrument** (code-defined in `catalog.ts` like DIPS; public-domain
+German wording, PHQ_total verified against legacy syntax, GAD-2/PHQ-2 subscales,
+norm bands) so session-wise symptom trajectories accumulate from day one.
+
+**Batch 5 (2026-07-03)**: **Patient archive** — `Patient.status` gains
+`"archived"` plus `archivedAt`/`archiveOutcome`/`archivedBy`; the director or the
+assigned therapist concludes a treatment from `PatientDetail` (two-step confirm,
+optional outcome label `completed`/`dropout` — the first treatment-end label from
+`docs/outcome-prediction.md` §4). Archived patients leave every active overview
+and live in `ArchiveView` (separate full-screen view, low-prominence link at the
+dashboard bottom; category ▸ year-of-conclusion ▸ patient tree; director sees
+all, therapists their own, admin none). Archiving also writes a **filesystem
+export** (`src/lib/archive-export.ts`: `ARCHIVE_DIR`/category/year/patient/ with
+`patient.json` + per-instrument trajectory CSVs; best-effort — a disk failure
+never blocks the archive action; reopening leaves files on disk). **Manual
+registration** (director/admin) now takes optional e-mail + demographics
+(uniqueness checked against patients *and* staff, no password). **i18n
+completion**: `DipsSummary` no longer renders with hard-coded `"en"`; `fmtDate`
+follows the UI language (de-CH/fr-CH/en-GB via `setFmtLang` from `LangProvider`);
+data-model slugs (rater roles, cadence, population, response source, invitation
+status, canonical sex/living values) are translated on display via helpers in
+`i18n.ts`; the catalog's English scale labels, BDI norm-band labels and the BDI
+alert message were Germanized (stored clinical content is German by convention —
+PHQ-4/SRS already were). Demo free text (staff titles, occupations, diagnoses)
+Germanized; 4 archived demo patients (2 categories × 2024/2025) seed the archive
+including the disk export.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic
@@ -55,6 +104,16 @@ German in all UI languages.
    response-ingestion options (webhook plugin / end-URL ping / polling), survey setup
    conventions (question codes = item ids, token-based closed access), and the open
    hosting/GDPR questions.
+5. **`docs/pipeline-coverage.md`** — master cross-reference of every legacy
+   `.sps`/`.R` script found in the source clinic's data folder against this codebase:
+   what's fully implemented and verified (PSTB, SBKJ-P, BDI-FS, DIKJ, FGG, EDE-Q8, SDQ),
+   what's a placeholder only (the two big composite batteries — BSI, IIP-64, DERS,
+   SIAS, PHQ-4, YSR, CBCL, FRKJ, FEEL-KJ, TAIK/TAIE, full EDE, DEBQ, WBQ, Conners 3,
+   SCID-5-SPQ, Somatik, SRS), and which parts of the old R reporting pipeline are
+   obviated by the new architecture rather than missing. Read this before starting work
+   on any instrument not in the "fully implemented" list — the formulas are usually
+   already documented in `legacy-system-reference.md`, so it's transcription work, not
+   research.
 
 ## Working conventions
 

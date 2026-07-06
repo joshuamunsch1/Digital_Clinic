@@ -10,12 +10,27 @@ import { useT } from "./LangContext";
 
 export type PatientTask = { kind: "assessment" } | { kind: "instrument"; instrumentId: string };
 
-/// Instruments a patient can fill out in-app: complete definition AND full item
+/// Does this instrument's target population fit the patient? Age-based
+/// heuristic over the catalog's population slugs ("adult", "child_adolescent",
+/// "adult_adolescent", "all", …); unknown age defaults to the adult forms.
+function populationMatches(inst: InstrumentDef, patient: Patient): boolean {
+  if (inst.population === "all") return true;
+  const age = Number(patient.demographics.age);
+  if (!Number.isFinite(age)) return inst.population.includes("adult");
+  return age < 18 ? /child|adolescent/.test(inst.population) : inst.population.includes("adult");
+}
+
+/// Instruments a patient can fill out in-app: complete definition, full item
 /// wording available (licensed instruments only carry item codes, so those are
-/// administered via LimeSurvey or entered by the therapist instead).
-export function patientFillable(instruments: InstrumentDef[]): InstrumentDef[] {
+/// administered via LimeSurvey or entered by the therapist instead), and a
+/// population that fits the patient (an adult must not see the SBKJ child form).
+export function patientFillable(instruments: InstrumentDef[], patient: Patient): InstrumentDef[] {
   return instruments.filter(
-    (i) => i.instrumentType === "likert_battery" && isFillable(i) && i.items.every((it) => it.text),
+    (i) =>
+      i.instrumentType === "likert_battery" &&
+      isFillable(i) &&
+      i.items.every((it) => it.text) &&
+      populationMatches(i, patient),
   );
 }
 
@@ -29,7 +44,7 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
   const t = useT();
   const sub = patient.dips && patient.dips.submission;
 
-  const fillable = patientFillable(instruments);
+  const fillable = patientFillable(instruments, patient);
   const dueInstruments =
     patient.status === "therapy" ? fillable.filter((i) => i.cadenceType === "every_session") : [];
   const optionalInstruments =

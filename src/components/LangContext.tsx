@@ -4,6 +4,7 @@
 // names, PSTB item wording) is intentionally NOT translated.
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { LANGS, trUI, type Lang, type UIKey } from "@/lib/i18n";
+import { setFmtLang } from "@/lib/format";
 import { C } from "@/lib/theme";
 
 const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({ lang: "de", setLang: () => {} });
@@ -18,6 +19,9 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     setLangState(l);
     window.localStorage.setItem("linden_lang", l);
   };
+  // Keep fmtDate's locale in sync before children render (they re-render on
+  // every language change, so dates follow the UI language).
+  setFmtLang(lang);
   return <LangCtx.Provider value={{ lang, setLang }}>{children}</LangCtx.Provider>;
 }
 

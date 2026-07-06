@@ -10,13 +10,17 @@ import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { PatientDetail } from "./PatientDetail";
+import { ArchiveView } from "./ArchiveView";
 import { LangProvider, LangSwitcher, useT } from "./LangContext";
+import type { RegisterPatientPayload } from "@/lib/api-client";
 
 type View =
   | { name: "home" }
   | { name: "form-assessment" }
   | { name: "form-instrument"; instrumentId: string }
-  | { name: "patient-detail"; patientId: string };
+  | { name: "archive" }
+  // from: "archive" makes Back return to the archive instead of the dashboard.
+  | { name: "patient-detail"; patientId: string; from?: "archive" };
 
 export function AppShell() {
   return (
@@ -137,7 +141,8 @@ function Shell() {
     await refresh();
   };
   const assignTherapist = async (id: string, therapistId: string | null) => { await api.assignTherapist(id, therapistId); await refresh(); };
-  const registerPatient = async (name: string) => { await api.registerPatient(name); await refresh(); };
+  // Errors propagate to the Dashboard registration card (e.g. email_taken).
+  const registerPatient = async (payload: RegisterPatientPayload) => { await api.registerPatient(payload); await refresh(); };
   const resendDips = async (id: string) => { await api.resendDips(id); await refresh(); };
   const resetDemo = async () => {
     await api.resetDemo();
@@ -216,10 +221,13 @@ function Shell() {
         )}
 
         {isStaff && data && view.name === "home" && (
-          <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient} />
+          <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient} onOpenArchive={() => setView({ name: "archive" })} />
+        )}
+        {(user.role === "therapist" || user.role === "director") && data && view.name === "archive" && (
+          <ArchiveView data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "archive" })} onBack={() => setView({ name: "home" })} />
         )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
-          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments} onBack={() => setView({ name: "home" })} onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
+          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments} onBack={() => setView(view.name === "patient-detail" && view.from === "archive" ? { name: "archive" } : { name: "home" })} onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">

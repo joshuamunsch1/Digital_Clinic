@@ -54,7 +54,9 @@ Demo data worth clicking: *Mara Vogel* (PSTB session trajectory, falling
 BDI-FS with norm bands + RCI change markers, completed DIPS intake),
 *Camille Perret* (EDE-Q8 pre/zm/post waves, worsening BDI-FS that trips the
 **suicide-item safety flag**), *Tim Berger* (SDQ self- vs. mother-report,
-DIKJ series), *Jonas Wyss* (FGG).
+DIKJ series), *Jonas Wyss* (FGG). Four archived patients (2024/2025, two
+disorder categories) populate the **archive** — as the director you see all
+four, as `anna.keller@` only her two.
 
 ## Authentication, roles & network restriction
 
@@ -66,6 +68,18 @@ DIKJ series), *Jonas Wyss* (FGG).
   clinic-wide questionnaire-scores matrix), `admin` (**assignment only**: sees
   patient lists, registration status and the disorder-category chip, can
   assign therapists — but never scores, trajectories, diagnoses or DIPS).
+- **Archive**: the director or the assigned therapist can *conclude* a
+  treatment ("Behandlung abschließen & archivieren", optionally recording the
+  outcome — regular completion vs. dropout, the treatment-end label from
+  `docs/outcome-prediction.md`). Archived patients disappear from the active
+  overviews and move to the archive view (link at the bottom of the
+  dashboard), a disorder-category ▸ year tree; the director sees all archived
+  patients, therapists only their own, admin none. On archiving, the dossier
+  is also exported to the server's filesystem under
+  `ARCHIVE_DIR/<category>/<year>/<patient>/` as `patient.json` plus one
+  trajectory CSV per instrument (best-effort; failures are surfaced in the UI
+  but don't block archiving). Reopening restores the patient and leaves the
+  exported files in place.
 - **Network restriction** (`src/lib/network.ts`): when
   `ALLOWED_NETWORK_CIDRS` is set, staff sessions can only read/write clinic
   data from those IPv4 ranges (university network / VPN placeholder). Patients
@@ -73,10 +87,14 @@ DIKJ series), *Jonas Wyss* (FGG).
   `/api/limesurvey/notify` stays reachable for LimeSurvey callbacks. Note:
   the check trusts `x-forwarded-for`, so in production the app must run behind
   a trusted reverse proxy that overwrites that header.
-- The every-session measure is the real **Berner Patientenstundenbogen
+- The every-session measures are the real **Berner Patientenstundenbogen
   (PSTB)** — 22 German items on a −3…+3 scale (wording supplied by the
-  clinic), scored into its 8 published scales. The validated German item text
-  is shown regardless of UI language.
+  clinic), scored into its 8 published scales — and the **PHQ-4** (4 items,
+  public domain), which adds the session-wise *symptom* trajectory needed for
+  trajectory-based outcome prediction (see
+  `docs/outcome-prediction.md` — Lutz-style expected treatment response,
+  not-on-track signals, and the staged analytics roadmap). Validated German
+  item text is shown regardless of UI language.
 
 ## The data model
 
@@ -142,6 +160,8 @@ docs/
   target-data-model.md         # the generalization this codebase implements
   instrument-catalog.json      # machine-readable instrument definitions (seed data)
   limesurvey-integration.md    # LimeSurvey research + setup conventions
+  pipeline-coverage.md         # legacy .sps/.R script coverage cross-reference
+  outcome-prediction.md        # Lutz-style trajectory prediction: research + roadmap
 prisma/
   schema.prisma          # User, Patient, Instrument, Scale, ResponseInstance,
                          # ScaleScore, QuestionnaireInvitation
@@ -186,9 +206,9 @@ All endpoints require a session cookie except `POST /api/auth`,
 | `GET /api/clinic` | Full clinic data (patients + therapists + instruments) |
 | `GET /api/instruments` | Instrument definitions |
 | `PATCH /api/instruments/:id` | Link an instrument to a LimeSurvey survey |
-| `POST /api/patients` | Register a patient (director) |
+| `POST /api/patients` | Register a patient manually (director/admin; optional e-mail + demographics) |
 | `GET /api/patients/:id` | One patient (responses, scores, invitations) |
-| `PATCH /api/patients/:id` | `{ action: "assign" \| "diagnose" \| "contact", … }` |
+| `PATCH /api/patients/:id` | `{ action: "assign" \| "diagnose" \| "contact" \| "archive" \| "unarchive", … }` |
 | `POST /api/patients/:id/assessment` | Submit DIPS intake → FHIR → ResponseInstance |
 | `PUT /api/patients/:id/assessment` | Resend stored FHIR to the relay |
 | `POST /api/patients/:id/responses` | Submit one questionnaire (scored server-side) |
@@ -233,6 +253,7 @@ See `.env.example`.
 | `FHIR_RELAY_URL` | Optional external FHIR server to forward intake submissions to |
 | `LIMESURVEY_URL` | Base URL of the LimeSurvey installation (optional) |
 | `LIMESURVEY_USERNAME` / `LIMESURVEY_PASSWORD` | RemoteControl API credentials |
+| `ARCHIVE_DIR` | Folder for the filesystem export of archived patients (default `./archive`) |
 | `ALLOWED_NETWORK_CIDRS` | Staff data access restricted to these IPv4 CIDRs (blank = unrestricted) |
 | `COOKIE_SECURE` | `"true"` to mark the session cookie Secure (HTTPS only) |
 | `SESSION_SECRET` | Signs the session cookie — set a strong value in any deployment |

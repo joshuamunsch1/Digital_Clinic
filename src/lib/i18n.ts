@@ -55,6 +55,7 @@ export const T = {
   sentLocal: L("Lokal gespeichert (Server nicht erreichbar) — kann erneut gesendet werden.", "Enregistré localement (serveur injoignable) — peut être renvoyé.", "Saved locally (server unreachable) — can be resent."),
   retry: L("Erneut senden", "Renvoyer", "Resend"),
   viewPayload: L("Gesendete Daten anzeigen (FHIR)", "Afficher les données envoyées (FHIR)", "View submitted data (FHIR)"),
+  monthYearPlaceholder: L("MM/JJJJ", "MM/AAAA", "MM/YYYY"),
 };
 
 // --- App-wide UI strings (batch-2 i18n: DE default, FR/EN) ----------------------
@@ -114,6 +115,7 @@ export const UI = {
   statusAssessment: L("Aufnahme ausstehend", "Admission en attente", "Assessment due"),
   statusInterview: L("Wartet auf Erstgespräch", "En attente du premier entretien", "Awaiting intake interview"),
   statusTherapy: L("In Therapie", "En thérapie", "In therapy"),
+  statusArchived: L("Archiviert", "Archivé·e", "Archived"),
   catAnxiety: L("Angststörungen", "Troubles anxieux", "Anxiety"),
   catDepression: L("Depression", "Dépression", "Depression"),
   catEating_disorder: L("Essstörungen", "Troubles alimentaires", "Eating disorder"),
@@ -191,6 +193,8 @@ export const UI = {
   ratedBy: L("Beurteilt durch", "Évalué par", "Rated by"),
   waveLabel: L("Messzeitpunkt", "Temps de mesure", "Measurement wave"),
   dateAdministered: L("Erhebungsdatum", "Date de passation", "Date administered"),
+  conductedBy: L("Durchgeführt von", "Réalisé par", "Conducted by"),
+  conductedByUnset: L("— keine Angabe —", "— non précisé —", "— unspecified —"),
   inviteHeading: L("LimeSurvey-Link per E-Mail senden", "Envoyer le lien LimeSurvey par e-mail", "Send LimeSurvey link by e-mail"),
   recipientEmail: L("Empfänger-E-Mail", "E-mail du destinataire", "Recipient e-mail"),
   surveyIdLinked: L("LimeSurvey-Umfrage-ID (verknüpft: {id})", "ID du sondage LimeSurvey (lié : {id})", "LimeSurvey survey id (linked: {id})"),
@@ -291,6 +295,72 @@ export const UI = {
   progressOverTime: L("Ihr Therapieverlauf", "Votre évolution", "Your progress over time"),
   intakeDelivered: L("Aufnahme: übermittelt ({date}).", "Admission : transmise ({date}).", "Intake submission: delivered ({date})."),
   intakeSavedPending: L("Aufnahme: gespeichert, Übermittlung ausstehend.", "Admission : enregistrée, transmission en attente.", "Intake submission: saved, awaiting delivery."),
+
+  // archive (concluded treatments)
+  archiveTitle: L("Patientenarchiv", "Archives des patient·e·s", "Patient archive"),
+  archiveSub: L(
+    "Abgeschlossene Behandlungen, geordnet nach Störungsbild und Jahr des Abschlusses. Klicken Sie auf eine Patient*in für das vollständige Dossier.",
+    "Traitements terminés, classés par trouble et année de clôture. Cliquez sur un·e patient·e pour ouvrir le dossier complet.",
+    "Concluded treatments, ordered by disorder category and year of conclusion. Click a patient to open the full record."),
+  archiveLink: L("Archiv abgeschlossener Behandlungen ({n})", "Archives des traitements terminés ({n})", "Archive of concluded treatments ({n})"),
+  archiveEmpty: L("Noch keine archivierten Behandlungen.", "Aucun traitement archivé pour le moment.", "No archived treatments yet."),
+  concludeTitle: L("Behandlung abschließen & archivieren", "Clôturer le traitement et archiver", "Conclude treatment & archive"),
+  concludeSub: L(
+    "Verschiebt die Patient*in aus den aktiven Übersichten ins Archiv. Das Behandlungsergebnis (freiwillig) fließt in spätere Verlaufsanalysen ein.",
+    "Déplace le·la patient·e des vues actives vers les archives. Le résultat du traitement (facultatif) alimentera les analyses ultérieures.",
+    "Moves the patient from the active overviews into the archive. The optional outcome label feeds later outcome analyses."),
+  outcomeLabel: L("Behandlungsergebnis (optional)", "Résultat du traitement (facultatif)", "Treatment outcome (optional)"),
+  outcomeNone: L("— keine Angabe —", "— non précisé —", "— unspecified —"),
+  outcomeCompleted: L("Regulär abgeschlossen", "Terminé régulièrement", "Completed as planned"),
+  outcomeDropout: L("Abbruch", "Interruption", "Dropout"),
+  archiveConfirm: L("Archivieren bestätigen", "Confirmer l'archivage", "Confirm archiving"),
+  archivedOn: L("Behandlung abgeschlossen und archiviert am {date}", "Traitement clôturé et archivé le {date}", "Treatment concluded and archived on {date}"),
+  archivedByLine: L("durch {name}", "par {name}", "by {name}"),
+  reopenTreatment: L("Behandlung wieder öffnen", "Rouvrir le traitement", "Reopen treatment"),
+  archiveExportFailed: L(
+    "Archiviert — aber der Dateiexport ist fehlgeschlagen: {error}",
+    "Archivé — mais l'export de fichiers a échoué : {error}",
+    "Archived — but the file export failed: {error}"),
+
+  // manual registration (director/admin)
+  moreDetails: L("E-Mail & persönliche Angaben", "E-mail et informations personnelles", "E-mail & personal details"),
+  invalidEmail: L("Bitte geben Sie eine gültige E-Mail-Adresse ein.", "Veuillez saisir une adresse e-mail valide.", "Please enter a valid e-mail address."),
+  patientRegistered: L("Patient*in registriert.", "Patient·e enregistré·e.", "Patient registered."),
+
+  // DIPS summary (clinician view)
+  dipsCompletedMeta: L("Ausgefüllt am {date} · Sprache: {lang}", "Rempli le {date} · langue : {lang}", "Completed {date} · language: {lang}"),
+  langNameDe: L("Deutsch", "allemand", "German"),
+  langNameFr: L("Französisch", "français", "French"),
+  langNameEn: L("Englisch", "anglais", "English"),
+  dipsRelayed: L("Weitergeleitet · HTTP {status}", "Transmis · HTTP {status}", "Relayed · HTTP {status}"),
+  dipsStoredDb: L("In Klinikdatenbank gespeichert", "Enregistré dans la base de la clinique", "Stored in clinic DB"),
+  dipsSendingShort: L("Wird gesendet…", "Envoi en cours…", "Sending…"),
+  dipsRelayFailed: L("Gespeichert; Weiterleitung fehlgeschlagen", "Enregistré ; transmission échouée", "Stored; relay failed"),
+  dipsDisclaimer: L(
+    "Zusammenfassung des Selbstbericht-Screenings — eine klinische Hilfe, keine Diagnose. Die Diagnose wird nach dem Erstgespräch von der Klinikerin / dem Kliniker erfasst.",
+    "Résumé du dépistage en auto-évaluation — une aide clinique, pas un diagnostic. Le diagnostic est établi par le·la clinicien·ne après l'entretien initial.",
+    "Self-report screening summary — a clinical aid, not a diagnosis. The diagnosis is recorded by the clinician after the intake interview."),
+  dipsNonePositive: L(
+    "Kein Angst-Modul wurde positiv gescreent. Die Patient*in hat die Screening-Fragen beantwortet; kein Bereich erreichte die Schwelle für weitere Fragen.",
+    "Aucun module d'anxiété n'a été dépisté positif. Le·la patient·e a répondu aux questions de dépistage ; aucun domaine n'a atteint le seuil de poursuite.",
+    "No anxiety module screened positive. The patient answered the screening questions; none met the threshold to continue."),
+  screenedPositiveBadge: L("positiv gescreent", "dépistage positif", "screened positive"),
+  screenedPositiveList: L("Positiv gescreent:", "Dépistage positif :", "Screened positive:"),
+  endorsedOf: L("{n} von {total} bejaht", "{n} sur {total} confirmés", "{n} of {total} endorsed"),
+  noneEndorsed: L("keine bejaht", "aucun confirmé", "none endorsed"),
+  impairDistress: L("Beeinträchtigung / Belastung (0–8)", "Altération / détresse (0–8)", "Impairment / distress (0–8)"),
+  showAllResponses: L("Alle Antworten anzeigen", "Afficher toutes les réponses", "Show all responses"),
+
+  // misc clinician strings
+  definitionBadgeTitle: L(
+    "Item-/Skalendetails wurden aus dem Altsystem nicht vollständig verifiziert — siehe docs/instrument-catalog.json.",
+    "Les détails des items/échelles n'ont pas été entièrement vérifiés depuis l'ancien système — voir docs/instrument-catalog.json.",
+    "Item/scale detail was not fully verified from the legacy system — see docs/instrument-catalog.json."),
+  scalesNotComputed: L(
+    "Gespeichert — einige Skalen konnten jedoch nicht berechnet werden:",
+    "Enregistré — mais certaines échelles n'ont pas pu être calculées :",
+    "Saved, but some scales were not computed:"),
+  importOk: L("OK", "OK", "OK"),
 } as const;
 
 export type UIKey = keyof typeof UI;
@@ -308,3 +378,80 @@ export function trCategory(category: string | null | undefined, lang: Lang): str
   const key = (`cat${category.charAt(0).toUpperCase()}${category.slice(1)}`) as UIKey;
   return key in UI ? trUI(key, lang) : category;
 }
+
+// --- Slug translations for data-model vocabulary shown in the UI ----------------
+// These are stored as stable English slugs in the database; the UI translates
+// them on display. Unknown slugs fall back to the slug with "_" → " ".
+
+const slugTr = (dict: Record<string, LangNode>) => (slug: string | null | undefined, lang: Lang): string => {
+  if (!slug) return "";
+  const node = dict[slug];
+  return node ? tr(node, lang) : slug.replace(/_/g, " ");
+};
+
+/// Rater / respondent roles (ResponseInstance.respondentRole, Instrument.raterRole).
+export const trRaterRole = slugTr({
+  self: L("Selbstbericht", "auto-évaluation", "self-report"),
+  mother: L("Mutter", "mère", "mother"),
+  father: L("Vater", "père", "father"),
+  parent: L("Elternteil", "parent", "parent"),
+  teacher: L("Lehrperson", "enseignant·e", "teacher"),
+  caregiver: L("Bezugsperson", "proche aidant·e", "caregiver"),
+  clinician: L("Kliniker*in", "clinicien·ne", "clinician"),
+});
+
+/// Instrument cadence types.
+export const trCadence = slugTr({
+  every_session: L("pro Sitzung", "à chaque séance", "every session"),
+  wave: L("Messzeitpunkte", "temps de mesure", "measurement waves"),
+  periodic: L("wiederkehrend", "périodique", "periodic"),
+  intake_once: L("einmalig bei Aufnahme", "une fois à l'admission", "once at intake"),
+});
+
+/// Instrument target populations (docs/instrument-catalog.json vocabulary).
+export const trPopulation = slugTr({
+  adult: L("Erwachsene", "adultes", "adults"),
+  adolescent: L("Jugendliche", "adolescent·e·s", "adolescents"),
+  adolescent_11_17: L("Jugendliche 11–17", "adolescent·e·s 11–17", "adolescents 11–17"),
+  adult_adolescent: L("Erwachsene & Jugendliche", "adultes et adolescent·e·s", "adults & adolescents"),
+  child: L("Kinder", "enfants", "children"),
+  child_2_4: L("Kinder 2–4", "enfants 2–4", "children 2–4"),
+  child_adolescent: L("Kinder & Jugendliche", "enfants et adolescent·e·s", "children & adolescents"),
+  child_adolescent_4_17: L("Kinder & Jugendliche 4–17", "enfants et adolescent·e·s 4–17", "children & adolescents 4–17"),
+  child_adolescent_8_16: L("Kinder & Jugendliche 8–16", "enfants et adolescent·e·s 8–16", "children & adolescents 8–16"),
+  child_school_age: L("Kinder im Schulalter", "enfants d'âge scolaire", "school-age children"),
+  all: L("alle Altersgruppen", "tous âges", "all ages"),
+});
+
+/// Response sources (ResponseInstance.source).
+export const trSource = slugTr({
+  in_app: L("in der App", "dans l'application", "in-app"),
+  limesurvey: L("LimeSurvey", "LimeSurvey", "LimeSurvey"),
+  csv_import: L("CSV-Import", "import CSV", "CSV import"),
+  manual_entry: L("manuelle Eingabe", "saisie manuelle", "manual entry"),
+  seed: L("Demodaten", "données de démo", "demo data"),
+});
+
+/// LimeSurvey invitation statuses (QuestionnaireInvitation.status).
+export const trInvitationStatus = slugTr({
+  created: L("erstellt", "créée", "created"),
+  invited: L("eingeladen", "invitation envoyée", "invited"),
+  reminded: L("erinnert", "rappel envoyé", "reminded"),
+  completed: L("abgeschlossen", "terminée", "completed"),
+  error: L("Fehler", "erreur", "error"),
+});
+
+/// Canonical demographics values stored by the registration forms (sex/living
+/// options are stored as their English label — see Login.tsx). Free-text
+/// values (occupation, city, …) pass through unchanged.
+export const trDemoValue = slugTr({
+  Female: L("Weiblich", "Féminin", "Female"),
+  Male: L("Männlich", "Masculin", "Male"),
+  "Non-binary": L("Divers", "Non-binaire", "Non-binary"),
+  "Prefer not to say": L("Keine Angabe", "Préfère ne pas répondre", "Prefer not to say"),
+  Alone: L("Allein", "Seul(e)", "Alone"),
+  "With partner": L("Mit Partner*in", "Avec partenaire", "With partner"),
+  "With family": L("Mit Familie", "Avec la famille", "With family"),
+  "Shared flat": L("Wohngemeinschaft", "Colocation", "Shared flat"),
+  Other: L("Andere", "Autre", "Other"),
+});
