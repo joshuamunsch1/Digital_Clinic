@@ -9,6 +9,8 @@ import type {
   SessionUser,
 } from "./types";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
+// Type-only imports — erased at compile time, no server code in the bundle.
+import type { PredictionPayload, PredictionSummary } from "./prediction/service";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -155,6 +157,13 @@ export const api = {
 
   unarchivePatient: (id: string) =>
     patch(`/api/patients/${id}`, { action: "unarchive" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  /// Therapist-facing outcome prediction (staff-only; 403 for patients/admin).
+  getPrediction: (id: string) =>
+    fetch(`/api/patients/${id}/prediction`).then((r) => handle<{ prediction: PredictionPayload }>(r)),
+
+  getPredictionSummaries: () =>
+    fetch("/api/predictions/summary").then((r) => handle<{ summaries: Record<string, PredictionSummary> }>(r)),
 
   resetDemo: () => post("/api/seed").then((r) => handle<{ ok: boolean }>(r)),
 };

@@ -255,6 +255,43 @@ export function patientFromRow(p: PatientRow): Patient {
   };
 }
 
+/// Summary form for ARCHIVED patients in the clinic payload: everything the
+/// archive tree and list rows need (name, category, archive metadata,
+/// termination reason, code, simulated flag) but WITHOUT the response/
+/// invitation/session-log payloads — with a couple hundred archived reference
+/// cases those would dominate the transfer. The full dossier is fetched via
+/// GET /api/patients/[id] when an archived patient is opened.
+export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs">): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    color: p.color,
+    status: p.status as Patient["status"],
+    disorderCategory: p.disorderCategory,
+    code: p.code,
+    icdCode: p.icdCode,
+    treatmentStartAt: p.treatmentStartAt ? p.treatmentStartAt.toISOString() : null,
+    treatmentEndAt: p.treatmentEndAt ? p.treatmentEndAt.toISOString() : null,
+    terminationReason: p.terminationReason,
+    caseCharacteristics: parse<CaseCharacteristics>(p.caseCharacteristics, {}),
+    simulated: p.simulated,
+    therapistId: p.therapistId,
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archivedBy: p.archivedBy,
+    demographics: parse<Demographics>(p.demographics, {}),
+    responses: [],
+    invitations: [],
+    sessionLogs: [],
+    assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
+    dips: null,
+    diagnosis:
+      p.diagnosisText && p.diagnosisDate
+        ? { text: p.diagnosisText, date: p.diagnosisDate.toISOString(), by: p.diagnosisBy || "" }
+        : null,
+  };
+}
+
 /// Administration view of a patient: assignment-relevant fields only — no
 /// responses, scores, DIPS, diagnosis text or demographics detail. The disorder
 /// category IS included (clinic decision: needed for specialty-based assignment).

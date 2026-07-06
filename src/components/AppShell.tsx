@@ -44,7 +44,21 @@ function Shell() {
   const refresh = useCallback(async () => {
     try {
       const d = await api.getClinic();
-      setData(d);
+      // Archived patients arrive as summary rows (no responses) to keep the
+      // clinic payload small; keep any full dossier we already fetched instead
+      // of clobbering it with the summary.
+      setData((prev) => {
+        if (!prev) return d;
+        return {
+          ...d,
+          patients: d.patients.map((np) => {
+            const old = prev.patients.find((x) => x.id === np.id);
+            return np.status === "archived" && np.responses.length === 0 && old && old.responses.length > 0
+              ? { ...np, responses: old.responses, invitations: old.invitations, sessionLogs: old.sessionLogs, dips: old.dips }
+              : np;
+          }),
+        };
+      });
       setNetworkBlocked(false);
     } catch (e) {
       setData(null);
@@ -135,6 +149,28 @@ function Shell() {
     setData((prev) => (prev ? { ...prev, patients: prev.patients.map((x) => (x.id === p.id ? p : x)) } : prev));
     void refresh();
   };
+
+  /// Archived dossiers are summary-only in the clinic payload — load the full
+  /// record once when one is opened.
+  const openedDetailRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (view.name !== "patient-detail") {
+      openedDetailRef.current = null;
+      return;
+    }
+    if (openedDetailRef.current === view.patientId) return;
+    openedDetailRef.current = view.patientId;
+    const p = data?.patients.find((x) => x.id === view.patientId);
+    if (!p || p.status !== "archived" || p.responses.length > 0) return;
+    void api
+      .getPatient(view.patientId)
+      .then((r) =>
+        setData((prev) =>
+          prev ? { ...prev, patients: prev.patients.map((x) => (x.id === r.patient.id ? r.patient : x)) } : prev,
+        ),
+      )
+      .catch(() => {});
+  }, [view, data]);
 
   const saveDiagnosis = async (id: string, text: string, category: string, icdCode?: string) => {
     await api.saveDiagnosis(id, text, category, icdCode);
