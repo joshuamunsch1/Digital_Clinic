@@ -1,13 +1,13 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { tr, T, trCategory } from "@/lib/i18n";
+import { tr, T, trCategory, trCadence, trDemoValue, trInvitationStatus, trPopulation, trRaterRole, trSource } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
 import type { InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, RATER_ROLES, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf } from "./charts";
 import { DipsSummary } from "./DipsSummary";
@@ -19,22 +19,27 @@ function DefinitionBadge({ instrument }: { instrument: InstrumentDef }) {
   if (instrument.definitionStatus === "complete") return null;
   return (
     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}
-      title="Item/scale detail was not fully verified from the legacy system — see docs/instrument-catalog.json.">
+      title={t("definitionBadgeTitle")}>
       {t("definitionBadge", { status: instrument.definitionStatus.replace("_", " ") })}
     </span>
   );
 }
 
 /// One individual filled-out questionnaire, expandable to its raw answers.
-function ResponseRow({ instrument, response }: { instrument: InstrumentDef; response: ResponseRecord }) {
+function ResponseRow({ instrument, response, therapists }: { instrument: InstrumentDef; response: ResponseRecord; therapists: Therapist[] }) {
   const t = useT();
+  const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const occ = occasionOf(instrument, response);
+  const conductedBy = therapists.find((th) => th.id === response.conductedById);
   return (
     <div className="rounded-lg" style={{ background: C.surfaceAlt }}>
       <button type="button" onClick={() => setOpen(!open)} className="w-full text-left px-3 py-2 flex items-center gap-3 flex-wrap" style={{ background: "none", border: "none", cursor: "pointer" }}>
         <span className="text-xs font-bold" style={{ color: C.ink }}>{occ.label}</span>
-        <span className="text-xs" style={{ color: C.muted }}>{fmtDate(response.occurredAt)} · {response.respondentRole} · {t("via")} {response.source.replace("_", " ")}</span>
+        <span className="text-xs" style={{ color: C.muted }}>
+          {fmtDate(response.occurredAt)} · {trRaterRole(response.respondentRole, lang)} · {t("via")} {trSource(response.source, lang)}
+          {conductedBy ? ` · ${t("conductedBy")}: ${conductedBy.name}` : ""}
+        </span>
         <span className="ml-auto text-xs" style={{ color: C.spruce }}>{open ? t("hideAnswers") : t("viewAnswers")}</span>
       </button>
       {open && (
@@ -71,8 +76,9 @@ function ResponseRow({ instrument, response }: { instrument: InstrumentDef; resp
   );
 }
 
-function InstrumentCard({ instrument, responses }: { instrument: InstrumentDef; responses: ResponseRecord[] }) {
+function InstrumentCard({ instrument, responses, therapists }: { instrument: InstrumentDef; responses: ResponseRecord[]; therapists: Therapist[] }) {
   const t = useT();
+  const { lang } = useLang();
   const [showAll, setShowAll] = useState(false);
   const occasions = new Set(responses.map((r) => occasionOf(instrument, r).key)).size;
   const scoreable = isScoreable(instrument);
@@ -85,7 +91,7 @@ function InstrumentCard({ instrument, responses }: { instrument: InstrumentDef; 
         <span className="ml-auto text-xs" style={{ color: C.muted }}>{responses.length} {t("responsesN")}</span>
       </div>
       <p className="text-xs mb-3" style={{ color: C.muted }}>
-        {instrument.raterRole} · {instrument.cadenceType.replace("_", " ")} · {instrument.population.replace(/_/g, " ")}
+        {trRaterRole(instrument.raterRole, lang)} · {trCadence(instrument.cadenceType, lang)} · {trPopulation(instrument.population, lang)}
       </p>
       {scoreable && occasions >= 2 && (
         <div className="mb-3"><TrajectoryChart instrument={instrument} responses={responses} /></div>
@@ -99,14 +105,12 @@ function InstrumentCard({ instrument, responses }: { instrument: InstrumentDef; 
       </button>
       {showAll && (
         <div className="flex flex-col gap-2 mt-2">
-          {list.map((r) => <ResponseRow key={r.id} instrument={instrument} response={r} />)}
+          {list.map((r) => <ResponseRow key={r.id} instrument={instrument} response={r} therapists={therapists} />)}
         </div>
       )}
     </Card>
   );
 }
-
-const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"];
 
 /// Get data in: send a LimeSurvey link, upload a LimeSurvey CSV export, or type
 /// a paper form in manually. See docs/limesurvey-integration.md.
@@ -117,6 +121,7 @@ function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
   onRefresh: (p: Patient) => void;
 }) {
   const t = useT();
+  const { lang } = useLang();
   const candidates = useMemo(
     () => instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery"),
     [instruments],
@@ -156,14 +161,14 @@ function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
           <select style={{ ...inputStyle, width: "auto", minWidth: 260 }} value={instId} onChange={(e) => { setInstId(e.target.value); setSurveyId(""); setMsg(null); }}>
             {candidates.map((i) => (
               <option key={i.id} value={i.id}>
-                {i.abbreviation} — {i.raterRole} ({i.population.replace(/_/g, " ")})
+                {i.abbreviation} — {trRaterRole(i.raterRole, lang)} ({trPopulation(i.population, lang)})
               </option>
             ))}
           </select>
         </Field>
         <Field label={t("ratedBy")}>
           <select style={{ ...inputStyle, width: "auto", minWidth: 120 }} value={role} onChange={(e) => setRole(e.target.value)}>
-            {RATER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {RATER_ROLES.map((r) => <option key={r} value={r}>{trRaterRole(r, lang)}</option>)}
           </select>
         </Field>
         {isWave && (
@@ -213,7 +218,7 @@ function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
               <PrimaryButton small disabled={busy || !csv.trim() || !inst.items.length}
                 onClick={() => run(
                   () => api.importCsv(patient.id, { instrumentId: inst.id, csv, respondentRole: role, wave: isWave && wave ? wave : undefined }),
-                  (r) => `✓ ${r.imported} — ${(r.warnings as string[]).join("; ") || "OK"}`,
+                  (r) => `✓ ${r.imported} — ${(r.warnings as string[]).join("; ") || t("importOk")}`,
                 )}>
                 {t("importCsv")}
               </PrimaryButton>
@@ -236,6 +241,7 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
   onRefresh: (p: Patient) => void;
 }) {
   const t = useT();
+  const { lang } = useLang();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   if (!patient.invitations.length) return null;
@@ -269,9 +275,9 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
         {[...patient.invitations].reverse().map((inv) => (
           <div key={inv.id} className="flex items-center gap-3 flex-wrap rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
             <span className="text-sm font-semibold" style={{ color: C.ink }}>{label(inv)}</span>
-            <span className="text-xs" style={{ color: C.muted }}>{inv.respondentRole} · {inv.email}{inv.context.wave ? ` · ${inv.context.wave}` : ""}</span>
+            <span className="text-xs" style={{ color: C.muted }}>{trRaterRole(inv.respondentRole, lang)} · {inv.email}{inv.context.wave ? ` · ${inv.context.wave}` : ""}</span>
             <span className="text-xs font-bold" style={{ color: statusColor[inv.status] ?? C.muted }}>
-              {inv.status}{inv.sentAt ? ` · ${fmtDate(inv.sentAt)}` : ""}{inv.completedAt ? ` · ✓ ${fmtDate(inv.completedAt)}` : ""}
+              {trInvitationStatus(inv.status, lang)}{inv.sentAt ? ` · ${fmtDate(inv.sentAt)}` : ""}{inv.completedAt ? ` · ✓ ${fmtDate(inv.completedAt)}` : ""}
             </span>
             {inv.lastError && <span className="text-xs" style={{ color: C.danger }}>{inv.lastError}</span>}
             <span className="ml-auto flex gap-2">
@@ -300,14 +306,48 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const [dxCategory, setDxCategory] = useState<string>("other");
   const [manualEntry, setManualEntry] = useState<InstrumentDef | null>(null);
   const [busy, setBusy] = useState(false);
+  // Conclude-treatment (archive) state — see the card at the bottom of the page.
+  const [archOutcome, setArchOutcome] = useState("");
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [archMsg, setArchMsg] = useState<string | null>(null);
   const lastProgress = latestSessionScore(patient);
   const d = patient.demographics;
   const demoRows: [string, React.ReactNode][] = [
-    [tr(T.age, lang), d.age], [tr(T.sex, lang), d.sex], [tr(T.nationality, lang), d.nationality],
-    [tr(T.city, lang), d.city], [tr(T.occupation, lang), d.occupation], [tr(T.living, lang), d.living],
+    [tr(T.age, lang), d.age], [tr(T.sex, lang), trDemoValue(d.sex, lang)], [tr(T.nationality, lang), d.nationality],
+    [tr(T.city, lang), d.city], [tr(T.occupation, lang), d.occupation], [tr(T.living, lang), trDemoValue(d.living, lang)],
   ];
   const sub = patient.dips && patient.dips.submission;
   const alerts = activeAlerts(patient, instruments);
+  const isArchived = patient.status === "archived";
+  const canArchive = user.role === "director" || (user.role === "therapist" && patient.therapistId === user.id);
+
+  const doArchive = async () => {
+    setBusy(true);
+    setArchMsg(null);
+    try {
+      const r = await api.archivePatient(patient.id, archOutcome || undefined);
+      onPatientUpdated(r.patient);
+      setConfirmArchive(false);
+      if (r.archiveExport && !r.archiveExport.ok)
+        setArchMsg(t("archiveExportFailed", { error: r.archiveExport.error ?? "" }));
+    } catch (e) {
+      setArchMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doUnarchive = async () => {
+    setBusy(true);
+    setArchMsg(null);
+    try {
+      const r = await api.unarchivePatient(patient.id);
+      onPatientUpdated(r.patient);
+    } catch (e) {
+      setArchMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const instrumentsWithData = instruments
     .filter((i) => i.id !== DIPS_INSTRUMENT_ID)
@@ -321,6 +361,8 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
       <InstrumentForm
         instrument={manualEntry}
         clinicianMode
+        therapists={therapists}
+        defaultConductedById={user.role === "therapist" ? user.id : patient.therapistId}
         busy={busy}
         onCancel={() => setManualEntry(null)}
         onSubmit={async (payload) => {
@@ -329,7 +371,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
             const r = await api.submitResponse(patient.id, payload);
             onPatientUpdated(r.patient);
             setManualEntry(null);
-            if (r.skippedScales.length) alert(`Saved, but some scales were not computed:\n${r.skippedScales.map((s) => `${s.key}: ${s.reason}`).join("\n")}`);
+            if (r.skippedScales.length) alert(`${t("scalesNotComputed")}\n${r.skippedScales.map((s) => `${s.key}: ${s.reason}`).join("\n")}`);
           } catch (e) {
             alert("✗ " + (e as Error).message);
           } finally {
@@ -352,6 +394,28 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           </p>
         </Card>
       ))}
+
+      {isArchived && (
+        <Card className="p-4 mb-4" style={{ background: C.surfaceAlt }}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-bold" style={{ color: C.ink }}>
+                {t("archivedOn", { date: patient.archivedAt ? fmtDate(patient.archivedAt) : "—" })}
+                {patient.archivedBy ? ` ${t("archivedByLine", { name: patient.archivedBy })}` : ""}
+              </p>
+              {patient.archiveOutcome && (
+                <p className="text-xs mt-0.5" style={{ color: C.muted }}>
+                  {patient.archiveOutcome === "completed" ? t("outcomeCompleted") : t("outcomeDropout")}
+                </p>
+              )}
+            </div>
+            {canArchive && (
+              <span className="ml-auto"><GhostButton small onClick={doUnarchive}>{t("reopenTreatment")}</GhostButton></span>
+            )}
+          </div>
+          {archMsg && <p className="text-xs mt-2" style={{ color: C.amber }}>{archMsg}</p>}
+        </Card>
+      )}
 
       <Card className="p-5 mb-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -413,6 +477,8 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("diagnosisTitle")}</h3>
           {patient.diagnosis ? (
             <div><p className="text-sm font-semibold" style={{ color: C.ink }}>{patient.diagnosis.text}</p><p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p></div>
+          ) : isArchived ? (
+            <p className="text-sm" style={{ color: C.muted }}>—</p>
           ) : patient.status === "assessment" ? (
             <p className="text-sm" style={{ color: C.muted }}>{t("diagnosisAfterIntake")}</p>
           ) : (
@@ -442,14 +508,15 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         </Card>
       )}
 
-      <AddDataPanel patient={patient} instruments={instruments} onStartManualEntry={setManualEntry} onRefresh={onPatientUpdated} />
+      {/* Archived dossiers are read-only — no new data collection. */}
+      {!isArchived && <AddDataPanel patient={patient} instruments={instruments} onStartManualEntry={setManualEntry} onRefresh={onPatientUpdated} />}
       <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
 
       {instrumentsWithData.length === 0 && (
         <Card className="p-5 mb-4"><p className="text-sm" style={{ color: C.muted }}>{t("noDataYet")}</p></Card>
       )}
       {instrumentsWithData.map(({ instrument, responses }) => (
-        <InstrumentCard key={instrument.id} instrument={instrument} responses={responses} />
+        <InstrumentCard key={instrument.id} instrument={instrument} responses={responses} therapists={therapists} />
       ))}
 
       {notes.length > 0 && (
@@ -463,6 +530,35 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* Conclude treatment & archive — deliberately the last, low-key card. */}
+      {canArchive && !isArchived && (
+        <Card className="p-5 mt-4">
+          <h3 className="text-sm font-bold mb-1" style={{ color: C.ink }}>{t("concludeTitle")}</h3>
+          <p className="text-xs mb-3" style={{ color: C.muted }}>{t("concludeSub")}</p>
+          <div className="flex items-end gap-3 flex-wrap">
+            <Field label={t("outcomeLabel")}>
+              <select style={{ ...inputStyle, width: "auto", minWidth: 200 }} value={archOutcome} onChange={(e) => setArchOutcome(e.target.value)}>
+                <option value="">{t("outcomeNone")}</option>
+                <option value="completed">{t("outcomeCompleted")}</option>
+                <option value="dropout">{t("outcomeDropout")}</option>
+              </select>
+            </Field>
+            {confirmArchive ? (
+              <>
+                <button type="button" onClick={doArchive} disabled={busy} className="text-xs font-bold px-3 py-2 rounded-lg"
+                  style={{ background: C.danger, color: "#fff", border: "none", cursor: busy ? "wait" : "pointer" }}>
+                  {t("archiveConfirm")}
+                </button>
+                <GhostButton small onClick={() => setConfirmArchive(false)}>{t("cancel")}</GhostButton>
+              </>
+            ) : (
+              <GhostButton small onClick={() => setConfirmArchive(true)}>{t("concludeTitle")}</GhostButton>
+            )}
+          </div>
+          {archMsg && <p className="text-xs mt-2" style={{ color: C.danger }}>{archMsg}</p>}
         </Card>
       )}
     </div>

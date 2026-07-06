@@ -27,6 +27,10 @@ model User {
   email        String    @unique
   passwordHash String
   patients     Patient[] @relation("TherapistPatients")
+  /// Sessions/occasions this staff member is recorded as having conducted —
+  /// see ResponseInstance.conductedById. Distinct from TherapistPatients,
+  /// which is the *current* patient assignment, not a per-occasion record.
+  conducted    ResponseInstance[] @relation("ResponseConductedBy")
   createdAt    DateTime  @default(now())
 }
 
@@ -36,8 +40,15 @@ model Patient {
   email          String?            @unique // login + LimeSurvey invitations
   passwordHash   String? // set when the patient registered themselves (or was given credentials)
   color          String
-  status         String // "assessment" | "interview" | "therapy"
+  status         String // "assessment" | "interview" | "therapy" | "archived"
   disorderCategory String? // "anxiety" | "depression" | "eating_disorder" | "adhd" | "burnout" | "other" — set at diagnosis
+  /// Treatment conclusion ("archive"): set by the director or the assigned
+  /// therapist when therapy ends. archiveOutcome is the treatment-end label
+  /// wanted by docs/outcome-prediction.md §4 ("completed" | "dropout",
+  /// extendable). archivedBy mirrors diagnosisBy (staff display name).
+  archivedAt     DateTime?
+  archiveOutcome String?
+  archivedBy     String?
   therapistId    String?
   therapist      User?              @relation("TherapistPatients", fields: [therapistId], references: [id])
   demographics   String             @default("{}") // JSON object
@@ -104,6 +115,14 @@ model ResponseInstance {
   respondentRole String // "self" | "mother" | "father" | "parent" | "teacher" | ...
   sessionNumber  Int? // set when instrument.cadenceType == "every_session" (0 = baseline)
   wave           String? // "pre" | "zm" | "post" | "postF", when cadenceType == "wave"
+  /// Staff member who conducted/recorded this occasion — the digital equivalent
+  /// of the legacy PSTB Hilfsskript's per-session "Therapeut" column. Nullable:
+  /// not every response has a clinician present (e.g. a wave-based self-report
+  /// questionnaire filled in remotely). Best-effort defaulted to the patient's
+  /// current therapistId at submission time when not explicitly set — see
+  /// src/app/api/patients/[id]/responses/route.ts.
+  conductedById  String?
+  conductedBy    User?        @relation("ResponseConductedBy", fields: [conductedById], references: [id])
   occurredAt     DateTime
   rawAnswers     String // JSON: { itemId: value }
   status         String       @default("complete") // "complete" | "partial"

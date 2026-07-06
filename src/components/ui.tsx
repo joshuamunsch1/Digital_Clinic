@@ -25,6 +25,7 @@ export function StatusBadge({ status }: { status: PatientStatus }) {
     assessment: { label: t("statusAssessment"), bg: C.amberSoft, fg: C.amber },
     interview: { label: t("statusInterview"), bg: C.blueSoft, fg: C.blue },
     therapy: { label: t("statusTherapy"), bg: C.spruceSoft, fg: C.spruce },
+    archived: { label: t("statusArchived"), bg: C.surfaceAlt, fg: C.muted },
   };
   const s = map[status];
   return <span className="text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>;

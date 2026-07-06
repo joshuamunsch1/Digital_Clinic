@@ -5,12 +5,13 @@
 // WellbeingForm. Structured interviews (DIPS) keep their dedicated renderer.
 import React, { useState } from "react";
 import { C } from "@/lib/theme";
+import { trRaterRole } from "@/lib/i18n";
 import type { InstrumentDef, ItemDef, RawAnswers } from "@/lib/instruments/types";
 import type { SubmitResponsePayload } from "@/lib/api-client";
+import type { Therapist } from "@/lib/types";
+import { RATER_ROLES } from "@/lib/types";
 import { Card, Field, GhostButton, PrimaryButton, SectionTitle, inputStyle } from "./ui";
-import { useT } from "./LangContext";
-
-const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"];
+import { useLang, useT } from "./LangContext";
 
 function LikertRow({ item, value, onChange }: { item: ItemDef; value: number | null; onChange: (v: number) => void }) {
   const min = item.min ?? 0;
@@ -56,27 +57,34 @@ function CategoricalRow({ item, value, onChange }: { item: ItemDef; value: strin
   );
 }
 
-export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber, onSubmit, onCancel, busy }: {
+export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber, therapists, defaultConductedById, onSubmit, onCancel, busy }: {
   instrument: InstrumentDef;
   /// therapists get rater/wave/date context controls; patients just answer
   clinicianMode?: boolean;
   defaultSessionNumber?: number;
+  /// clinic staff, for the "conducted by" picker on every-session instruments
+  /// (mirrors the legacy PSTB Hilfsskript's per-session Therapeut column).
+  therapists?: Therapist[];
+  defaultConductedById?: string | null;
   onSubmit: (payload: SubmitResponsePayload) => void;
   onCancel: () => void;
   busy?: boolean;
 }) {
   const t = useT();
+  const { lang } = useLang();
   const [answers, setAnswers] = useState<RawAnswers>({});
   const [note, setNote] = useState("");
   const [role, setRole] = useState(instrument.raterRole === "self" ? "self" : instrument.raterRole);
   const [wave, setWave] = useState((instrument.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"])[0]);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [conductedById, setConductedById] = useState(defaultConductedById ?? "");
 
   const set = (id: string, v: number | string) => setAnswers((prev) => ({ ...prev, [id]: v }));
   const required = instrument.items.filter((it) => it.responseType !== "text");
   const ready = required.every((it) => answers[it.id] !== undefined && answers[it.id] !== "");
   const assumedRange = instrument.items.some((it) => it.rangeAssumed);
   const isWave = instrument.cadenceType === "wave";
+  const showConductedBy = clinicianMode && instrument.cadenceType === "every_session" && !!therapists?.length;
 
   const submit = () =>
     onSubmit({
@@ -86,6 +94,7 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
       respondentRole: clinicianMode ? role : "self",
       wave: clinicianMode && isWave ? wave : undefined,
       sessionNumber: defaultSessionNumber,
+      conductedById: showConductedBy ? conductedById || null : undefined,
       occurredAt: clinicianMode ? new Date(`${date}T12:00:00`).toISOString() : undefined,
     });
 
@@ -102,7 +111,7 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
           <div className="flex gap-3 flex-wrap">
             <Field label={t("ratedBy")}>
               <select style={{ ...inputStyle, width: "auto", minWidth: 140 }} value={role} onChange={(e) => setRole(e.target.value)}>
-                {RATER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                {RATER_ROLES.map((r) => <option key={r} value={r}>{trRaterRole(r, lang)}</option>)}
               </select>
             </Field>
             {isWave && (
@@ -115,6 +124,14 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
             <Field label={t("dateAdministered")}>
               <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
+            {showConductedBy && (
+              <Field label={t("conductedBy")}>
+                <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={conductedById} onChange={(e) => setConductedById(e.target.value)}>
+                  <option value="">{t("conductedByUnset")}</option>
+                  {therapists!.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
         </Card>
       )}

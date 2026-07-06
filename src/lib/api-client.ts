@@ -35,6 +35,7 @@ export interface SubmitResponsePayload {
   wave?: string | null;
   occurredAt?: string;
   note?: string;
+  conductedById?: string | null;
 }
 
 export interface ImportCsvPayload {
@@ -62,6 +63,21 @@ export interface RegisterRequest {
   demographics: Demographics;
 }
 
+/// Manual registration by director/administrator (no password — the patient
+/// receives credentials later).
+export interface RegisterPatientPayload {
+  name: string;
+  email?: string;
+  demographics?: Demographics;
+}
+
+/// Result of the best-effort filesystem export performed by the archive action.
+export interface ArchiveExportInfo {
+  ok: boolean;
+  dir?: string;
+  error?: string;
+}
+
 export const api = {
   getSession: () => fetch("/api/auth").then((r) => handle<{ user: SessionUser | null }>(r)),
   login: (email: string, password: string) =>
@@ -72,7 +88,8 @@ export const api = {
 
   getClinic: () => fetch("/api/clinic").then((r) => handle<ClinicData>(r)),
   getPatient: (id: string) => fetch(`/api/patients/${id}`).then((r) => handle<{ patient: Patient }>(r)),
-  registerPatient: (name: string) => post("/api/patients", { name }).then((r) => handle<{ patient: Patient }>(r)),
+  registerPatient: (payload: RegisterPatientPayload) =>
+    post("/api/patients", payload).then((r) => handle<{ patient: Patient }>(r)),
 
   getInstruments: () => fetch("/api/instruments").then((r) => handle<{ instruments: InstrumentDef[] }>(r)),
   linkInstrumentSurvey: (id: string, limesurveySurveyId: string | null) =>
@@ -116,6 +133,14 @@ export const api = {
 
   assignTherapist: (id: string, therapistId: string | null) =>
     patch(`/api/patients/${id}`, { action: "assign", therapistId }).then((r) => handle<{ patient: Patient }>(r)),
+
+  archivePatient: (id: string, outcome?: string) =>
+    patch(`/api/patients/${id}`, { action: "archive", outcome }).then((r) =>
+      handle<{ patient: Patient; archiveExport?: ArchiveExportInfo }>(r),
+    ),
+
+  unarchivePatient: (id: string) =>
+    patch(`/api/patients/${id}`, { action: "unarchive" }).then((r) => handle<{ patient: Patient }>(r)),
 
   resetDemo: () => post("/api/seed").then((r) => handle<{ ok: boolean }>(r)),
 };

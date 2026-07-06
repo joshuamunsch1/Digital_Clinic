@@ -27,6 +27,7 @@ function errorText(msg: string, t: ReturnType<typeof useT>): string {
   switch (msg) {
     case "invalid_credentials": return t("invalidCredentials");
     case "email_taken": return t("emailTaken");
+    case "invalid_email": return t("invalidEmail");
     case "weak_password": return t("passwordTooShort");
     case "network_restricted": return t("networkRestricted");
     default: return msg;

@@ -17,8 +17,10 @@ import {
   SAMPLE_ANSWERS,
   SDQ_SERIES,
   THERAPISTS,
+  phq4SessionsFor,
   pstbSessionsFor,
 } from "./demo";
+import { exportPatientArchive } from "./archive-export";
 import { toFHIR } from "./dips/fhir";
 import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
@@ -142,6 +144,7 @@ export async function seedClinic(prisma: PrismaClient) {
 
   const instruments = await seedInstruments(prisma);
   const pstb = instruments.get(SESSION_INSTRUMENT_ID)!;
+  const phq4 = instruments.get("phq4")!;
   const dips = instruments.get(DIPS_INSTRUMENT_ID)!;
   const bdi = instruments.get("bdi_fs")!;
   const sdqSelf = instruments.get("sdq_self_11_17")!;
@@ -152,7 +155,7 @@ export async function seedClinic(prisma: PrismaClient) {
   const now = Date.now();
 
   for (const p of DEMO_PATIENTS) {
-    const sessions = pstbSessionsFor(p.levels);
+    const sessions = pstbSessionsFor(p.levels, p.seriesEnd);
     await prisma.patient.create({
       data: {
         id: p.id,
@@ -166,8 +169,11 @@ export async function seedClinic(prisma: PrismaClient) {
         demographics: JSON.stringify(p.demographics),
         assessmentDate: sessions.length ? new Date(sessions[0].date) : null,
         diagnosisText: p.diagnosis,
-        diagnosisDate: p.diagnosis ? new Date("2026-03-10T09:00:00.000Z") : null,
-        diagnosisBy: p.diagnosis ? "Intake interview" : null,
+        diagnosisDate: p.diagnosis ? new Date(p.diagnosedOn ?? "2026-03-10T09:00:00.000Z") : null,
+        diagnosisBy: p.diagnosis ? "Erstgespräch" : null,
+        archivedAt: p.archived ? new Date(p.archived.at) : null,
+        archiveOutcome: p.archived?.outcome ?? null,
+        archivedBy: p.archived ? DIRECTOR.name : null,
       },
     });
 
@@ -180,6 +186,18 @@ export async function seedClinic(prisma: PrismaClient) {
         occurredAt: new Date(e.date),
         rawAnswers: e.answers,
         note: e.note,
+      });
+    }
+
+    // Session-wise PHQ-4 symptom trajectory alongside the PSTB (same occasions).
+    for (const e of phq4SessionsFor(p.levels, p.seriesEnd)) {
+      await createScoredResponse(prisma, {
+        patientId: p.id,
+        instrument: phq4,
+        respondentRole: "self",
+        sessionNumber: e.session,
+        occurredAt: new Date(e.date),
+        rawAnswers: e.answers,
       });
     }
 
@@ -236,6 +254,14 @@ export async function seedClinic(prisma: PrismaClient) {
           submission: { status: "sent", endpoint: "clinic database (no external relay)", at: completedAt },
         },
       });
+    }
+
+    // Archived demo patients also get their filesystem export so the archive
+    // folder tree is demonstrable right after db:seed. Best-effort, like the
+    // live archive action.
+    if (p.archived) {
+      const res = await exportPatientArchive(prisma, p.id);
+      if (!res.ok) console.warn(`seed: archive export failed for ${p.id}: ${res.error}`);
     }
   }
 

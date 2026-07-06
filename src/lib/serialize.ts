@@ -49,6 +49,7 @@ interface ResponseRow {
   respondentRole: string;
   sessionNumber: number | null;
   wave: string | null;
+  conductedById: string | null;
   occurredAt: Date;
   rawAnswers: string;
   status: string;
@@ -82,6 +83,9 @@ interface PatientRow {
   status: string;
   disorderCategory: string | null;
   therapistId: string | null;
+  archivedAt: Date | null;
+  archiveOutcome: string | null;
+  archivedBy: string | null;
   demographics: string;
   assessmentDate: Date | null;
   diagnosisText: string | null;
@@ -148,6 +152,7 @@ export function responseFromRow(r: ResponseRow): ResponseRecord {
     respondentRole: r.respondentRole,
     sessionNumber: r.sessionNumber,
     wave: r.wave,
+    conductedById: r.conductedById,
     occurredAt: r.occurredAt.toISOString(),
     rawAnswers: parse<RawAnswers>(r.rawAnswers, {}),
     status: r.status,
@@ -200,6 +205,9 @@ export function patientFromRow(p: PatientRow): Patient {
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
     therapistId: p.therapistId,
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archiveOutcome: p.archiveOutcome,
+    archivedBy: p.archivedBy,
     demographics: parse<Demographics>(p.demographics, {}),
     responses: responses.map(responseFromRow),
     invitations: (p.invitations ?? []).map(invitationFromRow),
@@ -224,6 +232,11 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
     therapistId: p.therapistId,
+    // archivedAt is assignment-relevant (drives list exclusion); the outcome
+    // label and who archived are clinical-ish context the admin doesn't need.
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archiveOutcome: null,
+    archivedBy: null,
     demographics: {},
     responses: [],
     invitations: [],

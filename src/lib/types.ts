@@ -3,8 +3,16 @@ import type { Lang } from "./i18n";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
 export type Role = "patient" | "therapist" | "director" | "admin";
-export type PatientStatus = "assessment" | "interview" | "therapy";
+export type PatientStatus = "assessment" | "interview" | "therapy" | "archived";
 export type SubmissionStatus = "sent" | "local" | "sending";
+
+/// Treatment-end labels recorded when a patient is archived (see
+/// docs/outcome-prediction.md §4 — extend this array to add finer categories).
+export const ARCHIVE_OUTCOMES = ["completed", "dropout"] as const;
+export type ArchiveOutcome = (typeof ARCHIVE_OUTCOMES)[number];
+
+/// Who can fill out an instrument — shared by the clinician entry forms.
+export const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"] as const;
 
 export const DISORDER_CATEGORIES = [
   "anxiety",
@@ -39,6 +47,8 @@ export interface ResponseRecord {
   respondentRole: string;
   sessionNumber: number | null;
   wave: string | null;
+  /// Staff member who conducted/recorded this occasion, if any (see schema.prisma).
+  conductedById: string | null;
   occurredAt: string;
   rawAnswers: RawAnswers;
   status: string;
@@ -108,6 +118,10 @@ export interface Patient {
   status: PatientStatus;
   disorderCategory: string | null;
   therapistId: string | null;
+  /// Set when the treatment was concluded (status === "archived").
+  archivedAt: string | null;
+  archiveOutcome: string | null;
+  archivedBy: string | null;
   demographics: Demographics;
   responses: ResponseRecord[];
   invitations: InvitationRecord[];

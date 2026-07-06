@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import { C, PALETTE } from "@/lib/theme";
 import { fmtDate } from "@/lib/format";
-import { trCategory } from "@/lib/i18n";
+import { trCategory, trRaterRole } from "@/lib/i18n";
 import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
 import { classifyChange } from "@/lib/instruments/rci";
 import type { Patient, ResponseRecord } from "@/lib/types";
@@ -43,6 +43,10 @@ interface Occasion { key: string; label: string; order: number }
 
 export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasion {
   if (instrument.cadenceType === "every_session" && r.sessionNumber !== null) {
+    // "B"/"S{n}" is deliberately NOT localized: "S" reads as
+    // Sitzung/Séance/Session in all three UI languages, and the "B" label is
+    // load-bearing — rows[0].label === "B" gates the therapy-begins reference
+    // line below. Wave codes (pre/zm/post/postF) are clinic jargon, kept as-is.
     return {
       key: `s${r.sessionNumber}`,
       label: r.sessionNumber === 0 ? "B" : `S${r.sessionNumber}`,
@@ -70,6 +74,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
   initialScales?: string[];
 }) {
   const t = useT();
+  const { lang } = useLang();
   const scales = instrument.scales;
   const scored = useMemo(
     () => responses.filter((r) => Object.keys(r.scores).length > 0),
@@ -182,7 +187,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
                   <Line
                     key={seriesKey}
                     dataKey={seriesKey}
-                    name={multiRole ? `${s.label} (${role})` : s.label}
+                    name={multiRole ? `${s.label} (${trRaterRole(role, lang)})` : s.label}
                     stroke={color}
                     strokeWidth={ri === 0 ? 2.5 : 1.8}
                     strokeDasharray={ROLE_DASHES[ri % ROLE_DASHES.length]}
@@ -198,7 +203,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       {rciScale && <p className="text-xs mt-1" style={{ color: C.muted }}>{t("rciLegend")}</p>}
       {multiRole && (
         <p className="text-xs mt-1" style={{ color: C.muted }}>
-          {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${r}`).join(" · ")}
+          {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${trRaterRole(r, lang)}`).join(" · ")}
         </p>
       )}
     </div>
@@ -209,6 +214,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
 /// same shape as the legacy per-patient xlsx export.
 export function ScoreTable({ instrument, responses }: { instrument: InstrumentDef; responses: ResponseRecord[] }) {
   const t = useT();
+  const { lang } = useLang();
   const scored = responses.filter((r) => Object.keys(r.scores).length > 0);
   if (!scored.length) return null;
   const cols = scored
@@ -223,7 +229,7 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
             <th className="text-left pr-4 py-1" style={{ color: C.muted, fontWeight: 600 }}>{t("scaleCol")}</th>
             {cols.map(({ r, occ }) => (
               <th key={r.id} className="text-right px-2 py-1 whitespace-nowrap" style={{ color: C.muted, fontWeight: 600 }}>
-                {occ.label}{multiRole ? ` · ${r.respondentRole}` : ""}
+                {occ.label}{multiRole ? ` · ${trRaterRole(r.respondentRole, lang)}` : ""}
               </th>
             ))}
           </tr>
