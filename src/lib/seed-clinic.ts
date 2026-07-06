@@ -27,6 +27,7 @@ import { computeScaleScores } from "./instruments/scoring";
 import { isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
 import { hashPassword } from "./password";
 import { formatPatientCode } from "./patient-code";
+import { SIM_COHORT_SIZE, seedSimulation } from "./simulation/seed-simulation";
 import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
 
 interface SeededInstrument {
@@ -289,6 +290,21 @@ export async function seedClinic(prisma: PrismaClient) {
     }
   }
 
+  // Simulated reference cohort (docs/outcome-prediction.md): ~SIM_COHORT_SIZE
+  // archived labeled treatments + 10 scripted active patients, deterministic,
+  // flagged simulated. Override with SIM_COHORT_SIZE=<n> (0 skips entirely);
+  // `npm run sim:purge` removes it later without touching demo data.
+  const envSize = process.env.SIM_COHORT_SIZE;
+  const simSize = envSize !== undefined && envSize !== "" ? Number(envSize) : SIM_COHORT_SIZE;
+  let simulated: Awaited<ReturnType<typeof seedSimulation>> | null = null;
+  if (Number.isFinite(simSize) && simSize > 0) {
+    simulated = await seedSimulation(prisma, instruments, {
+      n: simSize,
+      startCodeSeq: codeSeq + 1,
+      therapistIds: THERAPISTS.map((t) => t.id),
+    });
+  }
+
   return {
     users: await prisma.user.count(),
     patients: await prisma.patient.count(),
@@ -296,5 +312,7 @@ export async function seedClinic(prisma: PrismaClient) {
     scales: await prisma.scale.count(),
     responses: await prisma.responseInstance.count(),
     scaleScores: await prisma.scaleScore.count(),
+    sessionLogs: await prisma.sessionLog.count(),
+    simulated,
   };
 }

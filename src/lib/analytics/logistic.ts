@@ -18,8 +18,8 @@ export const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
 
 export function trainLogistic(X: number[][], y: number[], opts: LogisticOptions = {}): LogisticFit {
   const l2 = opts.l2 ?? 0.01;
-  const lr = opts.lr ?? 0.1;
-  const iters = opts.iters ?? 800;
+  const lr = opts.lr ?? 0.2;
+  const iters = opts.iters ?? 3000;
   const n = X.length;
   const p = X[0]?.length ?? 0;
   const w = new Array<number>(p).fill(0);
