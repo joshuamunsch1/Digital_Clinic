@@ -72,10 +72,10 @@ export function PrimaryButton({ children, onClick, disabled, small, submit }: { 
   );
 }
 
-export function GhostButton({ children, onClick, small }: { children: React.ReactNode; onClick?: () => void; small?: boolean }) {
+export function GhostButton({ children, onClick, small, disabled }: { children: React.ReactNode; onClick?: () => void; small?: boolean; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={`rounded-lg font-semibold ${small ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}
-      style={{ background: "transparent", color: C.spruce, border: `1px solid ${C.line}` }}>
+    <button type="button" onClick={onClick} disabled={disabled} className={`rounded-lg font-semibold ${small ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}
+      style={{ background: "transparent", color: disabled ? C.muted : C.spruce, border: `1px solid ${C.line}`, cursor: disabled ? "not-allowed" : "pointer" }}>
       {children}
     </button>
   );

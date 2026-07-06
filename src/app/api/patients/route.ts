@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow, patientLiteFromRow } from "@/lib/serialize";
 import { PALETTE } from "@/lib/theme";
+import { withNextPatientCode } from "@/lib/patient-code";
 import type { Demographics } from "@/lib/types";
 
 // Manual registration by the clinic (patients normally self-register via
@@ -32,15 +33,18 @@ export async function POST(req: Request) {
   }
 
   const count = await prisma.patient.count();
-  const p = await prisma.patient.create({
-    data: {
-      name,
-      email,
-      color: PALETTE[count % PALETTE.length],
-      status: "assessment",
-      demographics: JSON.stringify(body.demographics ?? {}),
-    },
-    include: PATIENT_INCLUDE,
-  });
+  const p = await withNextPatientCode(prisma, (code) =>
+    prisma.patient.create({
+      data: {
+        name,
+        email,
+        code,
+        color: PALETTE[count % PALETTE.length],
+        status: "assessment",
+        demographics: JSON.stringify(body.demographics ?? {}),
+      },
+      include: PATIENT_INCLUDE,
+    }),
+  );
   return NextResponse.json({ patient: s.role === "admin" ? patientLiteFromRow(p) : patientFromRow(p) });
 }

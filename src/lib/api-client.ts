@@ -1,6 +1,7 @@
 // Frontend API client — thin typed wrappers over the route handlers.
 import type { Lang } from "./i18n";
 import type {
+  CaseCharacteristics,
   ClinicData,
   Demographics,
   DipsAnswers,
@@ -125,8 +126,13 @@ export const api = {
       handle<{ checked: number; imported: number; pending: number; errors: string[] }>(r),
     ),
 
-  saveDiagnosis: (id: string, text: string, category: string) =>
-    patch(`/api/patients/${id}`, { action: "diagnose", text, category }).then((r) => handle<{ patient: Patient }>(r)),
+  saveDiagnosis: (id: string, text: string, category: string, icdCode?: string) =>
+    patch(`/api/patients/${id}`, { action: "diagnose", text, category, icdCode }).then((r) => handle<{ patient: Patient }>(r)),
+
+  saveCaseCharacteristics: (id: string, characteristics: CaseCharacteristics) =>
+    patch(`/api/patients/${id}`, { action: "caseCharacteristics", characteristics }).then((r) =>
+      handle<{ patient: Patient }>(r),
+    ),
 
   savePatientEmail: (id: string, email: string) =>
     patch(`/api/patients/${id}`, { action: "contact", email }).then((r) => handle<{ patient: Patient }>(r)),
@@ -134,8 +140,16 @@ export const api = {
   assignTherapist: (id: string, therapistId: string | null) =>
     patch(`/api/patients/${id}`, { action: "assign", therapistId }).then((r) => handle<{ patient: Patient }>(r)),
 
-  archivePatient: (id: string, outcome?: string) =>
-    patch(`/api/patients/${id}`, { action: "archive", outcome }).then((r) =>
+  logSession: (id: string, payload: { occurredAt?: string; type: string; conductedById?: string | null; note?: string }) =>
+    post(`/api/patients/${id}/session-log`, payload).then((r) => handle<{ patient: Patient }>(r)),
+
+  deleteSessionLog: (logId: string) =>
+    fetch(`/api/session-logs/${logId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  /// terminationReason is required — the server rejects unlabeled conclusions
+  /// (docs/outcome-prediction.md §4.2).
+  archivePatient: (id: string, terminationReason: string) =>
+    patch(`/api/patients/${id}`, { action: "archive", terminationReason }).then((r) =>
       handle<{ patient: Patient; archiveExport?: ArchiveExportInfo }>(r),
     ),
 

@@ -1,13 +1,13 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { tr, T, trCategory, trCadence, trDemoValue, trInvitationStatus, trPopulation, trRaterRole, trSource } from "@/lib/i18n";
+import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trInvitationStatus, trPopulation, trProblemDuration, trRaterRole, trSessionLogType, trSource, trTerminationReason } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
-import type { InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, RATER_ROLES, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import type { CaseCharacteristics, InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, EMPLOYMENT_STATUSES, PROBLEM_DURATIONS, RATER_ROLES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf } from "./charts";
 import { DipsSummary } from "./DipsSummary";
@@ -293,10 +293,212 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
   );
 }
 
+/// Coded intake predictors (docs/outcome-prediction.md §4.3): the classic ETR
+/// set, entered by the clinician on the dossier — feeds nearest-neighbor /
+/// dropout-risk prediction. Coded fields only, no free text.
+function IntakePredictorsCard({ patient, readOnly, onRefresh }: {
+  patient: Patient;
+  readOnly: boolean;
+  onRefresh: (p: Patient) => void;
+}) {
+  const t = useT();
+  const { lang } = useLang();
+  const cc = patient.caseCharacteristics;
+  const [edit, setEdit] = useState<CaseCharacteristics>(cc);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const dirty = JSON.stringify(edit) !== JSON.stringify(cc);
+
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.saveCaseCharacteristics(patient.id, edit);
+      onRefresh(r.patient);
+      setMsg(t("predictorsSaved"));
+    } catch (e) {
+      setMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const yesNo = (v: boolean | undefined, set: (b: boolean) => void) => (
+    <div className="flex gap-1">
+      {[true, false].map((b) => (
+        <button key={String(b)} type="button" disabled={readOnly} onClick={() => set(b)} aria-pressed={v === b}
+          className="rounded-md text-xs font-semibold px-3 py-1.5"
+          style={{ background: v === b ? C.spruce : C.surfaceAlt, color: v === b ? "#fff" : C.muted, border: `1px solid ${v === b ? C.spruce : C.line}`, cursor: readOnly ? "default" : "pointer" }}>
+          {b ? t("predYes") : t("predNo")}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (readOnly) {
+    const rows: [string, string][] = [
+      [t("durationLabel"), cc.problemDuration ? trProblemDuration(cc.problemDuration, lang) : t("notRecorded")],
+      [t("priorTxLabel"), cc.priorPsychotherapy === undefined ? t("notRecorded") : cc.priorPsychotherapy ? t("predYes") : t("predNo")],
+      [t("medicationLabel"), cc.psychotropicMedication === undefined ? t("notRecorded") : cc.psychotropicMedication ? t("predYes") : t("predNo")],
+      [t("employmentLabel"), cc.employment ? trEmployment(cc.employment, lang) : t("notRecorded")],
+      [t("expectationLabel"), cc.treatmentExpectation === undefined ? t("notRecorded") : String(cc.treatmentExpectation)],
+    ];
+    return (
+      <Card className="p-5 mb-4">
+        <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("predictorsTitle")}</h3>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mt-2">
+          {rows.map(([k, v]) => (<React.Fragment key={k}><dt style={{ color: C.muted }}>{k}</dt><dd className="font-semibold" style={{ color: C.ink }}>{v}</dd></React.Fragment>))}
+        </dl>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-5 mb-4">
+      <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("predictorsTitle")}</h3>
+      <p className="text-xs mb-3" style={{ color: C.muted }}>{t("predictorsSub")}</p>
+      <div className="flex gap-4 flex-wrap items-end">
+        <Field label={t("durationLabel")}>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={edit.problemDuration ?? ""}
+            onChange={(e) => setEdit({ ...edit, ...(e.target.value ? { problemDuration: e.target.value as CaseCharacteristics["problemDuration"] } : {}) })}>
+            <option value="">{t("notRecorded")}</option>
+            {PROBLEM_DURATIONS.map((d) => <option key={d} value={d}>{trProblemDuration(d, lang)}</option>)}
+          </select>
+        </Field>
+        <Field label={t("employmentLabel")}>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={edit.employment ?? ""}
+            onChange={(e) => setEdit({ ...edit, ...(e.target.value ? { employment: e.target.value as CaseCharacteristics["employment"] } : {}) })}>
+            <option value="">{t("notRecorded")}</option>
+            {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{trEmployment(s, lang)}</option>)}
+          </select>
+        </Field>
+        <Field label={t("priorTxLabel")}>
+          {yesNo(edit.priorPsychotherapy, (b) => setEdit({ ...edit, priorPsychotherapy: b }))}
+        </Field>
+        <Field label={t("medicationLabel")}>
+          {yesNo(edit.psychotropicMedication, (b) => setEdit({ ...edit, psychotropicMedication: b }))}
+        </Field>
+        <Field label={t("expectationLabel")}>
+          <input type="number" min={0} max={10} step={1} style={{ ...inputStyle, width: 90 }}
+            value={edit.treatmentExpectation ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") {
+                const { treatmentExpectation: _drop, ...rest } = edit;
+                setEdit(rest);
+              } else {
+                setEdit({ ...edit, treatmentExpectation: Math.max(0, Math.min(10, Math.round(Number(raw)))) });
+              }
+            }} />
+        </Field>
+        <PrimaryButton small disabled={busy || !dirty} onClick={save}>{t("savePredictors")}</PrimaryButton>
+      </div>
+      {msg && <p className="text-xs mt-2" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
+    </Card>
+  );
+}
+
+/// Session-attendance log (§4.5): sessions without questionnaires, cancellations
+/// and no-shows — the "session without questionnaire" quick action.
+function SessionLogPanel({ patient, therapists, user, onRefresh }: {
+  patient: Patient;
+  therapists: Therapist[];
+  user: SessionUser;
+  onRefresh: (p: Patient) => void;
+}) {
+  const t = useT();
+  const { lang } = useLang();
+  const [type, setType] = useState<string>("held");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [conductedById, setConductedById] = useState<string>(user.role === "therapist" ? user.id : patient.therapistId ?? "");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.logSession(patient.id, {
+        occurredAt: `${date}T12:00:00`,
+        type,
+        conductedById: conductedById || null,
+        note: note.trim() || undefined,
+      });
+      onRefresh(r.patient);
+      setNote("");
+      setMsg(t("logSaved"));
+    } catch (e) {
+      setMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doDelete = async (logId: string) => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.deleteSessionLog(logId);
+      onRefresh(r.patient);
+    } catch (e) {
+      setMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 mb-4">
+      <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("sessionLogTitle")}</h3>
+      <p className="text-xs mb-3" style={{ color: C.muted }}>{t("sessionLogSub")}</p>
+      <div className="flex gap-3 flex-wrap items-end">
+        <Field label={t("logDateLabel")}>
+          <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label={t("logTypeLabel")}>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 200 }} value={type} onChange={(e) => setType(e.target.value)}>
+            {SESSION_LOG_TYPES.map((v) => <option key={v} value={v}>{trSessionLogType(v, lang)}</option>)}
+          </select>
+        </Field>
+        <Field label={t("conductedBy")}>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 180 }} value={conductedById} onChange={(e) => setConductedById(e.target.value)}>
+            <option value="">—</option>
+            {therapists.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
+          </select>
+        </Field>
+        <Field label={t("logNoteLabel")}>
+          <input style={{ ...inputStyle, width: 220 }} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <PrimaryButton small disabled={busy} onClick={save}>{t("logSave")}</PrimaryButton>
+      </div>
+      {patient.sessionLogs.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-bold mb-1" style={{ color: C.muted }}>{t("logEntries")}</p>
+          <div className="flex flex-col gap-1">
+            {[...patient.sessionLogs].reverse().map((l) => {
+              const by = therapists.find((th) => th.id === l.conductedById);
+              return (
+                <div key={l.id} className="flex items-center gap-3 flex-wrap rounded-lg px-3 py-1.5 text-xs" style={{ background: C.surfaceAlt }}>
+                  <span style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>{fmtDate(l.occurredAt)}</span>
+                  <span className="font-semibold" style={{ color: l.type === "held" ? C.spruce : C.amber }}>{trSessionLogType(l.type, lang)}</span>
+                  {by && <span style={{ color: C.muted }}>{t("conductedBy")}: {by.name}</span>}
+                  {l.note && <span style={{ color: C.muted }}>“{l.note}”</span>}
+                  <button type="button" className="ml-auto font-semibold" onClick={() => doDelete(l.id)}
+                    style={{ color: C.danger, background: "none", border: "none", cursor: "pointer", fontSize: 11 }}>
+                    {t("logDelete")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {msg && <p className="text-xs mt-2" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
+    </Card>
+  );
+}
+
 export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onResend, onPatientUpdated }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
-  onSaveDiagnosis: (id: string, text: string, category: string) => void; onResend: (id: string) => void;
+  onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void; onResend: (id: string) => void;
   onPatientUpdated: (p: Patient) => void;
 }) {
   const t = useT();
@@ -304,6 +506,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const therapist = therapists.find((th) => th.id === patient.therapistId);
   const [dxText, setDxText] = useState("");
   const [dxCategory, setDxCategory] = useState<string>("other");
+  const [dxIcd, setDxIcd] = useState("");
   const [manualEntry, setManualEntry] = useState<InstrumentDef | null>(null);
   const [busy, setBusy] = useState(false);
   // Conclude-treatment (archive) state — see the card at the bottom of the page.
@@ -325,7 +528,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     setBusy(true);
     setArchMsg(null);
     try {
-      const r = await api.archivePatient(patient.id, archOutcome || undefined);
+      const r = await api.archivePatient(patient.id, archOutcome);
       onPatientUpdated(r.patient);
       setConfirmArchive(false);
       if (r.archiveExport && !r.archiveExport.ok)
@@ -403,9 +606,9 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                 {t("archivedOn", { date: patient.archivedAt ? fmtDate(patient.archivedAt) : "—" })}
                 {patient.archivedBy ? ` ${t("archivedByLine", { name: patient.archivedBy })}` : ""}
               </p>
-              {patient.archiveOutcome && (
+              {patient.terminationReason && (
                 <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-                  {patient.archiveOutcome === "completed" ? t("outcomeCompleted") : t("outcomeDropout")}
+                  {t("terminationLabel")}: {trTerminationReason(patient.terminationReason, lang)}
                 </p>
               )}
             </div>
@@ -433,6 +636,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                 <span className="text-xs" style={{ color: C.muted }}>
                   {patient.responses.length > 0 ? `${patient.responses.length} ${t("questionnairesOnFile")}` : t("noQuestionnairesYet")}
                   {patient.email ? ` · ${patient.email}` : ""}
+                  {patient.code ? ` · ${t("patientCodeLabel")}: ${patient.code}` : ""}
                 </span>
               </div>
             </div>
@@ -476,7 +680,17 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         <Card className="p-5">
           <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("diagnosisTitle")}</h3>
           {patient.diagnosis ? (
-            <div><p className="text-sm font-semibold" style={{ color: C.ink }}>{patient.diagnosis.text}</p><p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p></div>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: C.ink }}>
+                {patient.diagnosis.text}
+                {patient.icdCode && (
+                  <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full align-middle" style={{ background: C.blueSoft, color: C.blue }}>
+                    {patient.icdCode}
+                  </span>
+                )}
+              </p>
+              <p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p>
+            </div>
           ) : isArchived ? (
             <p className="text-sm" style={{ color: C.muted }}>—</p>
           ) : patient.status === "assessment" ? (
@@ -491,12 +705,18 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                     {DISORDER_CATEGORIES.map((c) => <option key={c} value={c}>{trCategory(c, lang)}</option>)}
                   </select>
                 </Field>
+                <Field label={t("icdLabel")}>
+                  <input style={{ ...inputStyle, width: 110 }} placeholder="F41.0" value={dxIcd} onChange={(e) => setDxIcd(e.target.value.toUpperCase())} />
+                </Field>
               </div>
-              <div className="mt-2"><PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory)}>{t("saveDiagnosis")}</PrimaryButton></div>
+              <div className="mt-2"><PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory, dxIcd.trim() || undefined)}>{t("saveDiagnosis")}</PrimaryButton></div>
             </div>
           )}
         </Card>
       </div>
+
+      {/* Intake predictors (§4.3) — read-only on archived dossiers. */}
+      <IntakePredictorsCard patient={patient} readOnly={isArchived} onRefresh={onPatientUpdated} />
 
       {patient.dips && (
         <Card className="p-5 mb-4">
@@ -510,6 +730,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
 
       {/* Archived dossiers are read-only — no new data collection. */}
       {!isArchived && <AddDataPanel patient={patient} instruments={instruments} onStartManualEntry={setManualEntry} onRefresh={onPatientUpdated} />}
+      {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
       <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
 
       {instrumentsWithData.length === 0 && (
@@ -539,23 +760,24 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           <h3 className="text-sm font-bold mb-1" style={{ color: C.ink }}>{t("concludeTitle")}</h3>
           <p className="text-xs mb-3" style={{ color: C.muted }}>{t("concludeSub")}</p>
           <div className="flex items-end gap-3 flex-wrap">
-            <Field label={t("outcomeLabel")}>
-              <select style={{ ...inputStyle, width: "auto", minWidth: 200 }} value={archOutcome} onChange={(e) => setArchOutcome(e.target.value)}>
-                <option value="">{t("outcomeNone")}</option>
-                <option value="completed">{t("outcomeCompleted")}</option>
-                <option value="dropout">{t("outcomeDropout")}</option>
+            <Field label={t("terminationLabel")}>
+              <select style={{ ...inputStyle, width: "auto", minWidth: 240 }} value={archOutcome} onChange={(e) => setArchOutcome(e.target.value)}>
+                <option value="">{t("terminationNone")}</option>
+                {TERMINATION_REASONS.map((r) => (
+                  <option key={r} value={r}>{trTerminationReason(r, lang)}</option>
+                ))}
               </select>
             </Field>
             {confirmArchive ? (
               <>
-                <button type="button" onClick={doArchive} disabled={busy} className="text-xs font-bold px-3 py-2 rounded-lg"
-                  style={{ background: C.danger, color: "#fff", border: "none", cursor: busy ? "wait" : "pointer" }}>
+                <button type="button" onClick={doArchive} disabled={busy || !archOutcome} className="text-xs font-bold px-3 py-2 rounded-lg"
+                  style={{ background: C.danger, color: "#fff", border: "none", cursor: busy ? "wait" : "pointer", opacity: archOutcome ? 1 : 0.5 }}>
                   {t("archiveConfirm")}
                 </button>
                 <GhostButton small onClick={() => setConfirmArchive(false)}>{t("cancel")}</GhostButton>
               </>
             ) : (
-              <GhostButton small onClick={() => setConfirmArchive(true)}>{t("concludeTitle")}</GhostButton>
+              <GhostButton small disabled={!archOutcome} onClick={() => setConfirmArchive(true)}>{t("concludeTitle")}</GhostButton>
             )}
           </div>
           {archMsg && <p className="text-xs mt-2" style={{ color: C.danger }}>{archMsg}</p>}

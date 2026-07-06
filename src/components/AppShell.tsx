@@ -136,8 +136,8 @@ function Shell() {
     void refresh();
   };
 
-  const saveDiagnosis = async (id: string, text: string, category: string) => {
-    await api.saveDiagnosis(id, text, category);
+  const saveDiagnosis = async (id: string, text: string, category: string, icdCode?: string) => {
+    await api.saveDiagnosis(id, text, category, icdCode);
     await refresh();
   };
   const assignTherapist = async (id: string, therapistId: string | null) => { await api.assignTherapist(id, therapistId); await refresh(); };

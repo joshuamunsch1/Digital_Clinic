@@ -306,13 +306,16 @@ export const UI = {
   archiveEmpty: L("Noch keine archivierten Behandlungen.", "Aucun traitement archivé pour le moment.", "No archived treatments yet."),
   concludeTitle: L("Behandlung abschließen & archivieren", "Clôturer le traitement et archiver", "Conclude treatment & archive"),
   concludeSub: L(
-    "Verschiebt die Patient*in aus den aktiven Übersichten ins Archiv. Das Behandlungsergebnis (freiwillig) fließt in spätere Verlaufsanalysen ein.",
-    "Déplace le·la patient·e des vues actives vers les archives. Le résultat du traitement (facultatif) alimentera les analyses ultérieures.",
-    "Moves the patient from the active overviews into the archive. The optional outcome label feeds later outcome analyses."),
-  outcomeLabel: L("Behandlungsergebnis (optional)", "Résultat du traitement (facultatif)", "Treatment outcome (optional)"),
-  outcomeNone: L("— keine Angabe —", "— non précisé —", "— unspecified —"),
-  outcomeCompleted: L("Regulär abgeschlossen", "Terminé régulièrement", "Completed as planned"),
-  outcomeDropout: L("Abbruch", "Interruption", "Dropout"),
+    "Verschiebt die Patient*in aus den aktiven Übersichten ins Archiv. Die kodierte Abschlussart ist erforderlich — sie ist das Behandlungsende-Label für spätere Verlaufs- und Abbruchanalysen (klinische Einschätzung der Therapeut*in).",
+    "Déplace le·la patient·e des vues actives vers les archives. Le motif de clôture codé est obligatoire — c'est l'étiquette de fin de traitement pour les analyses ultérieures (jugement clinique du·de la thérapeute).",
+    "Moves the patient from the active overviews into the archive. The coded termination reason is required — it is the treatment-end label for later outcome and dropout analyses (therapist judgment)."),
+  terminationLabel: L("Abschlussart", "Motif de clôture", "Termination reason"),
+  terminationNone: L("— bitte wählen —", "— veuillez choisir —", "— please choose —"),
+  termCompleted: L("Regulär abgeschlossen", "Terminé régulièrement", "Completed as planned"),
+  termDropout: L("Abbruch (einseitig durch Patient*in)", "Interruption (unilatérale, patient·e)", "Dropout (unilateral, patient)"),
+  termMutual: L("Einvernehmlich beendet", "Terminé d'un commun accord", "Ended by mutual agreement"),
+  termTransfer: L("Überweisung / Weiterverweisung", "Transfert / réorientation", "Transfer / referral"),
+  termOther: L("Sonstiges", "Autre", "Other"),
   archiveConfirm: L("Archivieren bestätigen", "Confirmer l'archivage", "Confirm archiving"),
   archivedOn: L("Behandlung abgeschlossen und archiviert am {date}", "Traitement clôturé et archivé le {date}", "Treatment concluded and archived on {date}"),
   archivedByLine: L("durch {name}", "par {name}", "by {name}"),
@@ -321,6 +324,50 @@ export const UI = {
     "Archiviert — aber der Dateiexport ist fehlgeschlagen: {error}",
     "Archivé — mais l'export de fichiers a échoué : {error}",
     "Archived — but the file export failed: {error}"),
+
+  // intake predictors (docs/outcome-prediction.md §4.3 — coded ETR set)
+  predictorsTitle: L("Prognosemerkmale (Aufnahme)", "Facteurs pronostiques (admission)", "Intake predictors"),
+  predictorsSub: L(
+    "Kodierte Merkmale für Verlaufsprognosen (Lutz-Ansatz): Problemdauer, Vorbehandlung, Medikation, Beschäftigung, Behandlungserwartung. Nur kodierte Felder, kein Freitext.",
+    "Caractéristiques codées pour les prédictions d'évolution (approche Lutz) : durée du problème, traitement antérieur, médication, emploi, attentes. Champs codés uniquement, pas de texte libre.",
+    "Coded characteristics for expected-course prediction (Lutz approach): problem duration, prior treatment, medication, employment, treatment expectation. Coded fields only, no free text."),
+  durationLabel: L("Problemdauer", "Durée du problème", "Problem duration"),
+  durLt6m: L("unter 6 Monate", "moins de 6 mois", "under 6 months"),
+  durM6to24: L("6–24 Monate", "6–24 mois", "6–24 months"),
+  durGt24m: L("über 24 Monate", "plus de 24 mois", "over 24 months"),
+  priorTxLabel: L("Frühere Psychotherapie", "Psychothérapie antérieure", "Prior psychotherapy"),
+  medicationLabel: L("Psychopharmaka", "Psychotropes", "Psychotropic medication"),
+  employmentLabel: L("Beschäftigungsstatus", "Statut professionnel", "Employment status"),
+  empEmployed: L("erwerbstätig", "en emploi", "employed"),
+  empInTraining: L("in Ausbildung/Studium", "en formation/études", "in training/studies"),
+  empUnemployed: L("erwerbslos", "sans emploi", "unemployed"),
+  empRetired: L("pensioniert", "retraité·e", "retired"),
+  empOther: L("anderes", "autre", "other"),
+  expectationLabel: L("Behandlungserwartung (0–10)", "Attentes envers le traitement (0–10)", "Treatment expectation (0–10)"),
+  predYes: L("ja", "oui", "yes"),
+  predNo: L("nein", "non", "no"),
+  notRecorded: L("— nicht erfasst —", "— non renseigné —", "— not recorded —"),
+  savePredictors: L("Prognosemerkmale speichern", "Enregistrer les facteurs", "Save intake predictors"),
+  predictorsSaved: L("Gespeichert.", "Enregistré.", "Saved."),
+  icdLabel: L("ICD-10-Code (optional)", "Code CIM-10 (facultatif)", "ICD-10 code (optional)"),
+  patientCodeLabel: L("Forschungscode", "Code de recherche", "Research code"),
+
+  // session log (sessions without questionnaires, §4.5)
+  sessionLogTitle: L("Sitzung ohne Fragebogen erfassen", "Consigner une séance sans questionnaire", "Log a session without questionnaire"),
+  sessionLogSub: L(
+    "Für Dosis-Wirkungs- und Abbruchanalysen zählen auch Sitzungen ohne Messung — sowie Absagen und Nichterscheinen.",
+    "Pour les analyses dose-effet et d'interruption, les séances sans mesure comptent aussi — de même que les annulations et absences.",
+    "Dose–response and dropout analyses also need sessions without measurement — plus cancellations and no-shows."),
+  logTypeHeld: L("stattgefunden (ohne Fragebogen)", "a eu lieu (sans questionnaire)", "held (no questionnaire)"),
+  logTypeCancelled: L("abgesagt", "annulée", "cancelled"),
+  logTypeNoShow: L("nicht erschienen", "absence non annoncée", "no-show"),
+  logTypeLabel: L("Art", "Type", "Type"),
+  logDateLabel: L("Datum", "Date", "Date"),
+  logNoteLabel: L("Notiz (optional)", "Note (facultatif)", "Note (optional)"),
+  logSave: L("Eintrag speichern", "Enregistrer l'entrée", "Save entry"),
+  logSaved: L("Erfasst.", "Consigné.", "Logged."),
+  logDelete: L("Löschen", "Supprimer", "Delete"),
+  logEntries: L("Einträge", "Entrées", "Entries"),
 
   // manual registration (director/admin)
   moreDetails: L("E-Mail & persönliche Angaben", "E-mail et informations personnelles", "E-mail & personal details"),
@@ -430,6 +477,38 @@ export const trSource = slugTr({
   csv_import: L("CSV-Import", "import CSV", "CSV import"),
   manual_entry: L("manuelle Eingabe", "saisie manuelle", "manual entry"),
   seed: L("Demodaten", "données de démo", "demo data"),
+});
+
+/// Coded termination reasons (Patient.terminationReason — therapist judgment).
+export const trTerminationReason = slugTr({
+  completed: UI.termCompleted,
+  dropout: UI.termDropout,
+  mutual: UI.termMutual,
+  transfer: UI.termTransfer,
+  other: UI.termOther,
+});
+
+/// Coded problem-duration / chronicity values (CaseCharacteristics.problemDuration).
+export const trProblemDuration = slugTr({
+  lt6m: UI.durLt6m,
+  m6to24: UI.durM6to24,
+  gt24m: UI.durGt24m,
+});
+
+/// Coded employment statuses (CaseCharacteristics.employment).
+export const trEmployment = slugTr({
+  employed: UI.empEmployed,
+  in_training: UI.empInTraining,
+  unemployed: UI.empUnemployed,
+  retired: UI.empRetired,
+  other: UI.empOther,
+});
+
+/// Session-log entry types (SessionLog.type).
+export const trSessionLogType = slugTr({
+  held: UI.logTypeHeld,
+  cancelled: UI.logTypeCancelled,
+  no_show: UI.logTypeNoShow,
 });
 
 /// LimeSurvey invitation statuses (QuestionnaireInvitation.status).

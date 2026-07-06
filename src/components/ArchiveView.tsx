@@ -7,7 +7,7 @@
 // ones they treated (client-side scoping, same convention as the dashboard).
 import React, { useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { trCategory } from "@/lib/i18n";
+import { trCategory, trTerminationReason } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import type { ClinicData, Patient, SessionUser } from "@/lib/types";
 import { DISORDER_CATEGORIES } from "@/lib/types";
@@ -23,14 +23,22 @@ export function archivedPatientsFor(patients: Patient[], user: SessionUser): Pat
 
 const yearOf = (p: Patient) => new Date(p.archivedAt ?? 0).getFullYear();
 
-function OutcomeChip({ outcome }: { outcome: string | null }) {
-  const t = useT();
-  if (!outcome) return null;
-  const good = outcome === "completed";
+/// Coded termination reason (therapist judgment, docs/outcome-prediction.md
+/// §4.2): green = completed, amber = dropout, blue = mutual, grey = the rest.
+function TerminationChip({ reason }: { reason: string | null }) {
+  const { lang } = useLang();
+  if (!reason) return null;
+  const style =
+    reason === "completed"
+      ? { background: C.spruceSoft, color: C.spruce }
+      : reason === "dropout"
+        ? { background: C.amberSoft, color: C.amber }
+        : reason === "mutual"
+          ? { background: C.blueSoft, color: C.blue }
+          : { background: C.surfaceAlt, color: C.muted };
   return (
-    <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-      style={{ background: good ? C.spruceSoft : C.amberSoft, color: good ? C.spruce : C.amber }}>
-      {good ? t("outcomeCompleted") : t("outcomeDropout")}
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={style}>
+      {trTerminationReason(reason, lang)}
     </span>
   );
 }
@@ -123,7 +131,7 @@ export function ArchiveView({ data, user, onOpenPatient, onBack }: {
                           style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, cursor: "pointer" }}>
                           <span className="rounded-full shrink-0" style={{ width: 10, height: 10, background: p.color }} />
                           <span className="font-semibold text-sm" style={{ color: C.ink, minWidth: 130 }}>{p.name}</span>
-                          <OutcomeChip outcome={p.archiveOutcome} />
+                          <TerminationChip reason={p.terminationReason} />
                           {p.archivedAt && <span className="text-xs" style={{ color: C.muted }}>{fmtDate(p.archivedAt)}</span>}
                           {user.role === "director" && (
                             <span className="ml-auto text-xs" style={{ color: C.muted }}>{therapistName(p.therapistId)}</span>

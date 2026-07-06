@@ -1,5 +1,6 @@
 // Map database rows (JSON stored as TEXT) to the application data model.
 import type {
+  CaseCharacteristics,
   Demographics,
   DipsAnswers,
   DipsRecord,
@@ -7,6 +8,7 @@ import type {
   InvitationRecord,
   Patient,
   ResponseRecord,
+  SessionLogRecord,
   SubmissionInfo,
 } from "./types";
 import { DIPS_INSTRUMENT_ID } from "./types";
@@ -75,6 +77,13 @@ interface InvitationRow {
   lastError: string | null;
   createdAt: Date;
 }
+interface SessionLogRow {
+  id: string;
+  occurredAt: Date;
+  type: string;
+  conductedById: string | null;
+  note: string;
+}
 interface PatientRow {
   id: string;
   name: string;
@@ -82,9 +91,15 @@ interface PatientRow {
   color: string;
   status: string;
   disorderCategory: string | null;
+  code: string | null;
+  icdCode: string | null;
+  treatmentStartAt: Date | null;
+  treatmentEndAt: Date | null;
+  terminationReason: string | null;
+  caseCharacteristics: string;
+  simulated: boolean;
   therapistId: string | null;
   archivedAt: Date | null;
-  archiveOutcome: string | null;
   archivedBy: string | null;
   demographics: string;
   assessmentDate: Date | null;
@@ -93,6 +108,7 @@ interface PatientRow {
   diagnosisBy: string | null;
   responses: ResponseRow[];
   invitations?: InvitationRow[];
+  sessionLogs?: SessionLogRow[];
 }
 
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -192,6 +208,16 @@ function dipsFromResponse(r: ResponseRow): DipsRecord {
   };
 }
 
+export function sessionLogFromRow(l: SessionLogRow): SessionLogRecord {
+  return {
+    id: l.id,
+    occurredAt: l.occurredAt.toISOString(),
+    type: l.type,
+    conductedById: l.conductedById,
+    note: l.note,
+  };
+}
+
 export function patientFromRow(p: PatientRow): Patient {
   const responses = [...p.responses].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
@@ -204,13 +230,22 @@ export function patientFromRow(p: PatientRow): Patient {
     color: p.color,
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
+    code: p.code,
+    icdCode: p.icdCode,
+    treatmentStartAt: p.treatmentStartAt ? p.treatmentStartAt.toISOString() : null,
+    treatmentEndAt: p.treatmentEndAt ? p.treatmentEndAt.toISOString() : null,
+    terminationReason: p.terminationReason,
+    caseCharacteristics: parse<CaseCharacteristics>(p.caseCharacteristics, {}),
+    simulated: p.simulated,
     therapistId: p.therapistId,
     archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
-    archiveOutcome: p.archiveOutcome,
     archivedBy: p.archivedBy,
     demographics: parse<Demographics>(p.demographics, {}),
     responses: responses.map(responseFromRow),
     invitations: (p.invitations ?? []).map(invitationFromRow),
+    sessionLogs: [...(p.sessionLogs ?? [])]
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .map(sessionLogFromRow),
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: dipsRow ? dipsFromResponse(dipsRow) : null,
     diagnosis:
@@ -231,15 +266,24 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     color: p.color,
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
+    // All clinical/research fields stay hidden from administration: codes,
+    // episode labels, intake predictors, ICD — none are assignment-relevant.
+    code: null,
+    icdCode: null,
+    treatmentStartAt: null,
+    treatmentEndAt: null,
+    terminationReason: null,
+    caseCharacteristics: {},
+    simulated: p.simulated,
     therapistId: p.therapistId,
     // archivedAt is assignment-relevant (drives list exclusion); the outcome
     // label and who archived are clinical-ish context the admin doesn't need.
     archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
-    archiveOutcome: null,
     archivedBy: null,
     demographics: {},
     responses: [],
     invitations: [],
+    sessionLogs: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis: null,
@@ -250,4 +294,5 @@ export function patientLiteFromRow(p: PatientRow): Patient {
 export const PATIENT_INCLUDE = {
   responses: { include: { scaleScores: { include: { scale: true } } } },
   invitations: true,
+  sessionLogs: true,
 } as const;

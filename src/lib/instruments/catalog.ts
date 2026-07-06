@@ -242,11 +242,26 @@ function normalizeEntry(raw: RawInstrument, all: RawInstrument[]): InstrumentDef
       });
       // Therapiefortschritte is the clinic's headline session metric — put it
       // first so the summary strip / scores matrix (which use the first scale)
-      // agree with the dashboard.
+      // agree with the dashboard. Its rci enables sudden-shift / early-change
+      // detection (docs/outcome-prediction.md Stage 1) — PLACEHOLDER
+      // psychometrics like BDI/SDQ, flagged in the note.
       const ordered = [
         ...scales.filter((s) => s.key === "Therapiefortschritte"),
         ...scales.filter((s) => s.key !== "Therapiefortschritte"),
-      ].map((s, i) => ({ ...s, sortOrder: i }));
+      ].map((s, i) => ({
+        ...s,
+        sortOrder: i,
+        ...(s.key === "Therapiefortschritte"
+          ? {
+              rci: {
+                reliability: 0.8,
+                sd: 1.2,
+                note:
+                  "PLATZHALTER-Psychometrie (wie BDI/SDQ): keine publizierten Reliabilitäts-/SD-Werte für die PSTB-Skala vorliegend — vor klinischer Interpretation durch Manual-/Klinikwerte ersetzen. Rohdaten bleiben re-skorierbar.",
+              },
+            }
+          : {}),
+      }));
       return {
         ...base,
         items,
@@ -478,6 +493,12 @@ export const PHQ4: InstrumentDef = {
         { min: 9, max: 12, label: "schwer" },
       ],
       higherIsBetter: false,
+      rci: {
+        reliability: 0.82,
+        sd: 2.5,
+        note:
+          "Reliability = Cronbachs Alpha .82 (Löwe et al. 2010, deutsche Bevölkerungsstichprobe); SD 2.5 an klinische Stichproben angenähert (Bevölkerungs-SD 2.1) — vor klinischer Interpretation gegen Klinikdaten prüfen. Schwelle ≈ 3 Punkte.",
+      },
       sortOrder: 0,
     },
     {

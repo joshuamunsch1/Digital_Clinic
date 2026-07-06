@@ -26,6 +26,7 @@ import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
 import { isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
 import { hashPassword } from "./password";
+import { formatPatientCode } from "./patient-code";
 import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
 
 interface SeededInstrument {
@@ -119,6 +120,7 @@ export async function seedClinic(prisma: PrismaClient) {
   await prisma.scaleScore.deleteMany();
   await prisma.responseInstance.deleteMany();
   await prisma.questionnaireInvitation.deleteMany();
+  await prisma.sessionLog.deleteMany();
   await prisma.scale.deleteMany();
   await prisma.instrument.deleteMany();
   await prisma.patient.deleteMany();
@@ -154,8 +156,10 @@ export async function seedClinic(prisma: PrismaClient) {
   const dikj = instruments.get("dikj")!;
   const now = Date.now();
 
+  let codeSeq = 0;
   for (const p of DEMO_PATIENTS) {
     const sessions = pstbSessionsFor(p.levels, p.seriesEnd);
+    const diagnosisDate = p.diagnosis ? new Date(p.diagnosedOn ?? "2026-03-10T09:00:00.000Z") : null;
     await prisma.patient.create({
       data: {
         id: p.id,
@@ -165,17 +169,37 @@ export async function seedClinic(prisma: PrismaClient) {
         color: p.color,
         status: p.status,
         disorderCategory: p.disorderCategory,
+        code: formatPatientCode(++codeSeq),
+        icdCode: p.icd ?? null,
+        caseCharacteristics: JSON.stringify(p.caseCharacteristics ?? {}),
         therapistId: p.therapistId,
         demographics: JSON.stringify(p.demographics),
         assessmentDate: sessions.length ? new Date(sessions[0].date) : null,
         diagnosisText: p.diagnosis,
-        diagnosisDate: p.diagnosis ? new Date(p.diagnosedOn ?? "2026-03-10T09:00:00.000Z") : null,
+        diagnosisDate,
         diagnosisBy: p.diagnosis ? "Erstgespräch" : null,
+        // Episode boundaries (§4.2): therapy starts with the diagnosis, ends at
+        // the archive timestamp; the end label is therapist-coded.
+        treatmentStartAt: diagnosisDate,
+        treatmentEndAt: p.archived ? new Date(p.archived.at) : null,
+        terminationReason: p.archived?.reason ?? null,
         archivedAt: p.archived ? new Date(p.archived.at) : null,
-        archiveOutcome: p.archived?.outcome ?? null,
         archivedBy: p.archived ? DIRECTOR.name : null,
       },
     });
+
+    // Sessions without questionnaires / cancellations / no-shows (§4.5).
+    for (const log of p.sessionLogs ?? []) {
+      await prisma.sessionLog.create({
+        data: {
+          patientId: p.id,
+          occurredAt: new Date(now - log.daysAgo * 864e5),
+          type: log.type,
+          conductedById: p.therapistId,
+          note: log.note ?? "",
+        },
+      });
+    }
 
     for (const e of sessions) {
       await createScoredResponse(prisma, {
