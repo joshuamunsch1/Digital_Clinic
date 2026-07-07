@@ -35,9 +35,11 @@ export function buildExpectedCourse(
     .map(([session, xs]) => ({
       session,
       n: xs.length,
+      p10: percentile(xs, 0.1),
       p25: percentile(xs, 0.25),
       p50: percentile(xs, 0.5),
       p75: percentile(xs, 0.75),
+      p90: percentile(xs, 0.9),
     }))
     .sort((a, b) => a.session - b.session);
 }
@@ -98,12 +100,13 @@ export interface OnTrackOptions {
   consecutive?: number;
 }
 
-/// The amber "not on track" signal (Stage 1 item 4): the patient sits on the
-/// WORSE side of the band (direction-aware: below p25 when higher is better,
-/// above p75 otherwise) for ≥ 2 consecutive measured occasions that have a
-/// band — OR shows baseline-anchored reliable deterioration on the latest
-/// measurement. "unknown" when neither signal is computable. Deliberately a
-/// distinct signal from the red safety alerts.
+/// The amber "not on track" signal (Stage 1 item 4): the patient crosses the
+/// 80% tolerance boundary (direction-aware: below p10 when higher is better,
+/// above p90 otherwise — Finch/Lambert/Anderson-style failure boundary) for
+/// ≥ 2 consecutive measured occasions that have a band — OR shows
+/// baseline-anchored reliable deterioration on the latest measurement.
+/// "unknown" when neither signal is computable. Deliberately a distinct
+/// signal from the red safety alerts.
 export function classifyOnTrack(
   series: SessionPoint[],
   course: ExpectedCoursePoint[],
@@ -123,7 +126,7 @@ export function classifyOnTrack(
     // the streak (a band gap must not silence an ongoing deterioration).
     if (!b) continue;
     bandComparisons++;
-    const worse = scale.higherIsBetter ? p.value < b.p25 : p.value > b.p75;
+    const worse = scale.higherIsBetter ? p.value < b.p10 : p.value > b.p90;
     streak = worse ? streak + 1 : 0;
     if (streak >= needed) {
       reasons.push("below_band");

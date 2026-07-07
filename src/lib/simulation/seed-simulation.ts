@@ -257,7 +257,11 @@ function scriptedActivePatients(therapistIds: string[], codeStart: number): Acti
     logs?: { daysAgo: number; type: string; note?: string }[];
   }[] = [
     { slug: "on-track", name: "Sina Albrecht", sex: "Female", age: 31, category: "depression", icd: "F32.1", cc: cc({}), sessions: [8, 7, 6.5, 6, 5.5, 5, 4.5, 4] },
-    { slug: "not-band", name: "Milo Berger", sex: "Male", age: 44, category: "depression", icd: "F33.1", cc: cc({ treatmentExpectation: 4 }), sessions: [8, 8.5, 9, 9.5, 9, 9.5] },
+    // Mid-severity baseline drifting upward: crosses the mid-stratum p90
+    // boundary for ≥2 consecutive sessions while the baseline-anchored change
+    // (+2) stays under the RCI cutoff (~2.9) — the band-only NOT demo. (The
+    // top tertile can't demo this: its p90 saturates at the scale ceiling.)
+    { slug: "not-band", name: "Milo Berger", sex: "Male", age: 44, category: "depression", icd: "F33.1", cc: cc({ treatmentExpectation: 4 }), sessions: [8, 9, 9.5, 10, 10, 10] },
     { slug: "not-rci", name: "Petra Custer", sex: "Female", age: 52, category: "anxiety", icd: "F41.1", cc: cc({ problemDuration: "gt24m" }), sessions: [5, 5.5, 6, 7, 8.5] },
     { slug: "sudden-gain", name: "Ralf Dorn", sex: "Male", age: 38, category: "anxiety", icd: "F41.0", cc: cc({}), sessions: [9, 8.5, 9, 8.75, 9, 3.5, 3, 3.25, 3] },
     { slug: "sudden-loss", name: "Alma Egli", sex: "Female", age: 27, category: "depression", icd: "F32.2", cc: cc({ psychotropicMedication: true }), sessions: [4, 3.5, 4, 3.75, 4, 9, 9.5, 9.25] },

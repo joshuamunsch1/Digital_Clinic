@@ -76,9 +76,14 @@ export interface ExpectedCoursePoint {
   /// Reference cases measured at this session — displayed with the band, and
   /// the honesty gate: occasions below minN are not drawn at all.
   n: number;
+  /// p25–p75 is the DISPLAYED band; p10/p90 delimit the 80% tolerance band
+  /// (Finch, Lambert & Anderson 2001) that the not-on-track flag uses — the
+  /// interquartile band would flag 25% of the reference itself by construction.
+  p10: number;
   p25: number;
   p50: number;
   p75: number;
+  p90: number;
 }
 
 export interface OnTrackResult {

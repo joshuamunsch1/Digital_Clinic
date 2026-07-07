@@ -85,6 +85,37 @@ PHQ-4/SRS already were). Demo free text (staff titles, occupations, diagnoses)
 Germanized; 4 archived demo patients (2 categories × 2024/2025) seed the archive
 including the disk export.
 
+**Batch 6 (2026-07-07, branch `feature/lutz-outcome-prediction`)**: the full
+`docs/outcome-prediction.md` roadmap (all 3 stages), with a **simulated
+reference cohort** standing in for the missing archive — see that doc's §7
+implementation notes. Schema: `Patient.code` (A00120-style pseudonym,
+auto-assigned), `icdCode`, `treatmentStartAt/treatmentEndAt`,
+`terminationReason` (5-code, REQUIRED at archive — replaces `archiveOutcome`;
+dropout = therapist judgment per clinic decision §6.2), `caseCharacteristics`
+JSON (coded ETR intake predictors), `simulated` flag, new `SessionLog` model
+(sessions without questionnaires, §4.5). Pure analytics in
+`src/lib/analytics/` (suddengains-exact sudden shifts, RCI early change,
+percentile expected-course bands — displayed p25–p75, NOT flag on the p10/p90
+80% boundary — dynamic Gower nearest neighbors, two-stage log-linear ETR
+approximation, L2-logistic dropout risk; 57 tests via `npm test`, node:test
+through tsx). Server: cached reference sample with an aggregate version probe
+(`src/lib/prediction/`), staff-only prediction routes
+(`/api/patients/[id]/prediction`, `/api/predictions/summary`), director-only
+§5 research-export CSVs (`/api/export/research`, simulated rows excluded by
+default); `/api/clinic` ships archived patients as summary rows (full dossier
+fetched on open — a 250-case archive would dominate the payload). Simulation:
+deterministic generative cohort with planted predictor signal
+(`src/lib/simulation/`, master seed 20260706, `SIM_COHORT_SIZE` env override,
+`npm run sim:purge` = real-data cutover), 10 scripted active patients demoing
+each feedback state. UI: `PredictionPanel` (source toggle clinic/NN/ETR,
+dropout gauge with n + base rate + AUC, NN research codes only), chart
+overlays band/boundary/ETR/diamonds (LineChart→ComposedChart), amber NOT
+banner distinct from red safety alerts, dashboard badges, SIM chips,
+"Simulierte Referenzdaten" badge on every prediction surface. `rci` params
+added for `phq4/PHQ_total` (Löwe-derived) and `pstb/Therapiefortschritte`
+(PLACEHOLDER, flagged). Predictions are therapist-facing only — patient and
+admin sessions get 403 before anything is computed.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

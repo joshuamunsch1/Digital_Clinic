@@ -575,10 +575,23 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         : bandSource === "nn" && s.nn.available && s.nn.points
           ? { points: s.nn.points, label: t("bandLabelNn", { k: s.nn.k ?? 0 }), simulated }
           : null;
+    // The NOT flag fires on the 80% tolerance boundary (p10/p90) — draw that
+    // same line the flag actually uses, direction-aware per scale.
+    const hib =
+      instruments.find((i) => i.id === instrumentId)?.scales.find((k) => k.key === s.scaleKey)?.higherIsBetter ?? true;
+    const clinicBoundary = s.expectedCourse.points.map((p) => ({
+      session: p.session,
+      value: hib ? p.p10 : p.p90,
+    }));
     return {
       scaleKey: s.scaleKey,
       band,
-      failureBoundary: bandSource === "nn" && s.nn.available ? s.nn.failureBoundary : undefined,
+      failureBoundary:
+        bandSource === "nn" && s.nn.available
+          ? s.nn.failureBoundary
+          : bandSource === "clinic"
+            ? clinicBoundary
+            : undefined,
       etrPoints: bandSource === "etr" && s.etr.available ? s.etr.points : undefined,
       shifts: s.suddenShifts,
     };

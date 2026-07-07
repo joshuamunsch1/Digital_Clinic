@@ -131,10 +131,10 @@ in the IAPT system (Lancet Digital Health, 2021).
 | Long-format scored storage for growth modeling | ✅ `ResponseInstance` × `ScaleScore` (see §5) |
 | Reliable-change logic | ✅ `src/lib/instruments/rci.ts` (placeholder psychometrics, flagged) |
 | Safety alarms | ✅ data-driven `alert` rule (BDI-FS suicide item) with banner propagation |
-| Expected-course bands / NOT alarms | ❌ Stage 1 roadmap (below) |
-| Sudden-gain / early-change detection | ❌ Stage 1 roadmap |
-| Intake predictors, dropout labels | ❌ data checklist (§4) — start collecting now |
-| ETR / nearest-neighbor / dropout ML | ❌ Stages 2–3 — blocked on sample size, not on code |
+| Expected-course bands / NOT alarms | ✅ **implemented 2026-07-07**: `src/lib/analytics/expected-course.ts` + amber banner/badges (see notes below) |
+| Sudden-gain / early-change detection | ✅ `src/lib/analytics/sudden-shifts.ts` (exact suddengains criteria), `early-change.ts` |
+| Intake predictors, dropout labels | ✅ `Patient.caseCharacteristics` / `terminationReason` (5-code, required at archive), `SessionLog`, `Patient.code` pseudonyms |
+| ETR / nearest-neighbor / dropout ML | ✅ `src/lib/analytics/etr.ts` (two-stage approximation), `nearest-neighbors.ts` (dynamic Gower NN), `dropout-risk.ts` — running against a **simulated reference cohort** until real completed treatments accumulate |
 
 ---
 
@@ -284,3 +284,62 @@ SQLite, the documented one-line Postgres switch applies with no schema change.
    expectations, employment) acceptable additions to the intake interview?
 4. For Stage 3, is a research cooperation (data-sharing agreement, ethics
    approval) an option? The export format is designed to make that cheap.
+
+## 7. Implementation notes (2026-07-07)
+
+All three roadmap stages are implemented, with a **deterministic simulated
+reference cohort** (default 250 archived synthetic treatments + 10 scripted
+active patients, master seed 20260706) standing in for the archive the clinic
+does not have yet. Everything trains from the database at prediction time, so
+real data replaces the simulation with **no code changes**: archive real
+treatments with coded termination reasons, then run `npm run sim:purge`.
+
+**File map.** Pure analytics (no prisma, unit-tested in `tests/`):
+`src/lib/analytics/{stats,sudden-shifts,early-change,expected-course,features,nearest-neighbors,etr,logistic,dropout-risk}.ts`.
+Server: `src/lib/prediction/{reference,service}.ts` (cached reference sample,
+invalidated by an aggregate version probe), routes
+`GET /api/patients/[id]/prediction`, `GET /api/predictions/summary`,
+`GET /api/export/research`. Simulation: `src/lib/simulation/`, purge script
+`prisma/purge-simulated.ts`. UI: `src/components/PredictionPanel.tsx`, chart
+overlays in `charts.tsx`, badges in `Dashboard.tsx`.
+
+**Criteria as implemented.**
+- *Sudden gains/losses* follow the `suddengains` R package (Wiedemann et al.
+  2020) exactly: RCI-based cutoff (criterion 1), ≥25% of the pre-shift
+  severity score (criterion 2 — severity is range-shifted so the best possible
+  score is 0, which the −3..+3 PSTB needs), stability via
+  `M_pre − M_post > t_crit × pooled SD` with t_crit 2.776/3.182/4.303 by
+  window completeness, ≥2 of 3 measurements per side, no imputation.
+  Detection is skipped for scales without `rci` parameters.
+- *Early change*: baseline → latest session ≤4 vs. the RCI threshold.
+- *Expected course*: empirical per-occasion percentiles, n shown, occasions
+  with n<3 hidden; severity-tertile stratification (Stage 2) gates at ≥30
+  cases / ≥8 per stratum with pooled fallback. The chart shows p25–p75; the
+  **not-on-track flag fires on the p10/p90 (80% tolerance) boundary**
+  (Finch/Lambert/Anderson-style) — the interquartile band would flag 25% of
+  the reference itself by construction.
+- *NN expected course*: Gower distance over the mixed intake features with
+  natural missing handling; the **dynamic** variant matches observed scores at
+  sessions ≤6, so neighbors and the failure boundary (worse-tail decile,
+  n-gated) update as data accrues — the NN analogue of TTN's dynamic boundary.
+- *ETR*: two-stage OLS approximation of the multilevel model (per-case
+  log-linear fit, then intercept/slope regressed on encoded intake features).
+  Labeled "Näherung, kein validiertes ETR" everywhere it surfaces.
+- *Dropout risk*: L2 logistic regression on intake features + early-change
+  one-hots; label = therapist-coded `dropout` vs `completed`/`mutual`
+  (`transfer`/`other` excluded); gates ≥40 labeled cases, ≥5 per class. The
+  UI reports train n, base rate and AUC next to every probability.
+
+**Decisions recorded from §6 (clinic answers, 2026-07-06):** PHQ-4 stays in
+the post-session routine clinic-wide (Q1). "Dropout" is **therapist
+judgment** — the concluding clinician codes the termination reason; there is
+no automatic session-count rule (Q2). The classic ETR intake predictors are
+collected on the dossier's coded intake-predictor card (Q3). Research
+cooperation is an option; the §5 export contract is implemented verbatim,
+with simulated rows excluded by default (`?includeSimulated=1` opts in) (Q4).
+
+**Honesty rules.** Every prediction surface carries the reference n and an
+amber "Simulierte Referenzdaten" badge whenever any reference case is
+simulated; predictions are therapist-facing only (patient and admin sessions
+get 403 before anything is computed); amber not-on-track signals are visually
+and semantically distinct from red safety alarms.

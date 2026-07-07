@@ -147,10 +147,26 @@ Three paths, all ending in the same scored `ResponseInstance`:
 | `npm run start` | Run the production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (next/core-web-vitals) |
+| `npm run test` | Analytics unit + simulation sanity tests (node:test via tsx) |
 | `npm run db:push` | Apply the Prisma schema to the database |
-| `npm run db:seed` | Seed instrument catalog + demo data |
-| `npm run db:reset` | Wipe + reseed |
+| `npm run db:seed` | Seed instrument catalog + demo data + simulated cohort |
+| `npm run db:reset` | Wipe + reseed (≈15 s including the simulated cohort) |
 | `npm run db:studio` | Prisma Studio (browse the DB) |
+| `npm run sim:purge` | Delete all simulated patients (the real-data cutover) |
+
+The seed includes a **simulated reference cohort** for the Lutz-style outcome
+prediction (250 archived synthetic treatments + 10 active demo patients, all
+marked with a SIM chip — see `docs/outcome-prediction.md`). Set
+`SIM_COHORT_SIZE=0 npm run db:reset` to seed without it, or any other number
+to change its size.
+
+### Switching git branches
+
+The SQLite database (`prisma/dev.db`) and the `archive/` folder are **not**
+tracked by git, so they do not change when you switch branches. Because
+branches can differ in their Prisma schema, run `npm run db:reset` once after
+every `git switch <branch>` — it rebuilds the database for the code you just
+checked out (all demo data is regenerated, nothing needs to be kept).
 
 ## Project structure
 

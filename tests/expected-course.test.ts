@@ -66,8 +66,8 @@ describe("classifyOnTrack", () => {
     assert.equal(r.status, "on_track");
   });
 
-  it("not on track after 2 consecutive occasions on the worse side (severity above p75)", () => {
-    // p75 at sessions 0..3 is [8, 7, 6, 5] → 11/11 sit above at sessions 1, 2.
+  it("not on track after 2 consecutive occasions beyond the 80% boundary (severity above p90)", () => {
+    // p90 at sessions 0..3 is [9.2, 8.2, 7.2, 6.2] → 11/11 cross at sessions 1, 2.
     const r = classifyOnTrack(flat([8, 11, 11]), course, PHQ);
     assert.equal(r.status, "not_on_track");
     assert.ok(r.reasons.includes("below_band"));
@@ -85,7 +85,7 @@ describe("classifyOnTrack", () => {
     assert.ok(r.reasons.includes("rci_deterioration"));
   });
 
-  it("direction-aware for higherIsBetter scales (worse side = below p25)", () => {
+  it("direction-aware for higherIsBetter scales (worse side = below p10)", () => {
     const pstb: ScaleParams = { higherIsBetter: true, rciCutoff: null, range: { min: -3, max: 3 } };
     const ref = [1, 1.5, 2, 2.5, 3].map((b) => flat([b, b, b]));
     const c = buildExpectedCourse(ref);
