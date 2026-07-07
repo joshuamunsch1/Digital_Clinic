@@ -12,6 +12,7 @@ import { fmtDate } from "@/lib/format";
 import type { ClinicData, Patient, SessionUser } from "@/lib/types";
 import { DISORDER_CATEGORIES } from "@/lib/types";
 import { Card, SectionTitle } from "./ui";
+import { SimChip } from "./Dashboard";
 import { useLang, useT } from "./LangContext";
 
 /// Archived patients visible to this user (director: all; therapist: own).
@@ -131,6 +132,7 @@ export function ArchiveView({ data, user, onOpenPatient, onBack }: {
                           style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, cursor: "pointer" }}>
                           <span className="rounded-full shrink-0" style={{ width: 10, height: 10, background: p.color }} />
                           <span className="font-semibold text-sm" style={{ color: C.ink, minWidth: 130 }}>{p.name}</span>
+                          <SimChip patient={p} />
                           <TerminationChip reason={p.terminationReason} />
                           {p.archivedAt && <span className="text-xs" style={{ color: C.muted }}>{fmtDate(p.archivedAt)}</span>}
                           {user.role === "director" && (

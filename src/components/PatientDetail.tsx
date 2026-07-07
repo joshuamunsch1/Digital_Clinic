@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { C } from "@/lib/theme";
 import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trInvitationStatus, trPopulation, trProblemDuration, trRaterRole, trSessionLogType, trSource, trTerminationReason } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
@@ -8,10 +8,12 @@ import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
 import type { CaseCharacteristics, InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
 import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, EMPLOYMENT_STATUSES, PROBLEM_DURATIONS, RATER_ROLES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import type { PredictionPayload } from "@/lib/prediction/service";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
-import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf } from "./charts";
+import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
 import { DipsSummary } from "./DipsSummary";
 import { InstrumentForm } from "./InstrumentForm";
+import { PredictionPanel, type BandSource } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
 
 function DefinitionBadge({ instrument }: { instrument: InstrumentDef }) {
@@ -76,7 +78,7 @@ function ResponseRow({ instrument, response, therapists }: { instrument: Instrum
   );
 }
 
-function InstrumentCard({ instrument, responses, therapists }: { instrument: InstrumentDef; responses: ResponseRecord[]; therapists: Therapist[] }) {
+function InstrumentCard({ instrument, responses, therapists, chartPrediction }: { instrument: InstrumentDef; responses: ResponseRecord[]; therapists: Therapist[]; chartPrediction?: ChartPrediction }) {
   const t = useT();
   const { lang } = useLang();
   const [showAll, setShowAll] = useState(false);
@@ -94,7 +96,7 @@ function InstrumentCard({ instrument, responses, therapists }: { instrument: Ins
         {trRaterRole(instrument.raterRole, lang)} · {trCadence(instrument.cadenceType, lang)} · {trPopulation(instrument.population, lang)}
       </p>
       {scoreable && occasions >= 2 && (
-        <div className="mb-3"><TrajectoryChart instrument={instrument} responses={responses} /></div>
+        <div className="mb-3"><TrajectoryChart instrument={instrument} responses={responses} prediction={chartPrediction} /></div>
       )}
       {scoreable && <div className="mb-3"><ScoreTable instrument={instrument} responses={responses} /></div>}
       {!scoreable && (
@@ -509,6 +511,12 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const [dxIcd, setDxIcd] = useState("");
   const [manualEntry, setManualEntry] = useState<InstrumentDef | null>(null);
   const [busy, setBusy] = useState(false);
+  // Therapist-facing outcome prediction (docs/outcome-prediction.md) — fetched
+  // for active therapy dossiers; the API rejects unassigned therapists (403),
+  // in which case the panel simply stays hidden.
+  const [prediction, setPrediction] = useState<PredictionPayload | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [bandSource, setBandSource] = useState<BandSource>("clinic");
   // Conclude-treatment (archive) state — see the card at the bottom of the page.
   const [archOutcome, setArchOutcome] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -523,6 +531,62 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const alerts = activeAlerts(patient, instruments);
   const isArchived = patient.status === "archived";
   const canArchive = user.role === "director" || (user.role === "therapist" && patient.therapistId === user.id);
+  const showPrediction = patient.status === "therapy";
+
+  useEffect(() => {
+    if (!showPrediction) {
+      setPrediction(null);
+      return;
+    }
+    let cancelled = false;
+    setPredictionLoading(true);
+    api
+      .getPrediction(patient.id)
+      .then((r) => {
+        if (!cancelled) setPrediction(r.prediction);
+      })
+      .catch(() => {
+        if (!cancelled) setPrediction(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPredictionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.id, patient.responses.length, showPrediction]);
+
+  /// Chart overlay (band/boundary/ETR/diamonds) for one instrument, driven by
+  /// the panel's source toggle.
+  const chartPredictionFor = (instrumentId: string): ChartPrediction | undefined => {
+    if (!prediction) return undefined;
+    const s = prediction.series.find((x) => x.instrumentId === instrumentId);
+    if (!s) return undefined;
+    const simulated = prediction.reference.includesSimulated;
+    const band =
+      bandSource === "clinic"
+        ? {
+            points: s.expectedCourse.points,
+            label:
+              t("bandLabelClinic", { n: s.expectedCourse.cases }) +
+              (s.expectedCourse.stratified ? ` · ${t("bandStratified")}` : ""),
+            simulated,
+          }
+        : bandSource === "nn" && s.nn.available && s.nn.points
+          ? { points: s.nn.points, label: t("bandLabelNn", { k: s.nn.k ?? 0 }), simulated }
+          : null;
+    return {
+      scaleKey: s.scaleKey,
+      band,
+      failureBoundary: bandSource === "nn" && s.nn.available ? s.nn.failureBoundary : undefined,
+      etrPoints: bandSource === "etr" && s.etr.available ? s.etr.points : undefined,
+      shifts: s.suddenShifts,
+    };
+  };
+
+  /// The amber not-on-track signal (Stage 1 item 4) — distinct from the red
+  /// safety alerts; red stays reserved for safety.
+  const notOnTrackSeries = (prediction?.series ?? []).filter((s) => s.onTrack.status === "not_on_track");
 
   const doArchive = async () => {
     setBusy(true);
@@ -597,6 +661,24 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           </p>
         </Card>
       ))}
+
+      {/* Amber "not on track" banner — decision support, NOT a safety alarm. */}
+      {notOnTrackSeries.length > 0 && (
+        <Card className="p-4 mb-4" style={{ background: C.amberSoft, border: `1px solid ${C.amber}` }}>
+          <p className="text-sm font-bold" style={{ color: C.amber }}>⚑ {t("notOnTrackBanner")}</p>
+          <p className="text-sm mt-1" style={{ color: C.ink }}>
+            {notOnTrackSeries
+              .map(
+                (s) =>
+                  `${s.instrumentId === "phq4" ? "PHQ-4" : "PSTB"}: ${s.onTrack.reasons
+                    .map((r) => (r === "below_band" ? t("notReasonBand") : t("notReasonRci")))
+                    .join(" + ")}`,
+              )
+              .join(" · ")}
+          </p>
+          <p className="text-xs mt-1" style={{ color: C.muted }}>{t("notOnTrackHint")}</p>
+        </Card>
+      )}
 
       {isArchived && (
         <Card className="p-4 mb-4" style={{ background: C.surfaceAlt }}>
@@ -715,6 +797,11 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         </Card>
       </div>
 
+      {/* Therapist-facing outcome prediction — active therapy dossiers only. */}
+      {showPrediction && (
+        <PredictionPanel prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
+      )}
+
       {/* Intake predictors (§4.3) — read-only on archived dossiers. */}
       <IntakePredictorsCard patient={patient} readOnly={isArchived} onRefresh={onPatientUpdated} />
 
@@ -737,7 +824,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         <Card className="p-5 mb-4"><p className="text-sm" style={{ color: C.muted }}>{t("noDataYet")}</p></Card>
       )}
       {instrumentsWithData.map(({ instrument, responses }) => (
-        <InstrumentCard key={instrument.id} instrument={instrument} responses={responses} therapists={therapists} />
+        <InstrumentCard key={instrument.id} instrument={instrument} responses={responses} therapists={therapists} chartPrediction={chartPredictionFor(instrument.id)} />
       ))}
 
       {notes.length > 0 && (

@@ -1,9 +1,10 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { C } from "@/lib/theme";
 import { T, tr, trCategory } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
-import type { RegisterPatientPayload } from "@/lib/api-client";
+import { api, type RegisterPatientPayload } from "@/lib/api-client";
+import type { PredictionSummary } from "@/lib/prediction/service";
 import type { ClinicData, Demographics, Patient, SessionUser, Therapist } from "@/lib/types";
 import {
   DIPS_INSTRUMENT_ID,
@@ -16,7 +17,20 @@ import {
 import { Card, Field, MiniTrend, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { GlobalChart } from "./charts";
 import { archivedPatientsFor } from "./ArchiveView";
+import { EarlyChangeBadge } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
+
+/// Small "SIM" chip marking synthetic demo patients (Patient.simulated).
+export function SimChip({ patient }: { patient: Patient }) {
+  const t = useT();
+  if (!patient.simulated) return null;
+  return (
+    <span className="text-xs font-bold px-1.5 py-0.5 rounded" title={t("simChipTitle")}
+      style={{ background: C.amberSoft, color: C.amber, letterSpacing: 0.5 }}>
+      SIM
+    </span>
+  );
+}
 
 export function CategoryChip({ category }: { category: string | null }) {
   const { lang } = useLang();
@@ -30,11 +44,12 @@ export function CategoryChip({ category }: { category: string | null }) {
 
 /// One patient row: assignment controls for director/admin; clinical score +
 /// alert marker only for clinical roles (never for admin).
-function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
+function PatientRow({ p, user, therapists, alertCount, summary, onOpen, onAssign }: {
   p: Patient;
   user: SessionUser;
   therapists: Therapist[];
   alertCount: number;
+  summary?: PredictionSummary;
   onOpen?: (id: string) => void;
   onAssign?: (id: string, therapistId: string | null) => void;
 }) {
@@ -48,11 +63,16 @@ function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
     <>
       <span className="rounded-full shrink-0" style={{ width: 11, height: 11, background: p.color }} />
       <span className="font-semibold text-sm" style={{ color: C.ink, minWidth: 130 }}>{p.name}</span>
+      <SimChip patient={p} />
       <StatusBadge status={p.status} />
       <CategoryChip category={p.disorderCategory} />
       {alertCount > 0 && (
         <span className="text-xs font-bold" style={{ color: C.danger }} title={t("clinicalAlert")}>⚠</span>
       )}
+      {!isAdmin && summary?.onTrack === "not_on_track" && (
+        <span className="text-xs font-bold" style={{ color: C.amber }} title={t("notOnTrack")}>⚑</span>
+      )}
+      {!isAdmin && summary && <EarlyChangeBadge value={summary.earlyChange} compact />}
       {canAssign ? (
         <select
           style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "4px 8px", fontSize: 12 }}
@@ -84,9 +104,10 @@ function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
 
 /// Director's all-scores matrix: latest primary-scale value per instrument and
 /// patient — the "everything at a glance" replacement for the old single index.
-function ScoresMatrix({ patients, data, onOpenPatient }: {
+function ScoresMatrix({ patients, data, summaries, onOpenPatient }: {
   patients: Patient[];
   data: ClinicData;
+  summaries: Record<string, PredictionSummary>;
   onOpenPatient: (id: string) => void;
 }) {
   const t = useT();
@@ -121,6 +142,11 @@ function ScoresMatrix({ patients, data, onOpenPatient }: {
                 <td className="pr-4 py-2 whitespace-nowrap">
                   <span className="inline-flex items-center gap-2 font-semibold" style={{ color: C.ink }}>
                     <span className="rounded-full" style={{ width: 9, height: 9, background: p.color }} />{p.name}
+                    <SimChip patient={p} />
+                    {summaries[p.id]?.onTrack === "not_on_track" && (
+                      <span className="text-xs font-bold" style={{ color: C.amber }} title={t("notOnTrack")}>⚑</span>
+                    )}
+                    {summaries[p.id] && <EarlyChangeBadge value={summaries[p.id].earlyChange} compact />}
                   </span>
                 </td>
                 {columns.map(({ inst, primary }) => {
@@ -263,6 +289,24 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
   const { lang } = useLang();
   const archivedCount = isAdmin ? 0 : archivedPatientsFor(data.patients, user).length;
 
+  // Per-patient prediction badges (early change / not-on-track / dropout risk)
+  // in ONE request — therapist/director only, best-effort (badges just stay
+  // hidden when the request fails, e.g. off-network).
+  const [summaries, setSummaries] = useState<Record<string, PredictionSummary>>({});
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    api
+      .getPredictionSummaries()
+      .then((r) => {
+        if (!cancelled) setSummaries(r.summaries);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, data.patients.length]);
+
   const section = (title: string, list: Patient[], emptyText: string, extra?: React.ReactNode) => (
     <Card className="p-5 mb-5">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -272,7 +316,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
       <div className="flex flex-col gap-2">
         {list.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{emptyText}</p>}
         {list.map((p) => (
-          <PatientRow key={p.id} p={p} user={user} therapists={data.therapists} alertCount={alertsOf(p)} onOpen={isAdmin ? undefined : onOpenPatient} onAssign={clinicWide ? onAssign : undefined} />
+          <PatientRow key={p.id} p={p} user={user} therapists={data.therapists} alertCount={alertsOf(p)} summary={summaries[p.id]} onOpen={isAdmin ? undefined : onOpenPatient} onAssign={clinicWide ? onAssign : undefined} />
         ))}
       </div>
     </Card>
@@ -322,7 +366,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         </Card>
       )}
 
-      {!isAdmin && <ScoresMatrix patients={patients} data={data} onOpenPatient={onOpenPatient} />}
+      {!isAdmin && <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />}
 
       {section(
         t("sectionInTherapy"),
@@ -368,6 +412,26 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
           </Card>
           <RegisterPatientCard onRegister={onRegisterPatient} />
         </div>
+      )}
+
+      {/* Director-only research export (docs/outcome-prediction.md §5) — the
+          handover point to R/lme4/brms and research cooperations. Plain <a>
+          downloads; the route enforces director + network gating server-side. */}
+      {isDirector && (
+        <Card className="p-5 mb-5">
+          <SectionTitle sub={t("exportSub")}>{t("exportTitle")}</SectionTitle>
+          <div className="flex items-center gap-3 flex-wrap">
+            <a href="/api/export/research?level=scores" className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
+              ⬇ {t("exportScores")}
+            </a>
+            <a href="/api/export/research?level=items" className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
+              ⬇ {t("exportItems")}
+            </a>
+            <span className="text-xs" style={{ color: C.muted }}>{t("exportSimNote")}</span>
+          </div>
+        </Card>
       )}
 
       {/* Low-priority entry point to the archive of concluded treatments —
