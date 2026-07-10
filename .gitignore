@@ -10,3 +10,4 @@ prisma/dev.db-journal
 /documents/
 .DS_Store
 next-env.d.ts
+archive/

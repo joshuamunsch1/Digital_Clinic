@@ -11,6 +11,7 @@ import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, activeAlerts, fmtScore, latest
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf } from "./charts";
 import { DipsSummary } from "./DipsSummary";
+import { DocumentsPanel } from "./DocumentsPanel";
 import { InstrumentForm } from "./InstrumentForm";
 import { useLang, useT } from "./LangContext";
 
@@ -431,6 +432,8 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           )}
         </Card>
       </div>
+
+      <DocumentsPanel patient={patient} user={user} onRefresh={onPatientUpdated} />
 
       {patient.dips && (
         <Card className="p-5 mb-4">

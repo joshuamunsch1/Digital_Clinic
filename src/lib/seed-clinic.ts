@@ -20,6 +20,8 @@ import {
   pstbSessionsFor,
 } from "./demo";
 import { toFHIR } from "./dips/fhir";
+import { DOC_TITLES_DE, type DocType } from "./document-types";
+import { readTemplate, storeDocumentFile, wipeDocumentsDir } from "./documents";
 import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
 import { isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
@@ -111,6 +113,54 @@ export async function createScoredResponse(prisma: PrismaClient, r: ResponseSeed
       },
     },
   });
+}
+
+/// Demo timeline documents: copies of the placeholder template PDFs, filed on
+/// disk exactly like live uploads. Mara has the complete standard set, Elif
+/// shows recurring reports with goals still pending, David a partial checklist.
+async function seedDocuments(prisma: PrismaClient) {
+  await wipeDocumentsDir();
+  const seedDoc = async (
+    patientId: string,
+    docType: DocType,
+    daysAgo: number,
+    uploadedById: string,
+    title?: string,
+  ) => {
+    const bytes = await readTemplate(docType);
+    if (!bytes) return; // template missing — skip silently (dev checkout without templates/)
+    const row = await prisma.patientDocument.create({
+      data: {
+        patientId,
+        docType,
+        title: title ?? DOC_TITLES_DE[docType],
+        fileName: `${docType}.pdf`,
+        mimeType: "application/pdf",
+        size: bytes.length,
+        storagePath: "",
+        uploadedById,
+        occurredAt: new Date(Date.now() - daysAgo * 864e5),
+      },
+    });
+    const storagePath = await storeDocumentFile(patientId, row.id, "application/pdf", bytes);
+    await prisma.patientDocument.update({ where: { id: row.id }, data: { storagePath } });
+  };
+
+  // p1 Mara Vogel (t1): complete standard checklist
+  await seedDoc("p1", "consent", 84, "t1");
+  await seedDoc("p1", "confidentiality", 84, "t1");
+  await seedDoc("p1", "emergency_contacts", 80, "t1");
+  await seedDoc("p1", "personal_goals", 70, "t1");
+  await seedDoc("p1", "report", 30, "t1", "Therapiebericht — Zwischenbericht");
+  // p3 Elif Demir (t1): recurring reports, personal goals still pending
+  await seedDoc("p3", "consent", 60, "t1");
+  await seedDoc("p3", "confidentiality", 60, "t1");
+  await seedDoc("p3", "emergency_contacts", 55, "t1");
+  await seedDoc("p3", "report", 60, "d1", "Therapiebericht — Eingangsbericht");
+  await seedDoc("p3", "report", 7, "t1", "Therapiebericht — Zwischenbericht");
+  // p2 David Hofmann (t2): partial — three standard documents still pending
+  await seedDoc("p2", "consent", 45, "t2");
+  await seedDoc("p2", "confidentiality", 45, "t2");
 }
 
 export async function seedClinic(prisma: PrismaClient) {
@@ -240,6 +290,8 @@ export async function seedClinic(prisma: PrismaClient) {
     }
   }
 
+  await seedDocuments(prisma);
+
   return {
     users: await prisma.user.count(),
     patients: await prisma.patient.count(),
@@ -247,5 +299,6 @@ export async function seedClinic(prisma: PrismaClient) {
     scales: await prisma.scale.count(),
     responses: await prisma.responseInstance.count(),
     scaleScores: await prisma.scaleScore.count(),
+    documents: await prisma.patientDocument.count(),
   };
 }
