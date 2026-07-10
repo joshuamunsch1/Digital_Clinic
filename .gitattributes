@@ -1,0 +1,3 @@
+# PDFs are binary — never apply line-ending conversion (it would corrupt
+# the xref byte offsets in templates/documents/*.pdf).
+*.pdf binary
