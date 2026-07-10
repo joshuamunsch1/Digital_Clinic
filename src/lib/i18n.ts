@@ -258,6 +258,72 @@ export const UI = {
     "Souhaitez-vous partager quelque chose de cette semaine avec votre thérapeute ? (facultatif)",
     "Anything from this week you'd like your therapist to know? (optional)"),
 
+  // questionnaire monitoring
+  monitoringTitle: L("Fragebogen-Monitoring", "Suivi des questionnaires", "Questionnaire monitoring"),
+  monitoringSub: L(
+    "Alle Fragebogen-Einladungen und In-App-Aufgaben im Blick — Status, Erinnerungen, Neuversand.",
+    "Toutes les invitations et tâches in-app en un coup d'œil — statut, rappels, nouvel envoi.",
+    "All questionnaire invitations and in-app tasks at a glance — status, reminders, sending new ones."),
+  openMonitoring: L("Fragebogen-Monitoring →", "Suivi des questionnaires →", "Questionnaire monitoring →"),
+  lsNotConfigured: L(
+    "LimeSurvey ist nicht konfiguriert — E-Mail-Einladungen und -Erinnerungen sind deaktiviert. In-App-Aufgaben, CSV-Import und manuelle Eingabe funktionieren weiterhin.",
+    "LimeSurvey n'est pas configuré — les invitations et rappels par e-mail sont désactivés. Les tâches in-app, l'import CSV et la saisie manuelle restent disponibles.",
+    "LimeSurvey is not configured — e-mail invitations and reminders are disabled. In-app tasks, CSV import and manual entry keep working."),
+  statOpenInvitations: L("Offene Anfragen", "Demandes ouvertes", "Open requests"),
+  statOverdue: L("Überfällig", "En retard", "Overdue"),
+  statCompleted30: L("Abgeschlossen (30 Tage)", "Terminés (30 jours)", "Completed (30 days)"),
+  runSweepNow: L("Erinnerungen jetzt senden", "Envoyer les rappels maintenant", "Send due reminders now"),
+  sweepSkipped: L("Übersprungen: {reason}", "Ignoré : {reason}", "Skipped: {reason}"),
+  sweepResult: L(
+    "Sync: {imported}/{checked} importiert · Erinnerungen: {sent}/{due} gesendet",
+    "Sync : {imported}/{checked} importés · rappels : {sent}/{due} envoyés",
+    "Sync: {imported}/{checked} imported · reminders: {sent}/{due} sent"),
+  overdueChip: L("Überfällig", "En retard", "Overdue"),
+  channelInApp: L("In-App", "In-app", "In-app"),
+  openInvitationsHeading: L("Offen", "Ouvertes", "Open"),
+  recentlyCompletedHeading: L("Kürzlich abgeschlossen", "Récemment terminés", "Recently completed"),
+  newQuestionnaire: L("Neuer Fragebogen", "Nouveau questionnaire", "New questionnaire"),
+  channelLabel: L("Kanal", "Canal", "Channel"),
+  inAppChannelHint: L(
+    "Die Aufgabe erscheint im Patientenportal und wird direkt in diesem Tool ausgefüllt — keine E-Mail nötig.",
+    "La tâche apparaît dans le portail patient et se remplit directement dans cet outil — sans e-mail.",
+    "The task appears in the patient portal and is filled out directly in this tool — no e-mail involved."),
+  inAppNotPossible: L(
+    "Für dieses Instrument nicht möglich (Item-Wortlaut liegt nicht vor — lizenzierte Instrumente laufen über LimeSurvey, CSV oder manuelle Eingabe).",
+    "Impossible pour cet instrument (le libellé des items n'est pas disponible — les instruments sous licence passent par LimeSurvey, CSV ou saisie manuelle).",
+    "Not possible for this instrument (item wording unavailable — licensed instruments go through LimeSurvey, CSV or manual entry)."),
+  remindEveryLabel: L("Automatisch erinnern alle … Tage", "Rappel automatique tous les … jours", "Auto-remind every … days"),
+  maxRemindersLabel: L("max. Erinnerungen", "rappels max.", "max reminders"),
+  schedNone: L("Kein automatischer Erinnerungsplan", "Pas de plan de rappel automatique", "No automatic reminder schedule"),
+  schedText: L("Erinnerung alle {days} Tage", "Rappel tous les {days} jours", "Reminder every {days} days"),
+  schedSent: L("{n}× erinnert", "{n} rappel(s) envoyé(s)", "{n} reminder(s) sent"),
+  schedNext: L("nächste: {date}", "prochain : {date}", "next: {date}"),
+  setSchedule: L("Plan festlegen", "Définir un plan", "Set schedule"),
+  clearSchedule: L("Plan entfernen", "Supprimer le plan", "Clear schedule"),
+  cancelInvitation: L("Stornieren", "Annuler", "Cancel"),
+  confirmCancelInvitation: L(
+    "Diese Anfrage wirklich stornieren?",
+    "Annuler vraiment cette demande ?",
+    "Really cancel this request?"),
+  invitationCancelled: L("Anfrage storniert.", "Demande annulée.", "Request cancelled."),
+  scheduleSaved: L("Erinnerungsplan gespeichert.", "Plan de rappel enregistré.", "Reminder schedule saved."),
+  openPatientLink: L("Patient*in öffnen →", "Ouvrir le·la patient·e →", "Open patient →"),
+  taskCreated: L(
+    "Aufgabe erstellt — sie erscheint im Patientenportal.",
+    "Tâche créée — elle apparaît dans le portail patient.",
+    "Task created — it appears in the patient portal."),
+  noInvitationsYet: L("Noch keine Einladungen oder Aufgaben.", "Pas encore d'invitations ni de tâches.", "No invitations or tasks yet."),
+  therapistFilterAll: L("Alle Therapeut*innen", "Tou·te·s les thérapeutes", "All therapists"),
+  daysShort: L("Tage", "jours", "days"),
+
+  // patient home in-app tasks
+  taskKicker: L("Anfrage Ihrer Therapeutin / Ihres Therapeuten", "Demande de votre thérapeute", "Request from your therapist"),
+  taskLead: L(
+    "Ihre Therapeutin / Ihr Therapeut bittet Sie, den folgenden Fragebogen auszufüllen.",
+    "Votre thérapeute vous prie de remplir le questionnaire suivant.",
+    "Your therapist asks you to fill out the following questionnaire."),
+  taskRequestedOn: L("Angefragt am {date}", "Demandé le {date}", "Requested on {date}"),
+
   // document timeline (document titles themselves are German clinical content,
   // stored on the rows — see DOC_TITLES_DE in src/lib/document-types.ts)
   documentsTitle: L("Dokumente im Therapieverlauf", "Documents du parcours thérapeutique", "Therapy-course documents"),

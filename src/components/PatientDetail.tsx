@@ -12,6 +12,7 @@ import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, input
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf } from "./charts";
 import { DipsSummary } from "./DipsSummary";
 import { DocumentsPanel } from "./DocumentsPanel";
+import { ChannelChip } from "./MonitoringView";
 import { InstrumentForm } from "./InstrumentForm";
 import { useLang, useT } from "./LangContext";
 
@@ -270,7 +271,8 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
         {[...patient.invitations].reverse().map((inv) => (
           <div key={inv.id} className="flex items-center gap-3 flex-wrap rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
             <span className="text-sm font-semibold" style={{ color: C.ink }}>{label(inv)}</span>
-            <span className="text-xs" style={{ color: C.muted }}>{inv.respondentRole} · {inv.email}{inv.context.wave ? ` · ${inv.context.wave}` : ""}</span>
+            <ChannelChip channel={inv.channel} />
+            <span className="text-xs" style={{ color: C.muted }}>{inv.respondentRole}{inv.channel === "limesurvey" && inv.email ? ` · ${inv.email}` : ""}{inv.context.wave ? ` · ${inv.context.wave}` : ""}</span>
             <span className="text-xs font-bold" style={{ color: statusColor[inv.status] ?? C.muted }}>
               {inv.status}{inv.sentAt ? ` · ${fmtDate(inv.sentAt)}` : ""}{inv.completedAt ? ` · ✓ ${fmtDate(inv.completedAt)}` : ""}
             </span>

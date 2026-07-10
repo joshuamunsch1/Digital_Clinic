@@ -148,11 +148,12 @@ function ScoresMatrix({ patients, data, onOpenPatient }: {
   );
 }
 
-export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient }: {
+export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient, onOpenMonitoring }: {
   data: ClinicData; user: SessionUser;
   onOpenPatient: (id: string) => void;
   onAssign: (id: string, therapistId: string | null) => void;
   onRegisterPatient: (name: string) => void;
+  onOpenMonitoring?: () => void;
 }) {
   const t = useT();
   const isDirector = user.role === "director";
@@ -216,9 +217,17 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         </Card>
       )}
 
-      <SectionTitle sub={isAdmin ? t("adminOverviewSub") : clinicWide ? t("clinicOverviewSub") : t("myPatientsSub")}>
-        {clinicWide ? t("clinicOverview") : t("myPatients")}
-      </SectionTitle>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <SectionTitle sub={isAdmin ? t("adminOverviewSub") : clinicWide ? t("clinicOverviewSub") : t("myPatientsSub")}>
+          {clinicWide ? t("clinicOverview") : t("myPatients")}
+        </SectionTitle>
+        {onOpenMonitoring && (
+          <button type="button" onClick={onOpenMonitoring} className="text-sm font-semibold"
+            style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+            {t("openMonitoring")}
+          </button>
+        )}
+      </div>
       <div className="flex gap-3 mb-5 flex-wrap">
         <Stat label={t("statPatients")} value={patients.length} />
         <Stat label={t("statInTherapy")} value={inTherapyAll.length} />

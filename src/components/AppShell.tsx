@@ -9,14 +9,16 @@ import { PatientHome, type PatientTask } from "./PatientHome";
 import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
+import { MonitoringView } from "./MonitoringView";
 import { PatientDetail } from "./PatientDetail";
 import { LangProvider, LangSwitcher, useT } from "./LangContext";
 
 type View =
   | { name: "home" }
   | { name: "form-assessment" }
-  | { name: "form-instrument"; instrumentId: string }
-  | { name: "patient-detail"; patientId: string };
+  | { name: "form-instrument"; instrumentId: string; invitationId?: string }
+  | { name: "patient-detail"; patientId: string; from?: "monitoring" }
+  | { name: "monitoring" };
 
 export function AppShell() {
   return (
@@ -166,7 +168,11 @@ function Shell() {
 
   const startPatientTask = (task: PatientTask) => {
     setJustSubmitted(false);
-    setView(task.kind === "assessment" ? { name: "form-assessment" } : { name: "form-instrument", instrumentId: task.instrumentId });
+    setView(
+      task.kind === "assessment"
+        ? { name: "form-assessment" }
+        : { name: "form-instrument", instrumentId: task.instrumentId, invitationId: task.invitationId },
+    );
   };
 
   const isStaff = user.role !== "patient";
@@ -211,15 +217,28 @@ function Shell() {
             instrument={formInstrument}
             busy={busy}
             onCancel={() => setView({ name: "home" })}
-            onSubmit={(payload) => submitResponse(currentPatient.id, payload)}
+            onSubmit={(payload) =>
+              submitResponse(currentPatient.id, {
+                ...payload,
+                invitationId: view.name === "form-instrument" ? view.invitationId : undefined,
+              })
+            }
           />
         )}
 
         {isStaff && data && view.name === "home" && (
-          <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient} />
+          <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient}
+            onOpenMonitoring={user.role === "therapist" || user.role === "director" ? () => setView({ name: "monitoring" }) : undefined} />
+        )}
+        {(user.role === "therapist" || user.role === "director") && data && view.name === "monitoring" && (
+          <MonitoringView data={data} user={user} onBack={() => setView({ name: "home" })}
+            onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "monitoring" })}
+            onPatientUpdated={patientUpdated} onRefreshAll={() => void refresh()} />
         )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
-          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments} onBack={() => setView({ name: "home" })} onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
+          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments}
+            onBack={() => setView(view.name === "patient-detail" && view.from === "monitoring" ? { name: "monitoring" } : { name: "home" })}
+            onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">

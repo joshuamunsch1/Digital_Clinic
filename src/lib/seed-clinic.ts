@@ -24,7 +24,7 @@ import { DOC_TITLES_DE, type DocType } from "./document-types";
 import { readTemplate, storeDocumentFile, wipeDocumentsDir } from "./documents";
 import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
-import { isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
+import { hasFullWording, isFillable, isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
 import { hashPassword } from "./password";
 import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
 
@@ -163,6 +163,61 @@ async function seedDocuments(prisma: PrismaClient) {
   await seedDoc("p2", "confidentiality", 45, "t2");
 }
 
+/// Demo questionnaire invitations for the monitoring view. Deliberately NO open
+/// LimeSurvey rows (they would carry fake tokens and every sync/sweep would log
+/// errors against a nonexistent server): open rows are in-app tasks, the
+/// LimeSurvey rows are already closed (completed / error).
+async function seedInvitations(prisma: PrismaClient, instruments: Map<string, SeededInstrument>) {
+  const defs = [...instruments.values()].map((x) => x.def);
+  const inApp =
+    defs.find(
+      (d) =>
+        d.id !== SESSION_INSTRUMENT_ID &&
+        d.id !== DIPS_INSTRUMENT_ID &&
+        d.instrumentType === "likert_battery" &&
+        isFillable(d) &&
+        hasFullWording(d),
+    ) ?? defs.find((d) => d.id === SESSION_INSTRUMENT_ID)!;
+  const day = 864e5;
+  const now = Date.now();
+
+  // p1 Mara (t1): fresh in-app task — visible in her patient portal
+  await prisma.questionnaireInvitation.create({
+    data: {
+      patientId: "p1", instrumentId: inApp.id, respondentRole: "self",
+      email: "mara.vogel@example.org", channel: "in_app",
+      createdAt: new Date(now - 2 * day),
+    },
+  });
+  // p3 Elif (t1): in-app task from 12 days ago with a weekly cadence → overdue
+  await prisma.questionnaireInvitation.create({
+    data: {
+      patientId: "p3", instrumentId: inApp.id, respondentRole: "self",
+      email: "elif.demir@example.org", channel: "in_app",
+      remindEveryDays: 7, createdAt: new Date(now - 12 * day),
+    },
+  });
+  // p5 Camille (t2): completed LimeSurvey invitation after one reminder
+  await prisma.questionnaireInvitation.create({
+    data: {
+      patientId: "p5", instrumentId: "edeq8", respondentRole: "self",
+      email: "camille.perret@example.org", surveyId: "100001",
+      status: "completed", reminderCount: 1,
+      sentAt: new Date(now - 20 * day), remindedAt: new Date(now - 15 * day),
+      completedAt: new Date(now - 13 * day), createdAt: new Date(now - 20 * day),
+    },
+  });
+  // p2 David (t2): failed delivery — demos the error surface
+  await prisma.questionnaireInvitation.create({
+    data: {
+      patientId: "p2", instrumentId: "bdi_fs", respondentRole: "self",
+      email: "david.hofmann@example.org",
+      status: "error", lastError: "LimeSurvey is not configured",
+      createdAt: new Date(now - 5 * day),
+    },
+  });
+}
+
 export async function seedClinic(prisma: PrismaClient) {
   await prisma.scaleScore.deleteMany();
   await prisma.responseInstance.deleteMany();
@@ -291,6 +346,7 @@ export async function seedClinic(prisma: PrismaClient) {
   }
 
   await seedDocuments(prisma);
+  await seedInvitations(prisma, instruments);
 
   return {
     users: await prisma.user.count(),

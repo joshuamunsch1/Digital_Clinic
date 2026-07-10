@@ -8,7 +8,9 @@ import { hasFullWording, isFillable, type InstrumentDef } from "@/lib/instrument
 import { Card, PrimaryButton, SectionTitle } from "./ui";
 import { useT } from "./LangContext";
 
-export type PatientTask = { kind: "assessment" } | { kind: "instrument"; instrumentId: string };
+export type PatientTask =
+  | { kind: "assessment" }
+  | { kind: "instrument"; instrumentId: string; invitationId?: string };
 
 /// Instruments a patient can fill out in-app: complete definition AND full item
 /// wording available (licensed instruments only carry item codes, so those are
@@ -36,6 +38,13 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
     patient.status === "therapy"
       ? fillable.filter((i) => i.cadenceType !== "every_session" && i.raterRole === "self")
       : [];
+  // Questionnaires the therapist explicitly requested in-app (open tasks).
+  const requestedTasks = patient.invitations
+    .filter((inv) => inv.channel === "in_app" && inv.status === "created")
+    .flatMap((inv) => {
+      const inst = fillable.find((i) => i.id === inv.instrumentId);
+      return inst ? [{ inv, inst }] : [];
+    });
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -60,6 +69,22 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
           </div>
         </Card>
       )}
+
+      {requestedTasks.map(({ inv, inst }) => (
+        <Card key={inv.id} className="p-5 mb-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: C.amber }}>{t("taskKicker")}</span>
+              <h3 className="lc-display text-xl mt-1" style={{ color: C.ink }}>{inst.name}</h3>
+              <p className="text-sm mt-1" style={{ color: C.muted }}>{t("taskLead")}</p>
+              <p className="text-xs mt-1" style={{ color: C.muted }}>{t("taskRequestedOn", { date: fmtDate(inv.createdAt) })}</p>
+            </div>
+            <PrimaryButton onClick={() => onStartTask({ kind: "instrument", instrumentId: inst.id, invitationId: inv.id })}>
+              {t("fillOut")}
+            </PrimaryButton>
+          </div>
+        </Card>
+      ))}
 
       {dueInstruments.map((inst) => (
         <Card key={inst.id} className="p-5 mb-4">
