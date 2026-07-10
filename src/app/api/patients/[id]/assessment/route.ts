@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
-import { PATIENT_INCLUDE, patientFromRow, type DipsMeta } from "@/lib/serialize";
+import { PATIENT_INCLUDE, patientForSession, type DipsMeta } from "@/lib/serialize";
 import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { toFHIR } from "@/lib/dips/fhir";
 import { endpointLabel, relay } from "@/lib/server-dips";
@@ -56,7 +56,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   });
 
   const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-  return NextResponse.json({ patient: patientFromRow(updated!) });
+  return NextResponse.json({ patient: patientForSession(updated!, s.role) });
 }
 
 // Resend a stored submission to the FHIR relay.
@@ -80,5 +80,5 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   };
   await prisma.responseInstance.update({ where: { id: row.id }, data: { meta: JSON.stringify(meta) } });
   const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-  return NextResponse.json({ patient: patientFromRow(updated!) });
+  return NextResponse.json({ patient: patientForSession(updated!, s.role) });
 }

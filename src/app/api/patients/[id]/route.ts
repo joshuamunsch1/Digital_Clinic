@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
-import { PATIENT_INCLUDE, patientFromRow, patientLiteFromRow } from "@/lib/serialize";
+import { PATIENT_INCLUDE, patientForSession } from "@/lib/serialize";
 import { DISORDER_CATEGORIES } from "@/lib/types";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (restricted) return restricted;
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json({ patient: s.role === "admin" ? patientLiteFromRow(p) : patientFromRow(p) });
+  return NextResponse.json({ patient: patientForSession(p, s.role) });
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -56,5 +56,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
   }
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-  return NextResponse.json({ patient: s.role === "admin" ? patientLiteFromRow(p!) : patientFromRow(p!) });
+  return NextResponse.json({ patient: patientForSession(p!, s.role) });
 }

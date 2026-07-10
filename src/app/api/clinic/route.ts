@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
-import { PATIENT_INCLUDE, instrumentFromRow, patientFromRow, patientLiteFromRow } from "@/lib/serialize";
+import { PATIENT_INCLUDE, instrumentFromRow, patientForSession, patientFromRow, patientLiteFromRow } from "@/lib/serialize";
 
 // Role-scoped clinic payload:
 // - patient: only their own record (plus therapist names + instruments)
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
       prisma.instrument.findMany({ include: { scales: true }, orderBy: { name: "asc" } }),
     ]);
     return NextResponse.json({
-      patients: me ? [patientFromRow(me)] : [],
+      patients: me ? [patientForSession(me, s.role)] : [],
       therapists: therapists.map((t) => ({ id: t.id, name: t.name, title: t.title })),
       instruments: instruments.map(instrumentFromRow),
     });

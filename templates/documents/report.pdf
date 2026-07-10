@@ -1,0 +1,55 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 683 >>
+stream
+0.6 w
+BT /F1 20 Tf 56 780 Td (Therapiebericht) Tj ET
+0.45 g
+BT /F2 9 Tf 56 766 Td (Linden-Klinik \267 Platzhaltervorlage \(Prototyp, kein rechtsg\374ltiges Dokument\)) Tj ET
+0 g
+BT /F2 10 Tf 56 740 Td (Patientin / Patient) Tj ET
+56 722 m 539 722 l S
+BT /F2 10 Tf 56 704 Td (Berichtszeitraum) Tj ET
+56 686 m 539 686 l S
+BT /F2 10 Tf 56 668 Td (Verfasst von) Tj ET
+56 650 m 539 650 l S
+BT /F2 11 Tf 56 618 Td (Zusammenfassung des Behandlungsverlaufs \(Platzhalter\):) Tj ET
+BT /F2 10 Tf 56 601 Td () Tj ET
+56 583 m 539 583 l S
+BT /F2 10 Tf 56 565 Td () Tj ET
+56 547 m 539 547 l S
+BT /F2 10 Tf 56 529 Td () Tj ET
+56 511 m 539 511 l S
+BT /F2 10 Tf 56 493 Td () Tj ET
+56 475 m 539 475 l S
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000353 00000 n 
+0000000450 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1184
+%%EOF

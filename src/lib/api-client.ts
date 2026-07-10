@@ -55,6 +55,15 @@ export interface CreateInvitationPayload {
   surveyId?: string;
 }
 
+export const documentDownloadUrl = (documentId: string) => `/api/documents/${documentId}`;
+
+export interface UpdateDocumentPayload {
+  title?: string;
+  occurredAt?: string;
+  note?: string;
+  docType?: string;
+}
+
 export interface RegisterRequest {
   name: string;
   email: string;
@@ -107,6 +116,18 @@ export const api = {
     post("/api/limesurvey/sync", patientId ? { patientId } : {}).then((r) =>
       handle<{ checked: number; imported: number; pending: number; errors: string[] }>(r),
     ),
+
+  // Document timeline. Upload is multipart (fields: docType, title?, occurredAt?,
+  // note?, and file OR template="true") — no Content-Type header so the browser
+  // sets the boundary. Downloads go through a plain <a href>, not fetch.
+  uploadDocument: (patientId: string, form: FormData) =>
+    fetch(`/api/patients/${patientId}/documents`, { method: "POST", body: form }).then((r) =>
+      handle<{ patient: Patient }>(r),
+    ),
+  updateDocument: (documentId: string, payload: UpdateDocumentPayload) =>
+    patch(`/api/documents/${documentId}`, payload).then((r) => handle<{ patient: Patient }>(r)),
+  deleteDocument: (documentId: string) =>
+    fetch(`/api/documents/${documentId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),
 
   saveDiagnosis: (id: string, text: string, category: string) =>
     patch(`/api/patients/${id}`, { action: "diagnose", text, category }).then((r) => handle<{ patient: Patient }>(r)),

@@ -1,0 +1,51 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 730 >>
+stream
+0.6 w
+BT /F1 20 Tf 56 780 Td (Notfallkontakte) Tj ET
+0.45 g
+BT /F2 9 Tf 56 766 Td (Linden-Klinik \267 Platzhaltervorlage \(Prototyp, kein rechtsg\374ltiges Dokument\)) Tj ET
+0 g
+BT /F2 11 Tf 56 740 Td (Im Notfall: 144 \(Sanit\344t\) \267 143 \(Die Dargebotene Hand\) \267 112 \(Europ\344ischer Notruf\)) Tj ET
+BT /F2 10 Tf 56 709 Td (Kontakt 1 \267 Name und Beziehung) Tj ET
+56 691 m 539 691 l S
+BT /F2 10 Tf 56 673 Td (Kontakt 1 \267 Telefon) Tj ET
+56 655 m 539 655 l S
+BT /F2 10 Tf 56 623 Td (Kontakt 2 \267 Name und Beziehung) Tj ET
+56 605 m 539 605 l S
+BT /F2 10 Tf 56 587 Td (Kontakt 2 \267 Telefon) Tj ET
+56 569 m 539 569 l S
+BT /F2 10 Tf 56 537 Td (Haus\344rztin / Hausarzt \267 Name und Telefon) Tj ET
+56 519 m 539 519 l S
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000353 00000 n 
+0000000450 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1231
+%%EOF

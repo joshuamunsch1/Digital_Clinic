@@ -3,6 +3,7 @@ import type {
   Demographics,
   DipsAnswers,
   DipsRecord,
+  DocumentRecord,
   InvitationContext,
   InvitationRecord,
   Patient,
@@ -74,6 +75,18 @@ interface InvitationRow {
   lastError: string | null;
   createdAt: Date;
 }
+interface DocumentRow {
+  id: string;
+  docType: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  occurredAt: Date;
+  note: string;
+  uploadedBy: { id: string; name: string } | null;
+  createdAt: Date;
+}
 interface PatientRow {
   id: string;
   name: string;
@@ -89,6 +102,7 @@ interface PatientRow {
   diagnosisBy: string | null;
   responses: ResponseRow[];
   invitations?: InvitationRow[];
+  documents?: DocumentRow[];
 }
 
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -177,6 +191,21 @@ export function invitationFromRow(i: InvitationRow): InvitationRecord {
   };
 }
 
+export function documentFromRow(d: DocumentRow): DocumentRecord {
+  return {
+    id: d.id,
+    docType: d.docType,
+    title: d.title,
+    fileName: d.fileName,
+    mimeType: d.mimeType,
+    size: d.size,
+    occurredAt: d.occurredAt.toISOString(),
+    note: d.note,
+    uploadedBy: d.uploadedBy ? { id: d.uploadedBy.id, name: d.uploadedBy.name } : null,
+    createdAt: d.createdAt.toISOString(),
+  };
+}
+
 function dipsFromResponse(r: ResponseRow): DipsRecord {
   const meta = parse<DipsMeta>(r.meta, {});
   return {
@@ -203,6 +232,9 @@ export function patientFromRow(p: PatientRow): Patient {
     demographics: parse<Demographics>(p.demographics, {}),
     responses: responses.map(responseFromRow),
     invitations: (p.invitations ?? []).map(invitationFromRow),
+    documents: [...(p.documents ?? [])]
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .map(documentFromRow),
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: dipsRow ? dipsFromResponse(dipsRow) : null,
     diagnosis:
@@ -227,14 +259,25 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     demographics: {},
     responses: [],
     invitations: [],
+    documents: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis: null,
   };
 }
 
+/// Role-scoped patient payload: admin gets the lite view (no clinical data),
+/// patients get their own record minus staff working documents (the document
+/// timeline is a staff surface — see docs), staff get everything.
+export function patientForSession(p: PatientRow, role: string): Patient {
+  if (role === "admin") return patientLiteFromRow(p);
+  const full = patientFromRow(p);
+  return role === "patient" ? { ...full, documents: [] } : full;
+}
+
 /// Standard Prisma include for loading a patient with everything the UI needs.
 export const PATIENT_INCLUDE = {
   responses: { include: { scaleScores: { include: { scale: true } } } },
   invitations: true,
+  documents: { include: { uploadedBy: { select: { id: true, name: true } } } },
 } as const;

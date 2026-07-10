@@ -1,0 +1,51 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 842 >>
+stream
+0.6 w
+BT /F1 20 Tf 56 780 Td (Vertraulichkeitserkl\344rung) Tj ET
+0.45 g
+BT /F2 9 Tf 56 766 Td (Linden-Klinik \267 Platzhaltervorlage \(Prototyp, kein rechtsg\374ltiges Dokument\)) Tj ET
+0 g
+BT /F2 11 Tf 56 740 Td (Vereinbarung \374ber die vertrauliche Behandlung aller im Rahmen der Therapie) Tj ET
+BT /F2 11 Tf 56 723 Td (erhobenen Informationen \(Schweigepflicht\) sowie \374ber Umfang und Grenzen der) Tj ET
+BT /F2 11 Tf 56 706 Td (Weitergabe an Dritte \(z. B. zuweisende Stellen, Krankenversicherung\).) Tj ET
+BT /F2 10 Tf 56 675 Td (Name der Patientin / des Patienten) Tj ET
+56 657 m 539 657 l S
+BT /F2 10 Tf 56 639 Td (Entbindung von der Schweigepflicht gegen\374ber \(optional\)) Tj ET
+56 621 m 539 621 l S
+BT /F2 10 Tf 56 589 Td (Ort, Datum) Tj ET
+56 571 m 539 571 l S
+BT /F2 10 Tf 56 553 Td (Unterschrift) Tj ET
+56 535 m 539 535 l S
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000353 00000 n 
+0000000450 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1343
+%%EOF

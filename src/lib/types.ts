@@ -76,6 +76,21 @@ export interface Diagnosis {
   by: string;
 }
 
+/// One therapy-course document on the patient's timeline (file lives on disk,
+/// served via /api/documents/[id]). docType values in src/lib/document-types.ts.
+export interface DocumentRecord {
+  id: string;
+  docType: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  occurredAt: string;
+  note: string;
+  uploadedBy: { id: string; name: string } | null;
+  createdAt: string;
+}
+
 // DIPS answers are stored per module: answers[moduleId][key].
 export type ModuleAnswers = Record<string, string | number | boolean | undefined>;
 export type DipsAnswers = Record<string, ModuleAnswers>;
@@ -111,6 +126,7 @@ export interface Patient {
   demographics: Demographics;
   responses: ResponseRecord[];
   invitations: InvitationRecord[];
+  documents: DocumentRecord[];
   assessment: { date: string; type: string } | null;
   /// Convenience view of the DIPS intake response (if any) for the existing
   /// DIPS summary/FHIR UI. Derived from responses, not separately stored.
