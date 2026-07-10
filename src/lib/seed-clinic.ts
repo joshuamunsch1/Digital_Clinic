@@ -117,6 +117,7 @@ export async function seedClinic(prisma: PrismaClient) {
   await prisma.scaleScore.deleteMany();
   await prisma.responseInstance.deleteMany();
   await prisma.questionnaireInvitation.deleteMany();
+  await prisma.patientDocument.deleteMany();
   await prisma.scale.deleteMany();
   await prisma.instrument.deleteMany();
   await prisma.patient.deleteMany();
