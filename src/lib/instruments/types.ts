@@ -95,3 +95,10 @@ export function isFillable(def: Pick<InstrumentDef, "definitionStatus" | "instru
   if (def.instrumentType === "structured_interview") return def.definitionStatus === "complete";
   return def.definitionStatus === "complete" && def.items.length > 0;
 }
+
+/// Full item wording available — required to present the form to a patient.
+/// Licensed instruments deliberately carry only item codes (no text), so they
+/// can be scored from imports but never rendered in-app.
+export function hasFullWording(def: Pick<InstrumentDef, "items">): boolean {
+  return def.items.length > 0 && def.items.every((it) => !!it.text);
+}

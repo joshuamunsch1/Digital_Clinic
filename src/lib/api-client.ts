@@ -35,6 +35,7 @@ export interface SubmitResponsePayload {
   wave?: string | null;
   occurredAt?: string;
   note?: string;
+  invitationId?: string; // when this submission answers an in-app task
 }
 
 export interface ImportCsvPayload {
@@ -53,6 +54,15 @@ export interface CreateInvitationPayload {
   wave?: string;
   sessionNumber?: number;
   surveyId?: string;
+  channel?: "limesurvey" | "in_app";
+  remindEveryDays?: number;
+  maxReminders?: number;
+}
+
+export interface SweepResult {
+  skipped?: string;
+  sync?: { checked: number; imported: number; pending: number; errors: string[] };
+  reminders?: { due: number; sent: number; errors: string[] };
 }
 
 export const documentDownloadUrl = (documentId: string) => `/api/documents/${documentId}`;
@@ -107,10 +117,20 @@ export const api = {
     ),
 
   createInvitation: (id: string, payload: CreateInvitationPayload) =>
-    post(`/api/patients/${id}/invitations`, payload).then((r) => handle<{ patient: Patient }>(r)),
+    post(`/api/patients/${id}/invitations`, payload).then((r) => handle<{ patient: Patient; warning?: string }>(r)),
 
   remindInvitation: (invitationId: string) =>
     patch(`/api/invitations/${invitationId}`, { action: "remind" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  scheduleInvitation: (invitationId: string, remindEveryDays: number | null, maxReminders: number | null) =>
+    patch(`/api/invitations/${invitationId}`, { action: "schedule", remindEveryDays, maxReminders }).then((r) =>
+      handle<{ patient: Patient }>(r),
+    ),
+
+  cancelInvitation: (invitationId: string) =>
+    patch(`/api/invitations/${invitationId}`, { action: "cancel" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  runReminderSweep: () => post("/api/reminders/run").then((r) => handle<SweepResult>(r)),
 
   syncLimesurvey: (patientId?: string) =>
     post("/api/limesurvey/sync", patientId ? { patientId } : {}).then((r) =>

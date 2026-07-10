@@ -4,7 +4,7 @@ import { C } from "@/lib/theme";
 import { fmtDate } from "@/lib/format";
 import type { Patient, Therapist } from "@/lib/types";
 import { responsesFor } from "@/lib/types";
-import { isFillable, type InstrumentDef } from "@/lib/instruments/types";
+import { hasFullWording, isFillable, type InstrumentDef } from "@/lib/instruments/types";
 import { Card, PrimaryButton, SectionTitle } from "./ui";
 import { useT } from "./LangContext";
 
@@ -15,7 +15,7 @@ export type PatientTask = { kind: "assessment" } | { kind: "instrument"; instrum
 /// administered via LimeSurvey or entered by the therapist instead).
 export function patientFillable(instruments: InstrumentDef[]): InstrumentDef[] {
   return instruments.filter(
-    (i) => i.instrumentType === "likert_battery" && isFillable(i) && i.items.every((it) => it.text),
+    (i) => i.instrumentType === "likert_battery" && isFillable(i) && hasFullWording(i),
   );
 }
 

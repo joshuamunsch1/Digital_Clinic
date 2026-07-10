@@ -53,6 +53,7 @@ function parseContext(s: string): InvitationContext {
 export async function syncInvitations(patientId?: string) {
   const open = await prisma.questionnaireInvitation.findMany({
     where: {
+      channel: "limesurvey", // in_app tasks complete in-app, never via LimeSurvey
       status: { in: ["invited", "reminded"] },
       ...(patientId ? { patientId } : {}),
     },

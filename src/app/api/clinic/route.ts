@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, instrumentFromRow, patientForSession, patientFromRow, patientLiteFromRow } from "@/lib/serialize";
+import { limesurveyConfigured } from "@/lib/limesurvey";
 
 // Role-scoped clinic payload:
 // - patient: only their own record (plus therapist names + instruments)
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
       patients: me ? [patientForSession(me, s.role)] : [],
       therapists: therapists.map((t) => ({ id: t.id, name: t.name, title: t.title })),
       instruments: instruments.map(instrumentFromRow),
+      limesurveyConfigured: limesurveyConfigured(),
     });
   }
 
@@ -38,6 +40,7 @@ export async function GET(req: Request) {
       patients: patients.map(patientLiteFromRow),
       therapists: therapists.map((t) => ({ id: t.id, name: t.name, title: t.title })),
       instruments: [],
+      limesurveyConfigured: limesurveyConfigured(),
     });
   }
 
@@ -50,5 +53,6 @@ export async function GET(req: Request) {
     patients: patients.map(patientFromRow),
     therapists: therapists.map((t) => ({ id: t.id, name: t.name, title: t.title })),
     instruments: instruments.map(instrumentFromRow),
+    limesurveyConfigured: limesurveyConfigured(),
   });
 }

@@ -62,6 +62,11 @@ export interface InvitationRecord {
   url: string | null;
   status: string;
   context: InvitationContext;
+  channel: string; // "limesurvey" | "in_app"
+  remindEveryDays: number | null;
+  maxReminders: number | null;
+  reminderCount: number;
+  nextReminderAt: string | null;
   sentAt: string | null;
   remindedAt: string | null;
   completedAt: string | null;
@@ -138,6 +143,9 @@ export interface ClinicData {
   patients: Patient[];
   therapists: Therapist[];
   instruments: InstrumentDef[];
+  /// Whether the LimeSurvey connection is configured on the server — lets the
+  /// UI disable e-mail invitation/reminder actions instead of surfacing 503s.
+  limesurveyConfigured: boolean;
 }
 
 // --- shared helpers over the generic model ------------------------------------

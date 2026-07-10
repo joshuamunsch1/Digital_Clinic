@@ -4,10 +4,21 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { addParticipant, inviteParticipant, limesurveyConfig, surveyUrl } from "@/lib/limesurvey";
+import { nextReminderAfter } from "@/lib/reminders";
+import { loadInstrument } from "@/lib/server-instruments";
+import { hasFullWording, isFillable } from "@/lib/instruments/types";
 
-/// Create a questionnaire invitation for a patient: registers them as a
-/// LimeSurvey participant on the instrument's survey and sends the invitation
-/// e-mail through LimeSurvey's mailer.
+/// A positive integer or null (schedule fields are optional and validated).
+const posInt = (v: unknown): number | null =>
+  typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null;
+
+/// Create a questionnaire invitation for a patient.
+/// channel "limesurvey" (default): registers the patient as a LimeSurvey
+/// participant and sends the invitation e-mail through LimeSurvey's mailer.
+/// channel "in_app": creates a pending task the patient sees and fills in this
+/// tool — no LimeSurvey, no e-mail; only fully-worded instruments qualify.
+/// Optional remindEveryDays/maxReminders set up automatic periodic reminders
+/// (sent by the sweep — LimeSurvey channel only).
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
@@ -22,9 +33,48 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     wave?: string;
     sessionNumber?: number;
     surveyId?: string; // saved onto the instrument when provided
+    channel?: string;
+    remindEveryDays?: number;
+    maxReminders?: number;
   };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const channel = body.channel === "in_app" ? "in_app" : "limesurvey";
+  const remindEveryDays = posInt(body.remindEveryDays);
+  const maxReminders = posInt(body.maxReminders);
+
+  const context: Record<string, unknown> = {};
+  if (body.wave) context.wave = body.wave;
+  if (body.sessionNumber !== undefined) context.sessionNumber = body.sessionNumber;
+
+  if (channel === "in_app") {
+    const inst = await loadInstrument(body.instrumentId);
+    if (!inst) return NextResponse.json({ error: "unknown instrument" }, { status: 400 });
+    if (inst.def.instrumentType !== "likert_battery" || !isFillable(inst.def) || !hasFullWording(inst.def))
+      return NextResponse.json(
+        { error: `instrument '${inst.def.id}' cannot be filled in-app (item wording not available) — send it via LimeSurvey or enter it manually` },
+        { status: 400 },
+      );
+    await prisma.questionnaireInvitation.create({
+      data: {
+        patientId: patient.id,
+        instrumentId: inst.def.id,
+        respondentRole: "self", // the patient fills it in their own portal
+        email: patient.email ?? "",
+        channel: "in_app",
+        context: JSON.stringify(context),
+        remindEveryDays,
+        maxReminders,
+      },
+    });
+    const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
+    return NextResponse.json({
+      patient: patientFromRow(updated!),
+      // warning only — the task shows up once the patient can log in
+      warning: patient.email ? undefined : "the patient has no login e-mail yet, so they cannot see the task",
+    });
+  }
 
   const cfg = limesurveyConfig();
   if (!cfg)
@@ -52,10 +102,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await prisma.patient.update({ where: { id: patient.id }, data: { email: body.email } });
   }
 
-  const context: Record<string, unknown> = {};
-  if (body.wave) context.wave = body.wave;
-  if (body.sessionNumber !== undefined) context.sessionNumber = body.sessionNumber;
-
   const invitation = await prisma.questionnaireInvitation.create({
     data: {
       patientId: patient.id,
@@ -64,6 +110,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       email,
       surveyId,
       context: JSON.stringify(context),
+      remindEveryDays,
+      maxReminders,
     },
   });
 
@@ -71,6 +119,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const [firstname, ...rest] = patient.name.split(" ");
     const participant = await addParticipant(surveyId, { email, firstname, lastname: rest.join(" ") || firstname });
     await inviteParticipant(surveyId, participant.tid);
+    const sentAt = new Date();
     await prisma.questionnaireInvitation.update({
       where: { id: invitation.id },
       data: {
@@ -78,7 +127,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         tokenId: participant.tid,
         url: surveyUrl(cfg.url, surveyId, participant.token),
         status: "invited",
-        sentAt: new Date(),
+        sentAt,
+        nextReminderAt: remindEveryDays ? nextReminderAfter(remindEveryDays, sentAt) : null,
       },
     });
   } catch (e) {

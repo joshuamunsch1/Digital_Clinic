@@ -68,6 +68,11 @@ interface InvitationRow {
   url: string | null;
   status: string;
   context: string;
+  channel: string;
+  remindEveryDays: number | null;
+  maxReminders: number | null;
+  reminderCount: number;
+  nextReminderAt: Date | null;
   sentAt: Date | null;
   remindedAt: Date | null;
   completedAt: Date | null;
@@ -182,6 +187,11 @@ export function invitationFromRow(i: InvitationRow): InvitationRecord {
     url: i.url,
     status: i.status,
     context: parse<InvitationContext>(i.context, {}),
+    channel: i.channel,
+    remindEveryDays: i.remindEveryDays,
+    maxReminders: i.maxReminders,
+    reminderCount: i.reminderCount,
+    nextReminderAt: i.nextReminderAt ? i.nextReminderAt.toISOString() : null,
     sentAt: i.sentAt ? i.sentAt.toISOString() : null,
     remindedAt: i.remindedAt ? i.remindedAt.toISOString() : null,
     completedAt: i.completedAt ? i.completedAt.toISOString() : null,
