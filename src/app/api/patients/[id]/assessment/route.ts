@@ -3,15 +3,12 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientForSession, type DipsMeta } from "@/lib/serialize";
-import { createResponse, loadInstrument } from "@/lib/server-instruments";
-import { toFHIR } from "@/lib/dips/fhir";
-import { endpointLabel, relay } from "@/lib/server-dips";
-import { DIPS_INSTRUMENT_ID, type Demographics, type DipsAnswers } from "@/lib/types";
-import type { Lang } from "@/lib/i18n";
+import { relay, endpointLabel } from "@/lib/server-dips";
+import { DIPS_INSTRUMENT_ID, type Demographics } from "@/lib/types";
 
-// Submit a completed intake: store demographics, persist the interview as a
-// ResponseInstance of the DIPS instrument (FHIR QuestionnaireResponse in meta),
-// optionally relay it, advance status to "interview".
+// Submit a completed intake: demographics only (the DIPS interview is
+// therapist-administered since the intake split — see POST .../dips).
+// Advances status assessment → interview.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -20,36 +17,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
 
-  const { demo, dips } = (await req.json()) as {
-    demo: Demographics;
-    dips: { lang: Lang; answers: DipsAnswers; completedAt: string };
-  };
+  const { demo } = (await req.json()) as { demo: Demographics };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const inst = await loadInstrument(DIPS_INSTRUMENT_ID);
-  if (!inst) return NextResponse.json({ error: "DIPS instrument is not seeded" }, { status: 500 });
-
-  const fhir = toFHIR(
-    { id: patient.id, name: patient.name, demographics: demo },
-    { answers: dips.answers, lang: dips.lang, completedAt: dips.completedAt },
-  );
-  const r = await relay(fhir);
-  const meta: DipsMeta = {
-    lang: dips.lang,
-    fhir,
-    submission: { status: r.status, endpoint: endpointLabel(), httpStatus: r.httpStatus, at: dips.completedAt },
-  };
-
-  // intake_once: replace any previous intake rather than accumulating
-  await prisma.responseInstance.deleteMany({ where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID } });
-  await createResponse(inst, {
-    patientId: params.id,
-    respondentRole: "self",
-    rawAnswers: dips.answers,
-    occurredAt: new Date(dips.completedAt),
-    meta: meta as unknown as Record<string, unknown>,
-  });
   await prisma.patient.update({
     where: { id: params.id },
     data: { demographics: JSON.stringify(demo), assessmentDate: new Date(), status: "interview" },

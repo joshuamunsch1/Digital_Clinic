@@ -174,6 +174,26 @@ export const SAMPLE_ANSWERS: DipsAnswers = {
   },
 };
 
+/// Therapist-conducted DIPS with a clearly positive social-anxiety module
+/// (meets all rule criteria) — no diagnosis recorded yet, so the diagnosis
+/// card demos the mechanical proposal pre-fill (Soziale Angststörung F40.1).
+export const SAMPLE_ANSWERS_SOCIAL: DipsAnswers = {
+  social: {
+    "1.1": "yes", "1.1_text": "Referate in der Schule, Gespräche mit Unbekannten",
+    "1.2": "yes", "1.3": "yes",
+    grid_speak_primary: "yes", grid_speak_sev: 3, grid_speak_avoid: "yes",
+    grid_examoral_primary: "yes", grid_examoral_sev: 3, grid_examoral_avoid: "yes",
+    grid_talkstranger_primary: "yes", grid_talkstranger_sev: 2, grid_talkstranger_avoid: "no",
+    grid_party_primary: "yes", grid_party_sev: 2, grid_party_avoid: "yes",
+    "4.2": "yes", "6": "yes",
+    cog: "Angst, sich zu blamieren; alle würden es merken",
+    cope: "Meldet sich krank, vermeidet Referate",
+    approp: "no", subst1: "no", subst2: "no", organic: "no",
+    onset_age: "13", hist1: "yes", hist1_text: "Bloßstellung vor der Klasse",
+    hist2: "no", impact_impair: 5, impact_distress: 6, earlier: "no",
+  },
+};
+
 export interface DemoPatient {
   id: string;
   name: string;
@@ -199,6 +219,9 @@ export interface DemoPatient {
   /// Diagnosis date override (defaults to the 2026 demo constant).
   diagnosedOn?: string;
   hasSampleDips?: boolean;
+  /// Therapist-conducted DIPS with a positive social-anxiety module and NO
+  /// diagnosis yet — demos the mechanical diagnosis proposal pre-fill.
+  hasSampleDipsSocial?: boolean;
   hasBdiSeries?: boolean;
   hasBdiAlertSeries?: boolean;
   hasEdeq8Series?: boolean;
@@ -216,7 +239,7 @@ export const DEMO_PATIENTS: DemoPatient[] = [
   { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 } },
   { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Schweiz", city: "Fribourg", occupation: "Software-Entwickler", living: "Alone", siblings: "Keine" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / Erschöpfungssyndrom (Platzhalter)", disorderCategory: "burnout", icd: "Z73.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 5 } },
   { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "Frankreich", city: "Bern", occupation: "Apothekerin", living: "With partner", siblings: "1 — jüngere Schwester" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; rezidivierende depressive Episoden (Platzhalter)", disorderCategory: "eating_disorder", icd: "F50.2", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 4 }, hasEdeq8Series: true, hasBdiAlertSeries: true },
-  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, hasSdqSeries: true, hasDikjSeries: true },
+  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, hasSampleDipsSocial: true, hasSdqSeries: true, hasDikjSeries: true },
   { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null },
   { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null },
 

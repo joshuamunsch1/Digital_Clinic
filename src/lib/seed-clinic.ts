@@ -15,6 +15,7 @@ import {
   EDEQ8_SERIES,
   FGG_SERIES,
   SAMPLE_ANSWERS,
+  SAMPLE_ANSWERS_SOCIAL,
   SDQ_SERIES,
   THERAPISTS,
   phq4SessionsFor,
@@ -90,6 +91,7 @@ interface ResponseSeed {
   wave?: string;
   note?: string;
   source?: string;
+  conductedById?: string | null;
   meta?: Record<string, unknown>;
 }
 
@@ -111,6 +113,7 @@ export async function createScoredResponse(prisma: PrismaClient, r: ResponseSeed
       rawAnswers: JSON.stringify(r.rawAnswers),
       note: r.note ?? "",
       source: r.source ?? "seed",
+      conductedById: r.conductedById ?? null,
       meta: JSON.stringify(r.meta ?? {}),
       scaleScores: {
         create: Object.entries(scores).map(([key, value]) => ({ scaleId: scaleIds[key], value })),
@@ -366,23 +369,30 @@ export async function seedClinic(prisma: PrismaClient) {
       }
     }
 
-    if (p.hasSampleDips) {
-      const completedAt = "2026-03-09T10:00:00.000Z";
+    // Therapist-administered DIPS interviews (respondentRole "clinician" since
+    // the intake split — the patient intake collects demographics only).
+    const dipsSeed = p.hasSampleDips
+      ? { answers: SAMPLE_ANSWERS, completedAt: "2026-03-09T10:00:00.000Z" }
+      : p.hasSampleDipsSocial
+        ? { answers: SAMPLE_ANSWERS_SOCIAL, completedAt: "2026-07-06T14:00:00.000Z" }
+        : null;
+    if (dipsSeed) {
       const lang = "de" as const;
       const fhir = toFHIR(
         { id: p.id, name: p.name, demographics: p.demographics },
-        { answers: SAMPLE_ANSWERS, lang, completedAt },
+        { answers: dipsSeed.answers, lang, completedAt: dipsSeed.completedAt },
       );
       await createScoredResponse(prisma, {
         patientId: p.id,
         instrument: dips,
-        respondentRole: "self",
-        occurredAt: new Date(completedAt),
-        rawAnswers: SAMPLE_ANSWERS,
+        respondentRole: "clinician",
+        conductedById: p.therapistId,
+        occurredAt: new Date(dipsSeed.completedAt),
+        rawAnswers: dipsSeed.answers,
         meta: {
           lang,
           fhir,
-          submission: { status: "sent", endpoint: "clinic database (no external relay)", at: completedAt },
+          submission: { status: "sent", endpoint: "clinic database (no external relay)", at: dipsSeed.completedAt },
         },
       });
     }

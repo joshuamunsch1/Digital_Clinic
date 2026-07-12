@@ -156,6 +156,10 @@ export interface DipsRecord {
   completedAt: string;
   answers: DipsAnswers;
   submission?: SubmissionInfo;
+  /// "clinician" for the therapist-administered interview; "self" on legacy
+  /// patient-intake records.
+  respondentRole?: string;
+  conductedById?: string | null;
 }
 
 export interface Therapist {

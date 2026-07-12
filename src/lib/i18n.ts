@@ -18,11 +18,11 @@ export const LANGS: { id: Lang; label: string }[] = [
 
 // UI chrome + shared question scaffolding strings.
 export const T = {
-  assessmentTitle: L("Erstgespräch – Aufnahme", "Entretien initial – admission", "Intake assessment"),
+  assessmentTitle: L("Aufnahme – Persönliche Angaben", "Admission – informations personnelles", "Intake — personal details"),
   assessmentIntro: L(
-    "Diese Aufnahme erfasst einige persönliche Angaben und ein strukturiertes Screening zu Angststörungen (DIPS). Es werden mehrere Bereiche kurz angefragt; ausführlichere Fragen erscheinen nur, wenn ein Bereich auf Sie zutrifft. Ihre Antworten werden an Ihre Therapeutin / Ihren Therapeuten weitergegeben.",
-    "Cette admission recueille quelques informations personnelles et un dépistage structuré des troubles anxieux (DIPS). Plusieurs domaines sont brièvement abordés ; des questions plus détaillées n'apparaissent que si un domaine vous concerne. Vos réponses sont transmises à votre thérapeute.",
-    "This intake collects some personal details and a structured screening for anxiety disorders (DIPS). Several areas are briefly screened; more detailed questions appear only if an area applies to you. Your answers are shared with your therapist."),
+    "Diese Aufnahme erfasst einige persönliche Angaben für Ihr Dossier. Das diagnostische Interview (DIPS) führt Ihre Therapeutin / Ihr Therapeut anschließend gemeinsam mit Ihnen durch.",
+    "Cette admission recueille quelques informations personnelles pour votre dossier. L'entretien diagnostique (DIPS) sera ensuite mené avec vous par votre thérapeute.",
+    "This intake collects some personal details for your file. The diagnostic interview (DIPS) will afterwards be conducted with you by your therapist."),
   personalDetails: L("Persönliche Angaben", "Informations personnelles", "Personal details"),
   personalNote: L("Aufnahmebogen – wird vor dem Erstgespräch ausgefüllt.", "Fiche d'admission – à remplir avant l'entretien initial.", "Intake cover sheet — completed before the first appointment."),
   yes: L("Ja", "Oui", "Yes"), no: L("Nein", "Non", "No"),
@@ -328,6 +328,27 @@ export const UI = {
     "Your therapist asks you to fill out the following questionnaire."),
   taskRequestedOn: L("Angefragt am {date}", "Demandé le {date}", "Requested on {date}"),
 
+  // therapist-administered DIPS + diagnosis gate
+  dipsInterviewTitle: L("DIPS-Interview mit {name}", "Entretien DIPS avec {name}", "DIPS interview with {name}"),
+  dipsInterviewIntro: L(
+    "Strukturiertes diagnostisches Interview (DIPS, Angst-Spektrum) — von der Therapeutin / dem Therapeuten gemeinsam mit der Patientin / dem Patienten durchgeführt. Nach Abschluss wird ein Diagnosevorschlag berechnet.",
+    "Entretien diagnostique structuré (DIPS, spectre anxieux) — mené par le/la thérapeute avec le/la patient·e. Une proposition de diagnostic est calculée à la fin.",
+    "Structured diagnostic interview (DIPS, anxiety spectrum) — conducted by the therapist together with the patient. A diagnosis proposal is computed on completion."),
+  dipsSubmit: L("Interview abschließen", "Terminer l'entretien", "Complete interview"),
+  dipsRequired: L(
+    "Vor der Diagnose ist das DIPS-Interview erforderlich. Führen Sie es gemeinsam mit der Patientin / dem Patienten durch — der Diagnosevorschlag wird daraus berechnet.",
+    "L'entretien DIPS est requis avant le diagnostic. Menez-le avec le/la patient·e — la proposition de diagnostic en est dérivée.",
+    "The DIPS interview is required before a diagnosis. Conduct it together with the patient — the diagnosis proposal is derived from it."),
+  startDipsInterview: L("DIPS-Interview starten", "Commencer l'entretien DIPS", "Start DIPS interview"),
+  dipsSaved: L("DIPS-Interview gespeichert.", "Entretien DIPS enregistré.", "DIPS interview saved."),
+  conductedByLabel: L("durchgeführt von", "mené par", "conducted by"),
+  proposalChip: L("Vorschlag aus DIPS — bitte prüfen", "Proposition issue du DIPS — à vérifier", "Proposal from DIPS — please review"),
+  noProposal: L(
+    "Kein DIPS-Modul erfüllt die Kriterien vollständig — Diagnose bitte klinisch begründen.",
+    "Aucun module DIPS ne remplit entièrement les critères — motiver le diagnostic cliniquement.",
+    "No DIPS module fully meets the criteria — please base the diagnosis on clinical judgement."),
+  openDiagnosisView: L("Diagnostik öffnen →", "Ouvrir le bilan diagnostique →", "Open diagnostics →"),
+
   // document timeline (document titles themselves are German clinical content,
   // stored on the rows — see DOC_TITLES_DE in src/lib/document-types.ts)
   documentsTitle: L("Dokumente im Therapieverlauf", "Documents du parcours thérapeutique", "Therapy-course documents"),
@@ -363,11 +384,11 @@ export const UI = {
   thankYouSaved: L("Vielen Dank — Ihre Antworten wurden gespeichert und der Klinik übermittelt.", "Merci — vos réponses ont été enregistrées et transmises à la clinique.", "Thank you — your answers were saved and shared with the clinic."),
   todo: L("Zu erledigen", "À faire", "To do"),
   todoAfterSession: L("Nach jeder Sitzung auszufüllen", "À remplir après chaque séance", "To do after each session"),
-  intakeTitle: L("Aufnahme & DIPS-Angst-Screening", "Admission et dépistage DIPS", "Intake & DIPS anxiety screening"),
+  intakeTitle: L("Aufnahme: Persönliche Angaben", "Admission : informations personnelles", "Intake: personal details"),
   intakeDesc: L(
-    "Bitte vor dem ersten Termin ausfüllen. Enthält einen kurzen persönlichen Teil und ein strukturiertes Angst-Screening in Ihrer Sprache.",
-    "À remplir avant votre premier rendez-vous. Comprend une courte partie personnelle et un dépistage structuré de l'anxiété dans votre langue.",
-    "Please complete this before your first appointment. It includes a short personal section and a structured anxiety screening in your language."),
+    "Bitte vor dem ersten Termin ausfüllen — ein kurzer persönlicher Teil in Ihrer Sprache. Das diagnostische Gespräch führt Ihre Therapeutin / Ihr Therapeut anschließend mit Ihnen durch.",
+    "À remplir avant votre premier rendez-vous — une courte partie personnelle dans votre langue. L'entretien diagnostique sera ensuite mené avec vous par votre thérapeute.",
+    "Please complete this before your first appointment — a short personal section in your language. Your therapist will afterwards conduct the diagnostic interview with you."),
   startIntake: L("Aufnahme starten", "Commencer l'admission", "Start intake"),
   sessionFormDesc: L(
     "Bitte füllen Sie diesen Stundenbogen nach jeder Therapiesitzung aus, damit Ihre Therapeutin / Ihr Therapeut Ihren Verlauf verfolgen kann.",

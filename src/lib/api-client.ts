@@ -117,11 +117,12 @@ export const api = {
   linkInstrumentSurvey: (id: string, limesurveySurveyId: string | null) =>
     patch(`/api/instruments/${id}`, { limesurveySurveyId }).then((r) => handle<{ instrument: InstrumentDef }>(r)),
 
-  submitAssessment: (
-    id: string,
-    demo: Demographics,
-    dips: { lang: Lang; answers: DipsAnswers; completedAt: string },
-  ) => post(`/api/patients/${id}/assessment`, { demo, dips }).then((r) => handle<{ patient: Patient }>(r)),
+  submitAssessment: (id: string, demo: Demographics) =>
+    post(`/api/patients/${id}/assessment`, { demo }).then((r) => handle<{ patient: Patient }>(r)),
+
+  /// Therapist-administered DIPS interview (staff-only).
+  submitDips: (id: string, dips: { lang: Lang; answers: DipsAnswers; completedAt: string }) =>
+    post(`/api/patients/${id}/dips`, { dips }).then((r) => handle<{ patient: Patient }>(r)),
 
   resendDips: (id: string) =>
     fetch(`/api/patients/${id}/assessment`, { method: "PUT" }).then((r) => handle<{ patient: Patient }>(r)),

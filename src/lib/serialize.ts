@@ -244,6 +244,8 @@ function dipsFromResponse(r: ResponseRow): DipsRecord {
     completedAt: r.occurredAt.toISOString(),
     answers: parse<DipsAnswers>(r.rawAnswers, {}),
     submission: meta.submission,
+    respondentRole: r.respondentRole,
+    conductedById: r.conductedById,
   };
 }
 
