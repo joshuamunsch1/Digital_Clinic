@@ -116,6 +116,36 @@ added for `phq4/PHQ_total` (Löwe-derived) and `pstb/Therapiefortschritte`
 (PLACEHOLDER, flagged). Predictions are therapist-facing only — patient and
 admin sessions get 403 before anything is computed.
 
+**Batch 7 (2026-07-10)**: **documents + monitoring** shipped on main
+(`PatientDocument` timeline with expected checklist + placeholder PDFs in
+`templates/documents/`, disk storage under `DOCUMENTS_DIR`; `MonitoringView`
+per-therapist questionnaire monitoring; invitation `channel` `limesurvey|in_app`
+— in-app tasks fill in the patient portal and complete the invitation;
+automatic periodic reminders via `src/lib/reminder-sweep.ts` + instrumentation
+hook, `REMINDER_SWEEP_MINUTES`/`REMINDER_SWEEP_SECRET`), then
+`feature/lutz-outcome-prediction` was **merged into main** (both worlds
+coexist; `patientForSession()` in `serialize.ts` is the single role-scoping
+entry point and strips documents + sessionLogs for patients).
+
+**Batch 8 (2026-07-12)**: **DIPS-first diagnosis workflow.** Patient intake is
+demographics-only (`AssessmentForm`); the DIPS is a **therapist-administered
+interview** (`DipsForm`, staff-only `POST /api/patients/[id]/dips`,
+`respondentRole "clinician"` + `conductedById`). The diagnosis card is gated:
+no DIPS → "DIPS-Interview erforderlich" (server enforces 409 `dips_required`).
+A **mechanical diagnosis** (`src/lib/dips/diagnosis.ts` — rule-based ICD-10
+proposals F41.0/F40.00/.01/F40.1/F40.2/F41.1/F93.0 from screening + symptom
+counts + impairment ≥4/8 + duration; organic/substance = caveats) pre-fills
+the (editable) diagnosis form — proposed, never auto-saved. Full-window
+`DiagnosisView` shows per-criterion checklists, the interview record,
+**recommended questionnaires** and **guideline cards**
+(`src/lib/recommendations.ts` — specific DIPS diagnosis first, category
+fallback; AWMF S3 051-028/nvl-005/051-026/028-045 + Swiss SGAD; burnout has
+NO S3 → ICD-11 QD85 note; catalog `wbq` is binge-eating, NOT burnout).
+Recommended instruments are ★-marked and sorted first in both send-forms.
+⚠ ALL thresholds/mappings are flagged `[clinician-confirm]` — DIPS-OA manual
+numerics were not verifiable; treat as prototype values pending clinical
+review.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

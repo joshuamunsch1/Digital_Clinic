@@ -10,6 +10,7 @@ import type { CaseCharacteristics, InvitationRecord, Patient, ResponseRecord, Se
 import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, EMPLOYMENT_STATUSES, PROBLEM_DURATIONS, RATER_ROLES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
+import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
 import { DipsSummary } from "./DipsSummary";
@@ -127,9 +128,14 @@ function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
 }) {
   const t = useT();
   const { lang } = useLang();
+  // Diagnosis-/category-specific recommendations: sorted first + starred.
+  const recIds = useMemo(() => recommendedInstrumentIds(patient, instruments), [patient, instruments]);
   const candidates = useMemo(
-    () => instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery"),
-    [instruments],
+    () =>
+      instruments
+        .filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery")
+        .sort((a, b) => Number(recIds.has(b.id)) - Number(recIds.has(a.id))),
+    [instruments, recIds],
   );
   const [instId, setInstId] = useState(candidates[0]?.id ?? "");
   const inst = candidates.find((i) => i.id === instId);
@@ -166,10 +172,11 @@ function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
           <select style={{ ...inputStyle, width: "auto", minWidth: 260 }} value={instId} onChange={(e) => { setInstId(e.target.value); setSurveyId(""); setMsg(null); }}>
             {candidates.map((i) => (
               <option key={i.id} value={i.id}>
-                {i.abbreviation} — {trRaterRole(i.raterRole, lang)} ({trPopulation(i.population, lang)})
+                {recIds.has(i.id) ? "★ " : ""}{i.abbreviation} — {trRaterRole(i.raterRole, lang)} ({trPopulation(i.population, lang)}){recIds.has(i.id) ? ` · ${t("recommendedTag")}` : ""}
               </option>
             ))}
           </select>
+          {recIds.size > 0 && <p className="text-xs mt-1" style={{ color: C.spruce }}>{t("recommendedHint")}</p>}
         </Field>
         <Field label={t("ratedBy")}>
           <select style={{ ...inputStyle, width: "auto", minWidth: 120 }} value={role} onChange={(e) => setRole(e.target.value)}>

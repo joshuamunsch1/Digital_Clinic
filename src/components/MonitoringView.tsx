@@ -7,6 +7,7 @@ import type { ClinicData, InvitationRecord, Patient, SessionUser } from "@/lib/t
 import { DIPS_INSTRUMENT_ID } from "@/lib/types";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isOpenInvitation, isOverdue } from "@/lib/reminders";
+import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { patientFillable } from "./PatientHome";
 import { Card, Field, GhostButton, PrimaryButton, SectionTitle, Stat, StatusBadge, inputStyle } from "./ui";
 import { useT } from "./LangContext";
@@ -88,9 +89,14 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
   onDone: (p: Patient, message: string) => void;
 }) {
   const t = useT();
+  // Diagnosis-/category-specific recommendations: sorted first + starred.
+  const recIds = useMemo(() => recommendedInstrumentIds(patient, instruments), [patient, instruments]);
   const candidates = useMemo(
-    () => instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery"),
-    [instruments],
+    () =>
+      instruments
+        .filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery")
+        .sort((a, b) => Number(recIds.has(b.id)) - Number(recIds.has(a.id))),
+    [instruments, recIds],
   );
   const fillableIds = useMemo(
     () => new Set(patientFillable(instruments, patient).map((i) => i.id)),
@@ -151,9 +157,12 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
           <select style={{ ...inputStyle, width: "auto", minWidth: 230 }} value={instId}
             onChange={(e) => { setInstId(e.target.value); setSurveyId(""); setErr(null); }}>
             {candidates.map((i) => (
-              <option key={i.id} value={i.id}>{i.abbreviation} — {i.raterRole} ({i.population.replace(/_/g, " ")})</option>
+              <option key={i.id} value={i.id}>
+                {recIds.has(i.id) ? "★ " : ""}{i.abbreviation} — {i.raterRole} ({i.population.replace(/_/g, " ")}){recIds.has(i.id) ? ` · ${t("recommendedTag")}` : ""}
+              </option>
             ))}
           </select>
+          {recIds.size > 0 && <p className="text-xs mt-1" style={{ color: C.spruce }}>{t("recommendedHint")}</p>}
         </Field>
         <Field label={t("channelLabel")}>
           <select style={{ ...inputStyle, width: "auto", minWidth: 130 }} value={effectiveChannel}
