@@ -173,20 +173,20 @@ const peakYes = (m: ModuleAnswers) => m["3"] === "yes";
 const enoughSym = (m: ModuleAnswers) => symCount(m) >= 4;
 const unexpected = (m: ModuleAnswers) => m["2.2"] === "yes" || !!m["2.2_unexpected"];
 export const pdShown = (m: ModuleAnswers) => hasPanic(m) && peakYes(m) && enoughSym(m) && unexpected(m);
-const PD_KEYS = ["7", "8.1", "8.2", "8.3", "8.4", "9"];
+export const PD_KEYS = ["7", "8.1", "8.2", "8.3", "8.4", "9"];
 const pdAnswered = (m: ModuleAnswers) => PD_KEYS.every((k) => m[k] !== undefined);
 const pdAllNo = (m: ModuleAnswers) => pdAnswered(m) && PD_KEYS.every((k) => m[k] === "no");
-const afterPdShown = (m: ModuleAnswers) => pdShown(m) && pdAnswered(m) && !pdAllNo(m);
+export const afterPdShown = (m: ModuleAnswers) => pdShown(m) && pdAnswered(m) && !pdAllNo(m);
 
 const agoraEnter = (m: ModuleAnswers) => (m["1.1"] === "yes" && (m["1.2"] === "yes" || m["1.3"] === "yes")) || (m["1.4"] === "yes" && (m["1.5"] === "yes" || m["1.6"] === "yes"));
 const socEnter = (m: ModuleAnswers) => (m["1.1"] === "yes" && (m["1.2"] === "yes" || m["1.3"] === "yes")) || (m["1.4"] === "yes" && (m["1.5"] === "yes" || m["1.6"] === "yes"));
 const phobiaEnter = (m: ModuleAnswers) => m["1.1"] === "yes" || m["1.2"] === "yes";
 export const gadSymCount = (m: ModuleAnswers) => GAD_SYMPTOMS.filter((s) => m[`symptoms_${s.key}_primary`] === "yes").length;
 const gadEnter = (m: ModuleAnswers) => m["1.1"] === "yes";
-const gadFull = (m: ModuleAnswers) => gadEnter(m) && gadSymCount(m) >= 3;
+export const gadFull = (m: ModuleAnswers) => gadEnter(m) && gadSymCount(m) >= 3;
 export const sepSymCount = (m: ModuleAnswers) => SEP_SYMPTOMS.filter((s) => m[`symptoms_${s.key}_primary`] === "yes").length;
 const sepEnter = (m: ModuleAnswers) => m["1.1"] === "yes" || m["1.3"] === "yes";
-const sepFull = (m: ModuleAnswers) => sepEnter(m) && sepSymCount(m) >= 3;
+export const sepFull = (m: ModuleAnswers) => sepEnter(m) && sepSymCount(m) >= 3;
 
 /* ---- modules ---- */
 const MOD_PANIC: DipsModule = {
