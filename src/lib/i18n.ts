@@ -55,6 +55,7 @@ export const T = {
   sentLocal: L("Lokal gespeichert (Server nicht erreichbar) — kann erneut gesendet werden.", "Enregistré localement (serveur injoignable) — peut être renvoyé.", "Saved locally (server unreachable) — can be resent."),
   retry: L("Erneut senden", "Renvoyer", "Resend"),
   viewPayload: L("Gesendete Daten anzeigen (FHIR)", "Afficher les données envoyées (FHIR)", "View submitted data (FHIR)"),
+  monthYearPlaceholder: L("MM/JJJJ", "MM/AAAA", "MM/YYYY"),
 };
 
 // --- App-wide UI strings (batch-2 i18n: DE default, FR/EN) ----------------------
@@ -114,6 +115,7 @@ export const UI = {
   statusAssessment: L("Aufnahme ausstehend", "Admission en attente", "Assessment due"),
   statusInterview: L("Wartet auf Erstgespräch", "En attente du premier entretien", "Awaiting intake interview"),
   statusTherapy: L("In Therapie", "En thérapie", "In therapy"),
+  statusArchived: L("Archiviert", "Archivé·e", "Archived"),
   catAnxiety: L("Angststörungen", "Troubles anxieux", "Anxiety"),
   catDepression: L("Depression", "Dépression", "Depression"),
   catEating_disorder: L("Essstörungen", "Troubles alimentaires", "Eating disorder"),
@@ -191,6 +193,8 @@ export const UI = {
   ratedBy: L("Beurteilt durch", "Évalué par", "Rated by"),
   waveLabel: L("Messzeitpunkt", "Temps de mesure", "Measurement wave"),
   dateAdministered: L("Erhebungsdatum", "Date de passation", "Date administered"),
+  conductedBy: L("Durchgeführt von", "Réalisé par", "Conducted by"),
+  conductedByUnset: L("— keine Angabe —", "— non précisé —", "— unspecified —"),
   inviteHeading: L("LimeSurvey-Link per E-Mail senden", "Envoyer le lien LimeSurvey par e-mail", "Send LimeSurvey link by e-mail"),
   recipientEmail: L("Empfänger-E-Mail", "E-mail du destinataire", "Recipient e-mail"),
   surveyIdLinked: L("LimeSurvey-Umfrage-ID (verknüpft: {id})", "ID du sondage LimeSurvey (lié : {id})", "LimeSurvey survey id (linked: {id})"),
@@ -385,6 +389,182 @@ export const UI = {
   progressOverTime: L("Ihr Therapieverlauf", "Votre évolution", "Your progress over time"),
   intakeDelivered: L("Aufnahme: übermittelt ({date}).", "Admission : transmise ({date}).", "Intake submission: delivered ({date})."),
   intakeSavedPending: L("Aufnahme: gespeichert, Übermittlung ausstehend.", "Admission : enregistrée, transmission en attente.", "Intake submission: saved, awaiting delivery."),
+
+  // archive (concluded treatments)
+  archiveTitle: L("Patientenarchiv", "Archives des patient·e·s", "Patient archive"),
+  archiveSub: L(
+    "Abgeschlossene Behandlungen, geordnet nach Störungsbild und Jahr des Abschlusses. Klicken Sie auf eine Patient*in für das vollständige Dossier.",
+    "Traitements terminés, classés par trouble et année de clôture. Cliquez sur un·e patient·e pour ouvrir le dossier complet.",
+    "Concluded treatments, ordered by disorder category and year of conclusion. Click a patient to open the full record."),
+  archiveLink: L("Archiv abgeschlossener Behandlungen ({n})", "Archives des traitements terminés ({n})", "Archive of concluded treatments ({n})"),
+  archiveEmpty: L("Noch keine archivierten Behandlungen.", "Aucun traitement archivé pour le moment.", "No archived treatments yet."),
+  concludeTitle: L("Behandlung abschließen & archivieren", "Clôturer le traitement et archiver", "Conclude treatment & archive"),
+  concludeSub: L(
+    "Verschiebt die Patient*in aus den aktiven Übersichten ins Archiv. Die kodierte Abschlussart ist erforderlich — sie ist das Behandlungsende-Label für spätere Verlaufs- und Abbruchanalysen (klinische Einschätzung der Therapeut*in).",
+    "Déplace le·la patient·e des vues actives vers les archives. Le motif de clôture codé est obligatoire — c'est l'étiquette de fin de traitement pour les analyses ultérieures (jugement clinique du·de la thérapeute).",
+    "Moves the patient from the active overviews into the archive. The coded termination reason is required — it is the treatment-end label for later outcome and dropout analyses (therapist judgment)."),
+  terminationLabel: L("Abschlussart", "Motif de clôture", "Termination reason"),
+  terminationNone: L("— bitte wählen —", "— veuillez choisir —", "— please choose —"),
+  termCompleted: L("Regulär abgeschlossen", "Terminé régulièrement", "Completed as planned"),
+  termDropout: L("Abbruch (einseitig durch Patient*in)", "Interruption (unilatérale, patient·e)", "Dropout (unilateral, patient)"),
+  termMutual: L("Einvernehmlich beendet", "Terminé d'un commun accord", "Ended by mutual agreement"),
+  termTransfer: L("Überweisung / Weiterverweisung", "Transfert / réorientation", "Transfer / referral"),
+  termOther: L("Sonstiges", "Autre", "Other"),
+  archiveConfirm: L("Archivieren bestätigen", "Confirmer l'archivage", "Confirm archiving"),
+  archivedOn: L("Behandlung abgeschlossen und archiviert am {date}", "Traitement clôturé et archivé le {date}", "Treatment concluded and archived on {date}"),
+  archivedByLine: L("durch {name}", "par {name}", "by {name}"),
+  reopenTreatment: L("Behandlung wieder öffnen", "Rouvrir le traitement", "Reopen treatment"),
+  archiveExportFailed: L(
+    "Archiviert — aber der Dateiexport ist fehlgeschlagen: {error}",
+    "Archivé — mais l'export de fichiers a échoué : {error}",
+    "Archived — but the file export failed: {error}"),
+
+  // outcome prediction (docs/outcome-prediction.md — Lutz decision support)
+  predictionTitle: L("Verlaufsprognose (Entscheidungshilfe)", "Prédiction d'évolution (aide à la décision)", "Outcome prediction (decision support)"),
+  predictionSub: L(
+    "Therapeutenseitige Entscheidungsunterstützung nach Lutz: erwarteter Verlauf aus abgeschlossenen Behandlungen, Frühverlaufs-Klassifikation, Abbruchrisiko. Keine Diagnose, niemals patientensichtbar.",
+    "Aide à la décision pour thérapeutes selon Lutz : évolution attendue à partir des traitements terminés, classification du début de traitement, risque d'interruption. Pas un diagnostic, jamais visible pour les patient·e·s.",
+    "Therapist-facing decision support after Lutz: expected course from completed treatments, early-change classification, dropout risk. Not a diagnosis, never patient-facing."),
+  expectedCourseLabel: L("Erwarteter Verlauf:", "Évolution attendue :", "Expected course:"),
+  sourceClinic: L("Klinik-Perzentile", "Percentiles clinique", "Clinic percentiles"),
+  sourceNn: L("Ähnliche Fälle (NN)", "Cas similaires (NN)", "Similar cases (NN)"),
+  sourceEtr: L("ETR-Kurve (Näherung)", "Courbe ETR (approximation)", "ETR curve (approximation)"),
+  etrCaveat: L("Zweistufige OLS-Näherung — kein validiertes ETR.", "Approximation OLS en deux étapes — pas un ETR validé.", "Two-stage OLS approximation — not a validated ETR."),
+  etrUnavailable: L("ETR-Modell nicht verfügbar (zu wenige Referenzfälle).", "Modèle ETR indisponible (trop peu de cas de référence).", "ETR model unavailable (too few reference cases)."),
+  nnUnavailable: L("Zu wenige vergleichbare abgeschlossene Fälle.", "Trop peu de cas terminés comparables.", "Too few comparable completed cases."),
+  referenceN: L("Referenz: n={n} abgeschlossene Fälle", "Référence : n={n} cas terminés", "Reference: n={n} completed cases"),
+  bandLabelClinic: L("Erwartungsband p25–p75, n={n} Klinik-Fälle — kein validiertes ETR", "Bande attendue p25–p75, n={n} cas de la clinique — pas un ETR validé", "Expected band p25–p75, n={n} clinic cases — not a validated ETR"),
+  bandStratified: L("nach Ausgangsschwere stratifiziert", "stratifié par sévérité initiale", "stratified by initial severity"),
+  bandLabelNn: L("Erwartungsband der k={k} ähnlichsten Fälle (dynamisch)", "Bande des k={k} cas les plus similaires (dynamique)", "Band of the k={k} most similar cases (dynamic)"),
+  bandMedian: L("Median (Referenz)", "Médiane (référence)", "Median (reference)"),
+  failureBoundary: L("Signalgrenze", "Limite d'alerte", "Failure boundary"),
+  etrCurve: L("ETR (Näherung)", "ETR (approximation)", "ETR (approximation)"),
+  suddenShiftLegend: L("plötzliche Verbesserung/Verschlechterung (Tang & DeRubeis)", "gain/perte soudain·e (Tang & DeRubeis)", "sudden gain/loss (Tang & DeRubeis)"),
+  simulatedReference: L("Simulierte Referenzdaten", "Données de référence simulées", "Simulated reference data"),
+  earlyResponse: L("Frühe Response", "Réponse précoce", "Early response"),
+  earlyDeterioration: L("Frühe Verschlechterung", "Détérioration précoce", "Early deterioration"),
+  earlyIndeterminate: L("Frühverlauf unbestimmt", "Début indéterminé", "Early course indeterminate"),
+  onTrack: L("Im erwarteten Verlauf", "Dans l'évolution attendue", "On track"),
+  notOnTrack: L("Nicht im erwarteten Verlauf", "Hors de l'évolution attendue", "Not on track"),
+  insufficientReference: L("zu wenig Daten", "données insuffisantes", "insufficient data"),
+  suddenGain: L("plötzliche Verbesserung", "gain soudain", "sudden gain"),
+  suddenLoss: L("plötzliche Verschlechterung", "perte soudaine", "sudden loss"),
+  notOnTrackBanner: L("Nicht im erwarteten Verlauf (Entscheidungshilfe)", "Hors de l'évolution attendue (aide à la décision)", "Not on track (decision support)"),
+  notReasonBand: L("≥2 Messungen auf der ungünstigen Seite des Erwartungsbands", "≥2 mesures du côté défavorable de la bande attendue", "≥2 measurements on the unfavourable side of the expected band"),
+  notReasonRci: L("reliable Verschlechterung gegenüber Baseline (RCI)", "détérioration fiable par rapport à la baseline (RCI)", "reliable deterioration vs baseline (RCI)"),
+  notOnTrackHint: L(
+    "Empfehlung der Feedback-Literatur: Problembereiche aktiv prüfen (Risiko, Motivation, Beziehung, soziales Umfeld, Emotionsregulation). Kein Alarm — ein Gesprächsanlass.",
+    "Recommandation de la littérature feedback : examiner activement les domaines problématiques (risque, motivation, alliance, entourage, régulation émotionnelle). Pas une alarme — une amorce d'échange.",
+    "Feedback-literature recommendation: actively review problem areas (risk, motivation, alliance, social support, emotion regulation). Not an alarm — a conversation starter."),
+  dropoutTitle: L("Abbruchrisiko (Modell)", "Risque d'interruption (modèle)", "Dropout risk (model)"),
+  dropoutMeta: L("Modell aus n={n} abgeschlossenen Behandlungen · Basisrate {base} % · AUC {auc}", "Modèle basé sur n={n} traitements terminés · taux de base {base} % · AUC {auc}", "Model from n={n} completed treatments · base rate {base}% · AUC {auc}"),
+  dropoutFactors: L("Wichtigste Faktoren", "Facteurs principaux", "Top factors"),
+  dropoutUnavailable: L("Noch kein Modell — zu wenige gelabelte abgeschlossene Behandlungen.", "Pas encore de modèle — trop peu de traitements terminés étiquetés.", "No model yet — too few labeled completed treatments."),
+  nnTitle: L("Ähnlichste abgeschlossene Fälle", "Cas terminés les plus similaires", "Most similar completed cases"),
+  nnMeta: L("k={k} Nachbarn · Median {sessions} Sitzungen", "k={k} voisins · médiane {sessions} séances", "k={k} neighbors · median {sessions} sessions"),
+  nnCodes: L("Codes", "Codes", "Codes"),
+  featAge: L("Alter", "âge", "age"),
+  featBaseline: L("Ausgangsschwere", "sévérité initiale", "baseline severity"),
+  featExpectation: L("Behandlungserwartung", "attentes", "treatment expectation"),
+  featDuration: L("Problemdauer", "durée du problème", "problem duration"),
+  featPriorTx: L("frühere Psychotherapie", "psychothérapie antérieure", "prior psychotherapy"),
+  featMedication: L("Psychopharmaka", "psychotropes", "psychotropic medication"),
+  featSexMale: L("Geschlecht (männlich)", "sexe (masculin)", "sex (male)"),
+  featEarlyResponse: L("frühe Response", "réponse précoce", "early response"),
+  featEarlyDeterioration: L("frühe Verschlechterung", "détérioration précoce", "early deterioration"),
+  simChipTitle: L("Simulierte Patient*in (Referenzkohorte) — via npm run sim:purge entfernbar", "Patient·e simulé·e (cohorte de référence) — supprimable via npm run sim:purge", "Simulated patient (reference cohort) — removable via npm run sim:purge"),
+  exportTitle: L("Forschungsexport (pseudonymisiert)", "Export recherche (pseudonymisé)", "Research export (pseudonymized)"),
+  exportSub: L(
+    "Long-Format-CSV nach dem Exportvertrag in docs/outcome-prediction.md §5 — Übergabepunkt an R/lme4/brms und Forschungskooperationen. Keine Namen, keine E-Mail-Adressen; Patient*innen erscheinen als Forschungscode, Mitarbeitende als T-Pseudonym.",
+    "CSV long format selon le contrat d'export (docs/outcome-prediction.md §5) — point de transfert vers R/lme4/brms et les coopérations de recherche. Ni noms ni e-mails ; patient·e·s en code de recherche, personnel en pseudonyme T.",
+    "Long-format CSV per the export contract in docs/outcome-prediction.md §5 — the handover point to R/lme4/brms and research cooperations. No names, no e-mails; patients appear as research codes, staff as T-pseudonyms."),
+  exportScores: L("Skalenwerte (CSV)", "Scores d'échelles (CSV)", "Scale scores (CSV)"),
+  exportItems: L("Item-Ebene (CSV)", "Niveau item (CSV)", "Item level (CSV)"),
+  exportSimNote: L("Simulierte Fälle sind standardmäßig ausgeschlossen (?includeSimulated=1 nimmt sie auf).", "Les cas simulés sont exclus par défaut (?includeSimulated=1 les inclut).", "Simulated cases are excluded by default (?includeSimulated=1 opts them in)."),
+
+  // intake predictors (docs/outcome-prediction.md §4.3 — coded ETR set)
+  predictorsTitle: L("Prognosemerkmale (Aufnahme)", "Facteurs pronostiques (admission)", "Intake predictors"),
+  predictorsSub: L(
+    "Kodierte Merkmale für Verlaufsprognosen (Lutz-Ansatz): Problemdauer, Vorbehandlung, Medikation, Beschäftigung, Behandlungserwartung. Nur kodierte Felder, kein Freitext.",
+    "Caractéristiques codées pour les prédictions d'évolution (approche Lutz) : durée du problème, traitement antérieur, médication, emploi, attentes. Champs codés uniquement, pas de texte libre.",
+    "Coded characteristics for expected-course prediction (Lutz approach): problem duration, prior treatment, medication, employment, treatment expectation. Coded fields only, no free text."),
+  durationLabel: L("Problemdauer", "Durée du problème", "Problem duration"),
+  durLt6m: L("unter 6 Monate", "moins de 6 mois", "under 6 months"),
+  durM6to24: L("6–24 Monate", "6–24 mois", "6–24 months"),
+  durGt24m: L("über 24 Monate", "plus de 24 mois", "over 24 months"),
+  priorTxLabel: L("Frühere Psychotherapie", "Psychothérapie antérieure", "Prior psychotherapy"),
+  medicationLabel: L("Psychopharmaka", "Psychotropes", "Psychotropic medication"),
+  employmentLabel: L("Beschäftigungsstatus", "Statut professionnel", "Employment status"),
+  empEmployed: L("erwerbstätig", "en emploi", "employed"),
+  empInTraining: L("in Ausbildung/Studium", "en formation/études", "in training/studies"),
+  empUnemployed: L("erwerbslos", "sans emploi", "unemployed"),
+  empRetired: L("pensioniert", "retraité·e", "retired"),
+  empOther: L("anderes", "autre", "other"),
+  expectationLabel: L("Behandlungserwartung (0–10)", "Attentes envers le traitement (0–10)", "Treatment expectation (0–10)"),
+  predYes: L("ja", "oui", "yes"),
+  predNo: L("nein", "non", "no"),
+  notRecorded: L("— nicht erfasst —", "— non renseigné —", "— not recorded —"),
+  savePredictors: L("Prognosemerkmale speichern", "Enregistrer les facteurs", "Save intake predictors"),
+  predictorsSaved: L("Gespeichert.", "Enregistré.", "Saved."),
+  icdLabel: L("ICD-10-Code (optional)", "Code CIM-10 (facultatif)", "ICD-10 code (optional)"),
+  patientCodeLabel: L("Forschungscode", "Code de recherche", "Research code"),
+
+  // session log (sessions without questionnaires, §4.5)
+  sessionLogTitle: L("Sitzung ohne Fragebogen erfassen", "Consigner une séance sans questionnaire", "Log a session without questionnaire"),
+  sessionLogSub: L(
+    "Für Dosis-Wirkungs- und Abbruchanalysen zählen auch Sitzungen ohne Messung — sowie Absagen und Nichterscheinen.",
+    "Pour les analyses dose-effet et d'interruption, les séances sans mesure comptent aussi — de même que les annulations et absences.",
+    "Dose–response and dropout analyses also need sessions without measurement — plus cancellations and no-shows."),
+  logTypeHeld: L("stattgefunden (ohne Fragebogen)", "a eu lieu (sans questionnaire)", "held (no questionnaire)"),
+  logTypeCancelled: L("abgesagt", "annulée", "cancelled"),
+  logTypeNoShow: L("nicht erschienen", "absence non annoncée", "no-show"),
+  logTypeLabel: L("Art", "Type", "Type"),
+  logDateLabel: L("Datum", "Date", "Date"),
+  logNoteLabel: L("Notiz (optional)", "Note (facultatif)", "Note (optional)"),
+  logSave: L("Eintrag speichern", "Enregistrer l'entrée", "Save entry"),
+  logSaved: L("Erfasst.", "Consigné.", "Logged."),
+  logDelete: L("Löschen", "Supprimer", "Delete"),
+  logEntries: L("Einträge", "Entrées", "Entries"),
+
+  // manual registration (director/admin)
+  moreDetails: L("E-Mail & persönliche Angaben", "E-mail et informations personnelles", "E-mail & personal details"),
+  invalidEmail: L("Bitte geben Sie eine gültige E-Mail-Adresse ein.", "Veuillez saisir une adresse e-mail valide.", "Please enter a valid e-mail address."),
+  patientRegistered: L("Patient*in registriert.", "Patient·e enregistré·e.", "Patient registered."),
+
+  // DIPS summary (clinician view)
+  dipsCompletedMeta: L("Ausgefüllt am {date} · Sprache: {lang}", "Rempli le {date} · langue : {lang}", "Completed {date} · language: {lang}"),
+  langNameDe: L("Deutsch", "allemand", "German"),
+  langNameFr: L("Französisch", "français", "French"),
+  langNameEn: L("Englisch", "anglais", "English"),
+  dipsRelayed: L("Weitergeleitet · HTTP {status}", "Transmis · HTTP {status}", "Relayed · HTTP {status}"),
+  dipsStoredDb: L("In Klinikdatenbank gespeichert", "Enregistré dans la base de la clinique", "Stored in clinic DB"),
+  dipsSendingShort: L("Wird gesendet…", "Envoi en cours…", "Sending…"),
+  dipsRelayFailed: L("Gespeichert; Weiterleitung fehlgeschlagen", "Enregistré ; transmission échouée", "Stored; relay failed"),
+  dipsDisclaimer: L(
+    "Zusammenfassung des Selbstbericht-Screenings — eine klinische Hilfe, keine Diagnose. Die Diagnose wird nach dem Erstgespräch von der Klinikerin / dem Kliniker erfasst.",
+    "Résumé du dépistage en auto-évaluation — une aide clinique, pas un diagnostic. Le diagnostic est établi par le·la clinicien·ne après l'entretien initial.",
+    "Self-report screening summary — a clinical aid, not a diagnosis. The diagnosis is recorded by the clinician after the intake interview."),
+  dipsNonePositive: L(
+    "Kein Angst-Modul wurde positiv gescreent. Die Patient*in hat die Screening-Fragen beantwortet; kein Bereich erreichte die Schwelle für weitere Fragen.",
+    "Aucun module d'anxiété n'a été dépisté positif. Le·la patient·e a répondu aux questions de dépistage ; aucun domaine n'a atteint le seuil de poursuite.",
+    "No anxiety module screened positive. The patient answered the screening questions; none met the threshold to continue."),
+  screenedPositiveBadge: L("positiv gescreent", "dépistage positif", "screened positive"),
+  screenedPositiveList: L("Positiv gescreent:", "Dépistage positif :", "Screened positive:"),
+  endorsedOf: L("{n} von {total} bejaht", "{n} sur {total} confirmés", "{n} of {total} endorsed"),
+  noneEndorsed: L("keine bejaht", "aucun confirmé", "none endorsed"),
+  impairDistress: L("Beeinträchtigung / Belastung (0–8)", "Altération / détresse (0–8)", "Impairment / distress (0–8)"),
+  showAllResponses: L("Alle Antworten anzeigen", "Afficher toutes les réponses", "Show all responses"),
+
+  // misc clinician strings
+  definitionBadgeTitle: L(
+    "Item-/Skalendetails wurden aus dem Altsystem nicht vollständig verifiziert — siehe docs/instrument-catalog.json.",
+    "Les détails des items/échelles n'ont pas été entièrement vérifiés depuis l'ancien système — voir docs/instrument-catalog.json.",
+    "Item/scale detail was not fully verified from the legacy system — see docs/instrument-catalog.json."),
+  scalesNotComputed: L(
+    "Gespeichert — einige Skalen konnten jedoch nicht berechnet werden:",
+    "Enregistré — mais certaines échelles n'ont pas pu être calculées :",
+    "Saved, but some scales were not computed:"),
+  importOk: L("OK", "OK", "OK"),
 } as const;
 
 export type UIKey = keyof typeof UI;
@@ -402,3 +582,112 @@ export function trCategory(category: string | null | undefined, lang: Lang): str
   const key = (`cat${category.charAt(0).toUpperCase()}${category.slice(1)}`) as UIKey;
   return key in UI ? trUI(key, lang) : category;
 }
+
+// --- Slug translations for data-model vocabulary shown in the UI ----------------
+// These are stored as stable English slugs in the database; the UI translates
+// them on display. Unknown slugs fall back to the slug with "_" → " ".
+
+const slugTr = (dict: Record<string, LangNode>) => (slug: string | null | undefined, lang: Lang): string => {
+  if (!slug) return "";
+  const node = dict[slug];
+  return node ? tr(node, lang) : slug.replace(/_/g, " ");
+};
+
+/// Rater / respondent roles (ResponseInstance.respondentRole, Instrument.raterRole).
+export const trRaterRole = slugTr({
+  self: L("Selbstbericht", "auto-évaluation", "self-report"),
+  mother: L("Mutter", "mère", "mother"),
+  father: L("Vater", "père", "father"),
+  parent: L("Elternteil", "parent", "parent"),
+  teacher: L("Lehrperson", "enseignant·e", "teacher"),
+  caregiver: L("Bezugsperson", "proche aidant·e", "caregiver"),
+  clinician: L("Kliniker*in", "clinicien·ne", "clinician"),
+});
+
+/// Instrument cadence types.
+export const trCadence = slugTr({
+  every_session: L("pro Sitzung", "à chaque séance", "every session"),
+  wave: L("Messzeitpunkte", "temps de mesure", "measurement waves"),
+  periodic: L("wiederkehrend", "périodique", "periodic"),
+  intake_once: L("einmalig bei Aufnahme", "une fois à l'admission", "once at intake"),
+});
+
+/// Instrument target populations (docs/instrument-catalog.json vocabulary).
+export const trPopulation = slugTr({
+  adult: L("Erwachsene", "adultes", "adults"),
+  adolescent: L("Jugendliche", "adolescent·e·s", "adolescents"),
+  adolescent_11_17: L("Jugendliche 11–17", "adolescent·e·s 11–17", "adolescents 11–17"),
+  adult_adolescent: L("Erwachsene & Jugendliche", "adultes et adolescent·e·s", "adults & adolescents"),
+  child: L("Kinder", "enfants", "children"),
+  child_2_4: L("Kinder 2–4", "enfants 2–4", "children 2–4"),
+  child_adolescent: L("Kinder & Jugendliche", "enfants et adolescent·e·s", "children & adolescents"),
+  child_adolescent_4_17: L("Kinder & Jugendliche 4–17", "enfants et adolescent·e·s 4–17", "children & adolescents 4–17"),
+  child_adolescent_8_16: L("Kinder & Jugendliche 8–16", "enfants et adolescent·e·s 8–16", "children & adolescents 8–16"),
+  child_school_age: L("Kinder im Schulalter", "enfants d'âge scolaire", "school-age children"),
+  all: L("alle Altersgruppen", "tous âges", "all ages"),
+});
+
+/// Response sources (ResponseInstance.source).
+export const trSource = slugTr({
+  in_app: L("in der App", "dans l'application", "in-app"),
+  limesurvey: L("LimeSurvey", "LimeSurvey", "LimeSurvey"),
+  csv_import: L("CSV-Import", "import CSV", "CSV import"),
+  manual_entry: L("manuelle Eingabe", "saisie manuelle", "manual entry"),
+  seed: L("Demodaten", "données de démo", "demo data"),
+});
+
+/// Coded termination reasons (Patient.terminationReason — therapist judgment).
+export const trTerminationReason = slugTr({
+  completed: UI.termCompleted,
+  dropout: UI.termDropout,
+  mutual: UI.termMutual,
+  transfer: UI.termTransfer,
+  other: UI.termOther,
+});
+
+/// Coded problem-duration / chronicity values (CaseCharacteristics.problemDuration).
+export const trProblemDuration = slugTr({
+  lt6m: UI.durLt6m,
+  m6to24: UI.durM6to24,
+  gt24m: UI.durGt24m,
+});
+
+/// Coded employment statuses (CaseCharacteristics.employment).
+export const trEmployment = slugTr({
+  employed: UI.empEmployed,
+  in_training: UI.empInTraining,
+  unemployed: UI.empUnemployed,
+  retired: UI.empRetired,
+  other: UI.empOther,
+});
+
+/// Session-log entry types (SessionLog.type).
+export const trSessionLogType = slugTr({
+  held: UI.logTypeHeld,
+  cancelled: UI.logTypeCancelled,
+  no_show: UI.logTypeNoShow,
+});
+
+/// LimeSurvey invitation statuses (QuestionnaireInvitation.status).
+export const trInvitationStatus = slugTr({
+  created: L("erstellt", "créée", "created"),
+  invited: L("eingeladen", "invitation envoyée", "invited"),
+  reminded: L("erinnert", "rappel envoyé", "reminded"),
+  completed: L("abgeschlossen", "terminée", "completed"),
+  error: L("Fehler", "erreur", "error"),
+});
+
+/// Canonical demographics values stored by the registration forms (sex/living
+/// options are stored as their English label — see Login.tsx). Free-text
+/// values (occupation, city, …) pass through unchanged.
+export const trDemoValue = slugTr({
+  Female: L("Weiblich", "Féminin", "Female"),
+  Male: L("Männlich", "Masculin", "Male"),
+  "Non-binary": L("Divers", "Non-binaire", "Non-binary"),
+  "Prefer not to say": L("Keine Angabe", "Préfère ne pas répondre", "Prefer not to say"),
+  Alone: L("Allein", "Seul(e)", "Alone"),
+  "With partner": L("Mit Partner*in", "Avec partenaire", "With partner"),
+  "With family": L("Mit Familie", "Avec la famille", "With family"),
+  "Shared flat": L("Wohngemeinschaft", "Colocation", "Shared flat"),
+  Other: L("Andere", "Autre", "Other"),
+});

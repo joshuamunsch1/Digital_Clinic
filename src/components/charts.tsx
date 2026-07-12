@@ -1,12 +1,13 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from "recharts";
 import { C, PALETTE } from "@/lib/theme";
 import { fmtDate } from "@/lib/format";
-import { trCategory } from "@/lib/i18n";
+import { trCategory, trRaterRole } from "@/lib/i18n";
+import type { ExpectedCoursePoint, SuddenShift } from "@/lib/analytics/types";
 import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
 import { classifyChange } from "@/lib/instruments/rci";
 import type { Patient, ResponseRecord } from "@/lib/types";
@@ -20,7 +21,7 @@ import {
 import { useLang, useT } from "./LangContext";
 import { MiniTrend } from "./ui";
 
-interface TipPayload { dataKey: string; name: string; value: number; color?: string; stroke?: string }
+interface TipPayload { dataKey: string; name: string; value: number | [number, number]; color?: string; stroke?: string }
 export function ChartTip({ active, payload, label }: { active?: boolean; payload?: TipPayload[]; label?: string | number }) {
   if (!active || !payload || !payload.length) return null;
   return (
@@ -29,11 +30,26 @@ export function ChartTip({ active, payload, label }: { active?: boolean; payload
       {payload.map((p) => (
         <div key={p.dataKey} className="flex justify-between gap-3">
           <span style={{ color: p.color || p.stroke || "#fff" }}>{p.name}</span>
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>{p.value}</span>
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>
+            {Array.isArray(p.value) ? `${fmtScore(p.value[0])} – ${fmtScore(p.value[1])}` : p.value}
+          </span>
         </div>
       ))}
     </div>
   );
+}
+
+/// Prediction overlays for one scale of the chart (docs/outcome-prediction.md
+/// Stage 1/3): the shaded expected-course band (p25–p75 + median), an optional
+/// failure boundary, the ETR expected-value curve, and sudden gain/loss
+/// diamonds. Only drawn while exactly `scaleKey` is visible (same gating as
+/// the RCI markers) — overlays on a multi-scale chart would be unreadable.
+export interface ChartPrediction {
+  scaleKey: string;
+  band: { points: ExpectedCoursePoint[]; label: string; simulated: boolean } | null;
+  failureBoundary?: { session: number; value: number }[];
+  etrPoints?: { session: number; expected: number }[];
+  shifts: SuddenShift[];
 }
 
 const ROLE_DASHES = ["", "6 3", "2 3", "8 2", "4 4"];
@@ -43,6 +59,10 @@ interface Occasion { key: string; label: string; order: number }
 
 export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasion {
   if (instrument.cadenceType === "every_session" && r.sessionNumber !== null) {
+    // "B"/"S{n}" is deliberately NOT localized: "S" reads as
+    // Sitzung/Séance/Session in all three UI languages, and the "B" label is
+    // load-bearing — rows[0].label === "B" gates the therapy-begins reference
+    // line below. Wave codes (pre/zm/post/postF) are clinic jargon, kept as-is.
     return {
       key: `s${r.sessionNumber}`,
       label: r.sessionNumber === 0 ? "B" : `S${r.sessionNumber}`,
@@ -63,13 +83,15 @@ export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasi
 /// have filled the same instrument (e.g. SDQ self + mother) each rater gets a
 /// line style. Norm bands are shaded and RCI change markers (▲/▼ vs. the first
 /// measurement) are drawn when exactly one scale is shown.
-export function TrajectoryChart({ instrument, responses, height = 280, initialScales }: {
+export function TrajectoryChart({ instrument, responses, height = 280, initialScales, prediction }: {
   instrument: InstrumentDef;
   responses: ResponseRecord[];
   height?: number;
   initialScales?: string[];
+  prediction?: ChartPrediction;
 }) {
   const t = useT();
+  const { lang } = useLang();
   const scales = instrument.scales;
   const scored = useMemo(
     () => responses.filter((r) => Object.keys(r.scores).length > 0),
@@ -87,28 +109,73 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
   const toggle = (k: string) =>
     setVisible((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
+  const visibleScalesEarly = scales.filter((s) => visible.has(s.key));
+  // Prediction overlays require the session axis and exactly the target scale.
+  const overlay =
+    prediction &&
+    instrument.cadenceType === "every_session" &&
+    visibleScalesEarly.length === 1 &&
+    visibleScalesEarly[0].key === prediction.scaleKey
+      ? prediction
+      : undefined;
+
   const rows = useMemo(() => {
-    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number> }>();
+    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number | [number, number] | null> }>();
     for (const r of scored) {
       const occ = occasionOf(instrument, r);
       let row = byOccasion.get(occ.key);
       if (!row) { row = { label: occ.label, order: occ.order, values: {} }; byOccasion.set(occ.key, row); }
       for (const [k, v] of Object.entries(r.scores)) row.values[`${k}|${r.respondentRole}`] = v;
     }
+    if (overlay) {
+      // Overlay values live on session occasions; sessions beyond the patient's
+      // last measurement extend the axis (a look-ahead window of 8 sessions).
+      const lastMeasured = Math.max(0, ...scored.filter((r) => r.sessionNumber !== null).map((r) => r.sessionNumber!));
+      const horizon = lastMeasured + 8;
+      const sessionRow = (session: number) => {
+        const key = `s${session}`;
+        let row = byOccasion.get(key);
+        if (!row) {
+          row = { label: session === 0 ? "B" : `S${session}`, order: session, values: {} };
+          byOccasion.set(key, row);
+        }
+        return row;
+      };
+      for (const p of overlay.band?.points ?? []) {
+        if (p.session > horizon) continue;
+        const row = sessionRow(p.session);
+        row.values.__band = [p.p25, p.p75];
+        row.values.__p50 = p.p50;
+      }
+      for (const b of overlay.failureBoundary ?? []) {
+        if (b.session > horizon) continue;
+        sessionRow(b.session).values.__boundary = b.value;
+      }
+      for (const e of overlay.etrPoints ?? []) {
+        if (e.session > horizon) continue;
+        sessionRow(e.session).values.__etr = Math.round(e.expected * 100) / 100;
+      }
+    }
     return Array.from(byOccasion.values())
       .sort((a, b) => a.order - b.order)
       .map((r) => ({ label: r.label, ...r.values }));
-  }, [scored, instrument]);
+  }, [scored, instrument, overlay]);
 
   if (!scored.length)
     return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
 
   const colorOf = (key: string) => PALETTE[Math.max(0, scales.findIndex((s) => s.key === key)) % PALETTE.length];
-  const visibleScales = scales.filter((s) => visible.has(s.key));
+  const visibleScales = visibleScalesEarly;
   const sharedRange = visibleScales.length && visibleScales.every(
     (s) => s.range && visibleScales[0].range && s.range.min === visibleScales[0].range.min && s.range.max === visibleScales[0].range.max,
   ) ? visibleScales[0].range : undefined;
-  const bands = visibleScales.length === 1 ? visibleScales[0].normBands : undefined;
+  // Static norm bands give way to the empirical expected-course band when a
+  // prediction overlay is active (both shaded areas would be illegible).
+  const bands = visibleScales.length === 1 && !overlay?.band ? visibleScales[0].normBands : undefined;
+
+  // Sudden gain/loss diamonds by occasion label (drawn at the shift's toSession).
+  const shiftAt = new Map<string, SuddenShift>();
+  if (overlay) for (const s of overlay.shifts) shiftAt.set(s.toSession === 0 ? "B" : `S${s.toSession}`, s);
 
   // RCI markers: only when a single scale with rci parameters is displayed.
   const rciScale: ScaleDef | undefined =
@@ -128,8 +195,20 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       const { cx, cy, payload } = props;
       if (cx === undefined || cy === undefined || !payload) return <g key={`d${props.index}`} />;
       const v = payload[seriesKey];
+      if (typeof v !== "number") return <g key={`d${props.index}`} />;
+      // Sudden gain/loss diamond takes precedence over the RCI triangle.
+      const shift = typeof payload.label === "string" ? shiftAt.get(payload.label) : undefined;
+      if (shift) {
+        const fill = shift.kind === "gain" ? C.spruce : C.danger;
+        const d = 6.5;
+        return (
+          <polygon key={`d${props.index}`}
+            points={`${cx},${cy - d} ${cx + d},${cy} ${cx},${cy + d} ${cx - d},${cy}`}
+            fill={fill} stroke="#fff" strokeWidth={1.5} />
+        );
+      }
       const baseline = baselines.get(seriesKey);
-      if (typeof v !== "number" || baseline === undefined || !rciScale)
+      if (baseline === undefined || !rciScale)
         return <circle key={`d${props.index}`} cx={cx} cy={cy} r={3} fill={color} />;
       const cls = classifyChange(rciScale, baseline, v);
       if (cls === "unchanged") return <circle key={`d${props.index}`} cx={cx} cy={cy} r={3} fill={color} />;
@@ -158,7 +237,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       </div>
       <div style={{ width: "100%", height }}>
         <ResponsiveContainer>
-          <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
+          <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
             <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
             <YAxis
@@ -170,6 +249,23 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
               <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
                 label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
             ))}
+            {/* Expected-course overlays render BEFORE the patient lines (paint order). */}
+            {overlay?.band && (
+              <Area dataKey="__band" name={overlay.band.label} fill={C.spruce} fillOpacity={0.12}
+                stroke="none" activeDot={false} connectNulls={false} isAnimationActive={false} legendType="none" />
+            )}
+            {overlay?.band && (
+              <Line dataKey="__p50" name={t("bandMedian")} stroke={C.spruce} strokeWidth={1.2}
+                strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+            )}
+            {overlay?.failureBoundary && overlay.failureBoundary.length > 0 && (
+              <Line dataKey="__boundary" name={t("failureBoundary")} stroke={C.danger} strokeWidth={1.4}
+                strokeDasharray="7 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+            )}
+            {overlay?.etrPoints && overlay.etrPoints.length > 0 && (
+              <Line dataKey="__etr" name={t("etrCurve")} stroke={C.blue} strokeWidth={1.4}
+                strokeDasharray="2 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+            )}
             {instrument.cadenceType === "every_session" && rows.length > 1 && rows[0].label === "B" && (
               <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
                 label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
@@ -178,27 +274,39 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
               roles.map((role, ri) => {
                 const seriesKey = `${s.key}|${role}`;
                 const color = colorOf(s.key);
+                const withMarkers = (rciScale && s.key === rciScale.key) || (overlay && s.key === overlay.scaleKey);
                 return (
                   <Line
                     key={seriesKey}
                     dataKey={seriesKey}
-                    name={multiRole ? `${s.label} (${role})` : s.label}
+                    name={multiRole ? `${s.label} (${trRaterRole(role, lang)})` : s.label}
                     stroke={color}
                     strokeWidth={ri === 0 ? 2.5 : 1.8}
                     strokeDasharray={ROLE_DASHES[ri % ROLE_DASHES.length]}
-                    dot={rciScale && s.key === rciScale.key ? rciDot(seriesKey, color) : { r: 3, fill: color, strokeWidth: 0 }}
+                    dot={withMarkers ? rciDot(seriesKey, color) : { r: 3, fill: color, strokeWidth: 0 }}
                     connectNulls type="monotone" isAnimationActive={false}
                   />
                 );
               }),
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {overlay?.band && (
+        <p className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{ color: C.muted }}>
+          <span>{overlay.band.label}</span>
+          {overlay.shifts.length > 0 && <span>◆ = {t("suddenShiftLegend")}</span>}
+          {overlay.band.simulated && (
+            <span className="font-bold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
+              {t("simulatedReference")}
+            </span>
+          )}
+        </p>
+      )}
       {rciScale && <p className="text-xs mt-1" style={{ color: C.muted }}>{t("rciLegend")}</p>}
       {multiRole && (
         <p className="text-xs mt-1" style={{ color: C.muted }}>
-          {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${r}`).join(" · ")}
+          {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${trRaterRole(r, lang)}`).join(" · ")}
         </p>
       )}
     </div>
@@ -209,6 +317,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
 /// same shape as the legacy per-patient xlsx export.
 export function ScoreTable({ instrument, responses }: { instrument: InstrumentDef; responses: ResponseRecord[] }) {
   const t = useT();
+  const { lang } = useLang();
   const scored = responses.filter((r) => Object.keys(r.scores).length > 0);
   if (!scored.length) return null;
   const cols = scored
@@ -223,7 +332,7 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
             <th className="text-left pr-4 py-1" style={{ color: C.muted, fontWeight: 600 }}>{t("scaleCol")}</th>
             {cols.map(({ r, occ }) => (
               <th key={r.id} className="text-right px-2 py-1 whitespace-nowrap" style={{ color: C.muted, fontWeight: 600 }}>
-                {occ.label}{multiRole ? ` · ${r.respondentRole}` : ""}
+                {occ.label}{multiRole ? ` · ${trRaterRole(r.respondentRole, lang)}` : ""}
               </th>
             ))}
           </tr>
@@ -372,7 +481,7 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
           </div>
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
-              <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
+              <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
                 <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
                 <YAxis
@@ -391,7 +500,7 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
                 {chartable.filter(({ p }) => !hidden.has(p.id)).map(({ p }) => (
                   <Line key={p.id} dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: p.color }} connectNulls type="monotone" isAnimationActive={false} />
                 ))}
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
           <p className="text-xs mt-1" style={{ color: C.muted }}>{scale.label}{scale.range ? ` · ${scale.range.min}–${scale.range.max}` : ""}</p>

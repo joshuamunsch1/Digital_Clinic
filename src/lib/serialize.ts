@@ -1,5 +1,6 @@
 // Map database rows (JSON stored as TEXT) to the application data model.
 import type {
+  CaseCharacteristics,
   Demographics,
   DipsAnswers,
   DipsRecord,
@@ -8,6 +9,7 @@ import type {
   InvitationRecord,
   Patient,
   ResponseRecord,
+  SessionLogRecord,
   SubmissionInfo,
 } from "./types";
 import { DIPS_INSTRUMENT_ID } from "./types";
@@ -50,6 +52,7 @@ interface ResponseRow {
   respondentRole: string;
   sessionNumber: number | null;
   wave: string | null;
+  conductedById: string | null;
   occurredAt: Date;
   rawAnswers: string;
   status: string;
@@ -92,6 +95,13 @@ interface DocumentRow {
   uploadedBy: { id: string; name: string } | null;
   createdAt: Date;
 }
+interface SessionLogRow {
+  id: string;
+  occurredAt: Date;
+  type: string;
+  conductedById: string | null;
+  note: string;
+}
 interface PatientRow {
   id: string;
   name: string;
@@ -99,7 +109,16 @@ interface PatientRow {
   color: string;
   status: string;
   disorderCategory: string | null;
+  code: string | null;
+  icdCode: string | null;
+  treatmentStartAt: Date | null;
+  treatmentEndAt: Date | null;
+  terminationReason: string | null;
+  caseCharacteristics: string;
+  simulated: boolean;
   therapistId: string | null;
+  archivedAt: Date | null;
+  archivedBy: string | null;
   demographics: string;
   assessmentDate: Date | null;
   diagnosisText: string | null;
@@ -108,6 +127,7 @@ interface PatientRow {
   responses: ResponseRow[];
   invitations?: InvitationRow[];
   documents?: DocumentRow[];
+  sessionLogs?: SessionLogRow[];
 }
 
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -167,6 +187,7 @@ export function responseFromRow(r: ResponseRow): ResponseRecord {
     respondentRole: r.respondentRole,
     sessionNumber: r.sessionNumber,
     wave: r.wave,
+    conductedById: r.conductedById,
     occurredAt: r.occurredAt.toISOString(),
     rawAnswers: parse<RawAnswers>(r.rawAnswers, {}),
     status: r.status,
@@ -226,6 +247,16 @@ function dipsFromResponse(r: ResponseRow): DipsRecord {
   };
 }
 
+export function sessionLogFromRow(l: SessionLogRow): SessionLogRecord {
+  return {
+    id: l.id,
+    occurredAt: l.occurredAt.toISOString(),
+    type: l.type,
+    conductedById: l.conductedById,
+    note: l.note,
+  };
+}
+
 export function patientFromRow(p: PatientRow): Patient {
   const responses = [...p.responses].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
@@ -238,15 +269,65 @@ export function patientFromRow(p: PatientRow): Patient {
     color: p.color,
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
+    code: p.code,
+    icdCode: p.icdCode,
+    treatmentStartAt: p.treatmentStartAt ? p.treatmentStartAt.toISOString() : null,
+    treatmentEndAt: p.treatmentEndAt ? p.treatmentEndAt.toISOString() : null,
+    terminationReason: p.terminationReason,
+    caseCharacteristics: parse<CaseCharacteristics>(p.caseCharacteristics, {}),
+    simulated: p.simulated,
     therapistId: p.therapistId,
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archivedBy: p.archivedBy,
     demographics: parse<Demographics>(p.demographics, {}),
     responses: responses.map(responseFromRow),
     invitations: (p.invitations ?? []).map(invitationFromRow),
     documents: [...(p.documents ?? [])]
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
       .map(documentFromRow),
+    sessionLogs: [...(p.sessionLogs ?? [])]
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .map(sessionLogFromRow),
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: dipsRow ? dipsFromResponse(dipsRow) : null,
+    diagnosis:
+      p.diagnosisText && p.diagnosisDate
+        ? { text: p.diagnosisText, date: p.diagnosisDate.toISOString(), by: p.diagnosisBy || "" }
+        : null,
+  };
+}
+
+/// Summary form for ARCHIVED patients in the clinic payload: everything the
+/// archive tree and list rows need (name, category, archive metadata,
+/// termination reason, code, simulated flag) but WITHOUT the response/
+/// invitation/session-log payloads — with a couple hundred archived reference
+/// cases those would dominate the transfer. The full dossier is fetched via
+/// GET /api/patients/[id] when an archived patient is opened.
+export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs" | "documents">): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    color: p.color,
+    status: p.status as Patient["status"],
+    disorderCategory: p.disorderCategory,
+    code: p.code,
+    icdCode: p.icdCode,
+    treatmentStartAt: p.treatmentStartAt ? p.treatmentStartAt.toISOString() : null,
+    treatmentEndAt: p.treatmentEndAt ? p.treatmentEndAt.toISOString() : null,
+    terminationReason: p.terminationReason,
+    caseCharacteristics: parse<CaseCharacteristics>(p.caseCharacteristics, {}),
+    simulated: p.simulated,
+    therapistId: p.therapistId,
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archivedBy: p.archivedBy,
+    demographics: parse<Demographics>(p.demographics, {}),
+    responses: [],
+    invitations: [],
+    documents: [],
+    sessionLogs: [],
+    assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
+    dips: null,
     diagnosis:
       p.diagnosisText && p.diagnosisDate
         ? { text: p.diagnosisText, date: p.diagnosisDate.toISOString(), by: p.diagnosisBy || "" }
@@ -265,11 +346,25 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     color: p.color,
     status: p.status as Patient["status"],
     disorderCategory: p.disorderCategory,
+    // All clinical/research fields stay hidden from administration: codes,
+    // episode labels, intake predictors, ICD — none are assignment-relevant.
+    code: null,
+    icdCode: null,
+    treatmentStartAt: null,
+    treatmentEndAt: null,
+    terminationReason: null,
+    caseCharacteristics: {},
+    simulated: p.simulated,
     therapistId: p.therapistId,
+    // archivedAt is assignment-relevant (drives list exclusion); the outcome
+    // label and who archived are clinical-ish context the admin doesn't need.
+    archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
+    archivedBy: null,
     demographics: {},
     responses: [],
     invitations: [],
     documents: [],
+    sessionLogs: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis: null,
@@ -277,12 +372,12 @@ export function patientLiteFromRow(p: PatientRow): Patient {
 }
 
 /// Role-scoped patient payload: admin gets the lite view (no clinical data),
-/// patients get their own record minus staff working documents (the document
-/// timeline is a staff surface — see docs), staff get everything.
+/// patients get their own record minus staff working artifacts (the document
+/// timeline and session-log notes are staff surfaces), staff get everything.
 export function patientForSession(p: PatientRow, role: string): Patient {
   if (role === "admin") return patientLiteFromRow(p);
   const full = patientFromRow(p);
-  return role === "patient" ? { ...full, documents: [] } : full;
+  return role === "patient" ? { ...full, documents: [], sessionLogs: [] } : full;
 }
 
 /// Standard Prisma include for loading a patient with everything the UI needs.
@@ -290,4 +385,5 @@ export const PATIENT_INCLUDE = {
   responses: { include: { scaleScores: { include: { scale: true } } } },
   invitations: true,
   documents: { include: { uploadedBy: { select: { id: true, name: true } } } },
+  sessionLogs: true,
 } as const;

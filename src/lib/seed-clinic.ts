@@ -17,8 +17,10 @@ import {
   SAMPLE_ANSWERS,
   SDQ_SERIES,
   THERAPISTS,
+  phq4SessionsFor,
   pstbSessionsFor,
 } from "./demo";
+import { exportPatientArchive } from "./archive-export";
 import { toFHIR } from "./dips/fhir";
 import { DOC_TITLES_DE, type DocType } from "./document-types";
 import { readTemplate, storeDocumentFile, wipeDocumentsDir } from "./documents";
@@ -26,6 +28,8 @@ import { loadInstrumentDefs } from "./instruments/catalog";
 import { computeScaleScores } from "./instruments/scoring";
 import { hasFullWording, isFillable, isScoreable, type InstrumentDef, type RawAnswers } from "./instruments/types";
 import { hashPassword } from "./password";
+import { formatPatientCode } from "./patient-code";
+import { SIM_COHORT_SIZE, seedSimulation } from "./simulation/seed-simulation";
 import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
 
 interface SeededInstrument {
@@ -223,6 +227,7 @@ export async function seedClinic(prisma: PrismaClient) {
   await prisma.responseInstance.deleteMany();
   await prisma.questionnaireInvitation.deleteMany();
   await prisma.patientDocument.deleteMany();
+  await prisma.sessionLog.deleteMany();
   await prisma.scale.deleteMany();
   await prisma.instrument.deleteMany();
   await prisma.patient.deleteMany();
@@ -248,6 +253,7 @@ export async function seedClinic(prisma: PrismaClient) {
 
   const instruments = await seedInstruments(prisma);
   const pstb = instruments.get(SESSION_INSTRUMENT_ID)!;
+  const phq4 = instruments.get("phq4")!;
   const dips = instruments.get(DIPS_INSTRUMENT_ID)!;
   const bdi = instruments.get("bdi_fs")!;
   const sdqSelf = instruments.get("sdq_self_11_17")!;
@@ -257,8 +263,10 @@ export async function seedClinic(prisma: PrismaClient) {
   const dikj = instruments.get("dikj")!;
   const now = Date.now();
 
+  let codeSeq = 0;
   for (const p of DEMO_PATIENTS) {
-    const sessions = pstbSessionsFor(p.levels);
+    const sessions = pstbSessionsFor(p.levels, p.seriesEnd);
+    const diagnosisDate = p.diagnosis ? new Date(p.diagnosedOn ?? "2026-03-10T09:00:00.000Z") : null;
     await prisma.patient.create({
       data: {
         id: p.id,
@@ -268,14 +276,37 @@ export async function seedClinic(prisma: PrismaClient) {
         color: p.color,
         status: p.status,
         disorderCategory: p.disorderCategory,
+        code: formatPatientCode(++codeSeq),
+        icdCode: p.icd ?? null,
+        caseCharacteristics: JSON.stringify(p.caseCharacteristics ?? {}),
         therapistId: p.therapistId,
         demographics: JSON.stringify(p.demographics),
         assessmentDate: sessions.length ? new Date(sessions[0].date) : null,
         diagnosisText: p.diagnosis,
-        diagnosisDate: p.diagnosis ? new Date("2026-03-10T09:00:00.000Z") : null,
-        diagnosisBy: p.diagnosis ? "Intake interview" : null,
+        diagnosisDate,
+        diagnosisBy: p.diagnosis ? "Erstgespräch" : null,
+        // Episode boundaries (§4.2): therapy starts with the diagnosis, ends at
+        // the archive timestamp; the end label is therapist-coded.
+        treatmentStartAt: diagnosisDate,
+        treatmentEndAt: p.archived ? new Date(p.archived.at) : null,
+        terminationReason: p.archived?.reason ?? null,
+        archivedAt: p.archived ? new Date(p.archived.at) : null,
+        archivedBy: p.archived ? DIRECTOR.name : null,
       },
     });
+
+    // Sessions without questionnaires / cancellations / no-shows (§4.5).
+    for (const log of p.sessionLogs ?? []) {
+      await prisma.sessionLog.create({
+        data: {
+          patientId: p.id,
+          occurredAt: new Date(now - log.daysAgo * 864e5),
+          type: log.type,
+          conductedById: p.therapistId,
+          note: log.note ?? "",
+        },
+      });
+    }
 
     for (const e of sessions) {
       await createScoredResponse(prisma, {
@@ -286,6 +317,18 @@ export async function seedClinic(prisma: PrismaClient) {
         occurredAt: new Date(e.date),
         rawAnswers: e.answers,
         note: e.note,
+      });
+    }
+
+    // Session-wise PHQ-4 symptom trajectory alongside the PSTB (same occasions).
+    for (const e of phq4SessionsFor(p.levels, p.seriesEnd)) {
+      await createScoredResponse(prisma, {
+        patientId: p.id,
+        instrument: phq4,
+        respondentRole: "self",
+        sessionNumber: e.session,
+        occurredAt: new Date(e.date),
+        rawAnswers: e.answers,
       });
     }
 
@@ -343,6 +386,29 @@ export async function seedClinic(prisma: PrismaClient) {
         },
       });
     }
+
+    // Archived demo patients also get their filesystem export so the archive
+    // folder tree is demonstrable right after db:seed. Best-effort, like the
+    // live archive action.
+    if (p.archived) {
+      const res = await exportPatientArchive(prisma, p.id);
+      if (!res.ok) console.warn(`seed: archive export failed for ${p.id}: ${res.error}`);
+    }
+  }
+
+  // Simulated reference cohort (docs/outcome-prediction.md): ~SIM_COHORT_SIZE
+  // archived labeled treatments + 10 scripted active patients, deterministic,
+  // flagged simulated. Override with SIM_COHORT_SIZE=<n> (0 skips entirely);
+  // `npm run sim:purge` removes it later without touching demo data.
+  const envSize = process.env.SIM_COHORT_SIZE;
+  const simSize = envSize !== undefined && envSize !== "" ? Number(envSize) : SIM_COHORT_SIZE;
+  let simulated: Awaited<ReturnType<typeof seedSimulation>> | null = null;
+  if (Number.isFinite(simSize) && simSize > 0) {
+    simulated = await seedSimulation(prisma, instruments, {
+      n: simSize,
+      startCodeSeq: codeSeq + 1,
+      therapistIds: THERAPISTS.map((t) => t.id),
+    });
   }
 
   await seedDocuments(prisma);
@@ -356,5 +422,7 @@ export async function seedClinic(prisma: PrismaClient) {
     responses: await prisma.responseInstance.count(),
     scaleScores: await prisma.scaleScore.count(),
     documents: await prisma.patientDocument.count(),
+    sessionLogs: await prisma.sessionLog.count(),
+    simulated,
   };
 }

@@ -1,6 +1,7 @@
 // Frontend API client — thin typed wrappers over the route handlers.
 import type { Lang } from "./i18n";
 import type {
+  CaseCharacteristics,
   ClinicData,
   Demographics,
   DipsAnswers,
@@ -8,6 +9,8 @@ import type {
   SessionUser,
 } from "./types";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
+// Type-only imports — erased at compile time, no server code in the bundle.
+import type { PredictionPayload, PredictionSummary } from "./prediction/service";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -36,6 +39,7 @@ export interface SubmitResponsePayload {
   occurredAt?: string;
   note?: string;
   invitationId?: string; // when this submission answers an in-app task
+  conductedById?: string | null;
 }
 
 export interface ImportCsvPayload {
@@ -81,6 +85,21 @@ export interface RegisterRequest {
   demographics: Demographics;
 }
 
+/// Manual registration by director/administrator (no password — the patient
+/// receives credentials later).
+export interface RegisterPatientPayload {
+  name: string;
+  email?: string;
+  demographics?: Demographics;
+}
+
+/// Result of the best-effort filesystem export performed by the archive action.
+export interface ArchiveExportInfo {
+  ok: boolean;
+  dir?: string;
+  error?: string;
+}
+
 export const api = {
   getSession: () => fetch("/api/auth").then((r) => handle<{ user: SessionUser | null }>(r)),
   login: (email: string, password: string) =>
@@ -91,7 +110,8 @@ export const api = {
 
   getClinic: () => fetch("/api/clinic").then((r) => handle<ClinicData>(r)),
   getPatient: (id: string) => fetch(`/api/patients/${id}`).then((r) => handle<{ patient: Patient }>(r)),
-  registerPatient: (name: string) => post("/api/patients", { name }).then((r) => handle<{ patient: Patient }>(r)),
+  registerPatient: (payload: RegisterPatientPayload) =>
+    post("/api/patients", payload).then((r) => handle<{ patient: Patient }>(r)),
 
   getInstruments: () => fetch("/api/instruments").then((r) => handle<{ instruments: InstrumentDef[] }>(r)),
   linkInstrumentSurvey: (id: string, limesurveySurveyId: string | null) =>
@@ -149,14 +169,42 @@ export const api = {
   deleteDocument: (documentId: string) =>
     fetch(`/api/documents/${documentId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),
 
-  saveDiagnosis: (id: string, text: string, category: string) =>
-    patch(`/api/patients/${id}`, { action: "diagnose", text, category }).then((r) => handle<{ patient: Patient }>(r)),
+  saveDiagnosis: (id: string, text: string, category: string, icdCode?: string) =>
+    patch(`/api/patients/${id}`, { action: "diagnose", text, category, icdCode }).then((r) => handle<{ patient: Patient }>(r)),
+
+  saveCaseCharacteristics: (id: string, characteristics: CaseCharacteristics) =>
+    patch(`/api/patients/${id}`, { action: "caseCharacteristics", characteristics }).then((r) =>
+      handle<{ patient: Patient }>(r),
+    ),
 
   savePatientEmail: (id: string, email: string) =>
     patch(`/api/patients/${id}`, { action: "contact", email }).then((r) => handle<{ patient: Patient }>(r)),
 
   assignTherapist: (id: string, therapistId: string | null) =>
     patch(`/api/patients/${id}`, { action: "assign", therapistId }).then((r) => handle<{ patient: Patient }>(r)),
+
+  logSession: (id: string, payload: { occurredAt?: string; type: string; conductedById?: string | null; note?: string }) =>
+    post(`/api/patients/${id}/session-log`, payload).then((r) => handle<{ patient: Patient }>(r)),
+
+  deleteSessionLog: (logId: string) =>
+    fetch(`/api/session-logs/${logId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  /// terminationReason is required — the server rejects unlabeled conclusions
+  /// (docs/outcome-prediction.md §4.2).
+  archivePatient: (id: string, terminationReason: string) =>
+    patch(`/api/patients/${id}`, { action: "archive", terminationReason }).then((r) =>
+      handle<{ patient: Patient; archiveExport?: ArchiveExportInfo }>(r),
+    ),
+
+  unarchivePatient: (id: string) =>
+    patch(`/api/patients/${id}`, { action: "unarchive" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  /// Therapist-facing outcome prediction (staff-only; 403 for patients/admin).
+  getPrediction: (id: string) =>
+    fetch(`/api/patients/${id}/prediction`).then((r) => handle<{ prediction: PredictionPayload }>(r)),
+
+  getPredictionSummaries: () =>
+    fetch("/api/predictions/summary").then((r) => handle<{ summaries: Record<string, PredictionSummary> }>(r)),
 
   resetDemo: () => post("/api/seed").then((r) => handle<{ ok: boolean }>(r)),
 };

@@ -1,9 +1,11 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { trCategory } from "@/lib/i18n";
+import { T, tr, trCategory } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
-import type { ClinicData, Patient, SessionUser, Therapist } from "@/lib/types";
+import { api, type RegisterPatientPayload } from "@/lib/api-client";
+import type { PredictionSummary } from "@/lib/prediction/service";
+import type { ClinicData, Demographics, Patient, SessionUser, Therapist } from "@/lib/types";
 import {
   DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
@@ -12,9 +14,23 @@ import {
   latestSessionScore,
   responsesFor,
 } from "@/lib/types";
-import { Card, MiniTrend, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow, inputStyle } from "./ui";
+import { Card, Field, MiniTrend, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { GlobalChart } from "./charts";
+import { archivedPatientsFor } from "./ArchiveView";
+import { EarlyChangeBadge } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
+
+/// Small "SIM" chip marking synthetic demo patients (Patient.simulated).
+export function SimChip({ patient }: { patient: Patient }) {
+  const t = useT();
+  if (!patient.simulated) return null;
+  return (
+    <span className="text-xs font-bold px-1.5 py-0.5 rounded" title={t("simChipTitle")}
+      style={{ background: C.amberSoft, color: C.amber, letterSpacing: 0.5 }}>
+      SIM
+    </span>
+  );
+}
 
 export function CategoryChip({ category }: { category: string | null }) {
   const { lang } = useLang();
@@ -28,11 +44,12 @@ export function CategoryChip({ category }: { category: string | null }) {
 
 /// One patient row: assignment controls for director/admin; clinical score +
 /// alert marker only for clinical roles (never for admin).
-function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
+function PatientRow({ p, user, therapists, alertCount, summary, onOpen, onAssign }: {
   p: Patient;
   user: SessionUser;
   therapists: Therapist[];
   alertCount: number;
+  summary?: PredictionSummary;
   onOpen?: (id: string) => void;
   onAssign?: (id: string, therapistId: string | null) => void;
 }) {
@@ -46,11 +63,16 @@ function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
     <>
       <span className="rounded-full shrink-0" style={{ width: 11, height: 11, background: p.color }} />
       <span className="font-semibold text-sm" style={{ color: C.ink, minWidth: 130 }}>{p.name}</span>
+      <SimChip patient={p} />
       <StatusBadge status={p.status} />
       <CategoryChip category={p.disorderCategory} />
       {alertCount > 0 && (
         <span className="text-xs font-bold" style={{ color: C.danger }} title={t("clinicalAlert")}>⚠</span>
       )}
+      {!isAdmin && summary?.onTrack === "not_on_track" && (
+        <span className="text-xs font-bold" style={{ color: C.amber }} title={t("notOnTrack")}>⚑</span>
+      )}
+      {!isAdmin && summary && <EarlyChangeBadge value={summary.earlyChange} compact />}
       {canAssign ? (
         <select
           style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "4px 8px", fontSize: 12 }}
@@ -82,9 +104,10 @@ function PatientRow({ p, user, therapists, alertCount, onOpen, onAssign }: {
 
 /// Director's all-scores matrix: latest primary-scale value per instrument and
 /// patient — the "everything at a glance" replacement for the old single index.
-function ScoresMatrix({ patients, data, onOpenPatient }: {
+function ScoresMatrix({ patients, data, summaries, onOpenPatient }: {
   patients: Patient[];
   data: ClinicData;
+  summaries: Record<string, PredictionSummary>;
   onOpenPatient: (id: string) => void;
 }) {
   const t = useT();
@@ -119,6 +142,11 @@ function ScoresMatrix({ patients, data, onOpenPatient }: {
                 <td className="pr-4 py-2 whitespace-nowrap">
                   <span className="inline-flex items-center gap-2 font-semibold" style={{ color: C.ink }}>
                     <span className="rounded-full" style={{ width: 9, height: 9, background: p.color }} />{p.name}
+                    <SimChip patient={p} />
+                    {summaries[p.id]?.onTrack === "not_on_track" && (
+                      <span className="text-xs font-bold" style={{ color: C.amber }} title={t("notOnTrack")}>⚑</span>
+                    )}
+                    {summaries[p.id] && <EarlyChangeBadge value={summaries[p.id].earlyChange} compact />}
                   </span>
                 </td>
                 {columns.map(({ inst, primary }) => {
@@ -148,18 +176,105 @@ function ScoresMatrix({ patients, data, onOpenPatient }: {
   );
 }
 
-export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient, onOpenMonitoring }: {
+/// Manual registration by director/administrator: the name is enough, but
+/// e-mail and personal details can be recorded right away (self-registration
+/// remains the normal path; the patient receives login credentials later).
+function RegisterPatientCard({ onRegister }: { onRegister: (payload: RegisterPatientPayload) => Promise<void> }) {
+  const t = useT();
+  const { lang } = useLang();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [details, setDetails] = useState(false);
+  const [demo, setDemo] = useState<Demographics>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const setD = (k: keyof Demographics, v: string) => setDemo((prev) => ({ ...prev, [k]: v }));
+
+  const errorText = (m: string) =>
+    m === "email_taken" ? t("emailTaken")
+    : m === "invalid_email" ? t("invalidEmail")
+    : m === "network_restricted" ? t("networkRestricted")
+    : m;
+
+  const submit = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const demographics = Object.fromEntries(Object.entries(demo).filter(([, v]) => v !== "" && v != null));
+      await onRegister({ name: name.trim(), email: email.trim() || undefined, demographics });
+      setName(""); setEmail(""); setDemo({});
+      setMsg({ ok: true, text: t("patientRegistered") });
+    } catch (e) {
+      setMsg({ ok: false, text: errorText((e as Error).message) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <SectionTitle sub={t("registerPatientSub")}>{t("registerPatientTitle")}</SectionTitle>
+      <div className="flex gap-2">
+        <input style={inputStyle} placeholder={t("fullName")} value={name} onChange={(e) => setName(e.target.value)} />
+        <PrimaryButton small disabled={busy || !name.trim()} onClick={submit}>{t("register")}</PrimaryButton>
+      </div>
+      <button type="button" onClick={() => setDetails(!details)} className="text-xs font-semibold mt-3"
+        style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+        {details ? "▴" : "▸"} {t("moreDetails")}
+      </button>
+      {details && (
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="col-span-2">
+            <Field label={t("email")}>
+              <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+          </div>
+          <Field label={tr(T.age, lang)}>
+            <input style={inputStyle} inputMode="numeric" value={String(demo.age ?? "")} onChange={(e) => setD("age", e.target.value)} />
+          </Field>
+          <Field label={tr(T.sex, lang)}>
+            <select style={inputStyle} value={demo.sex ?? ""} onChange={(e) => setD("sex", e.target.value)}>
+              <option value="">{tr(T.select, lang)}</option>
+              {T.sexOpts.map((o) => { const v = tr(o, "en"); return <option key={v} value={v}>{tr(o, lang)}</option>; })}
+            </select>
+          </Field>
+          <Field label={tr(T.nationality, lang)}>
+            <input style={inputStyle} value={demo.nationality ?? ""} onChange={(e) => setD("nationality", e.target.value)} />
+          </Field>
+          <Field label={tr(T.city, lang)}>
+            <input style={inputStyle} value={demo.city ?? ""} onChange={(e) => setD("city", e.target.value)} />
+          </Field>
+          <Field label={tr(T.occupation, lang)}>
+            <input style={inputStyle} value={demo.occupation ?? ""} onChange={(e) => setD("occupation", e.target.value)} />
+          </Field>
+          <Field label={tr(T.living, lang)}>
+            <select style={inputStyle} value={demo.living ?? ""} onChange={(e) => setD("living", e.target.value)}>
+              <option value="">{tr(T.select, lang)}</option>
+              {T.livingOpts.map((o) => { const v = tr(o, "en"); return <option key={v} value={v}>{tr(o, lang)}</option>; })}
+            </select>
+          </Field>
+        </div>
+      )}
+      {msg && <p className="text-xs mt-3" style={{ color: msg.ok ? C.spruce : C.danger }}>{msg.text}</p>}
+    </Card>
+  );
+}
+
+export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient, onOpenMonitoring, onOpenArchive }: {
   data: ClinicData; user: SessionUser;
   onOpenPatient: (id: string) => void;
   onAssign: (id: string, therapistId: string | null) => void;
-  onRegisterPatient: (name: string) => void;
+  onRegisterPatient: (payload: RegisterPatientPayload) => Promise<void>;
   onOpenMonitoring?: () => void;
+  onOpenArchive: () => void;
 }) {
   const t = useT();
   const isDirector = user.role === "director";
   const isAdmin = user.role === "admin";
   const clinicWide = isDirector || isAdmin;
-  const patients = clinicWide ? data.patients : data.patients.filter((p) => p.therapistId === user.id);
+  // Archived (concluded) patients live in the archive view, not the dashboard.
+  const patients = (clinicWide ? data.patients : data.patients.filter((p) => p.therapistId === user.id))
+    .filter((p) => p.status !== "archived");
 
   const unassigned = patients.filter((p) => !p.therapistId);
   const assignedIntake = patients.filter((p) => p.therapistId && p.status !== "therapy");
@@ -172,8 +287,26 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
   const avgProgress = withScore.length ? fmtScore(withScore.reduce((s, v) => s + v, 0) / withScore.length) : "—";
   const alertsOf = (p: Patient) => (isAdmin ? 0 : activeAlerts(p, data.instruments).length);
 
-  const [newName, setNewName] = useState("");
   const { lang } = useLang();
+  const archivedCount = isAdmin ? 0 : archivedPatientsFor(data.patients, user).length;
+
+  // Per-patient prediction badges (early change / not-on-track / dropout risk)
+  // in ONE request — therapist/director only, best-effort (badges just stay
+  // hidden when the request fails, e.g. off-network).
+  const [summaries, setSummaries] = useState<Record<string, PredictionSummary>>({});
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    api
+      .getPredictionSummaries()
+      .then((r) => {
+        if (!cancelled) setSummaries(r.summaries);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, data.patients.length]);
 
   const section = (title: string, list: Patient[], emptyText: string, extra?: React.ReactNode) => (
     <Card className="p-5 mb-5">
@@ -184,7 +317,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
       <div className="flex flex-col gap-2">
         {list.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{emptyText}</p>}
         {list.map((p) => (
-          <PatientRow key={p.id} p={p} user={user} therapists={data.therapists} alertCount={alertsOf(p)} onOpen={isAdmin ? undefined : onOpenPatient} onAssign={clinicWide ? onAssign : undefined} />
+          <PatientRow key={p.id} p={p} user={user} therapists={data.therapists} alertCount={alertsOf(p)} summary={summaries[p.id]} onOpen={isAdmin ? undefined : onOpenPatient} onAssign={clinicWide ? onAssign : undefined} />
         ))}
       </div>
     </Card>
@@ -242,7 +375,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         </Card>
       )}
 
-      {!isAdmin && <ScoresMatrix patients={patients} data={data} onOpenPatient={onOpenPatient} />}
+      {!isAdmin && <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />}
 
       {section(
         t("sectionInTherapy"),
@@ -276,7 +409,7 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
             <SectionTitle sub={t("caseloadSub")}>{t("therapistsTitle")}</SectionTitle>
             <div className="flex flex-col gap-2">
               {data.therapists.map((th) => {
-                const n = data.patients.filter((p) => p.therapistId === th.id).length;
+                const n = data.patients.filter((p) => p.therapistId === th.id && p.status !== "archived").length;
                 return (
                   <div key={th.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
                     <div><p className="text-sm font-semibold" style={{ color: C.ink }}>{th.name}</p><p className="text-xs" style={{ color: C.muted }}>{th.title}</p></div>
@@ -286,13 +419,38 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
               })}
             </div>
           </Card>
-          <Card className="p-5">
-            <SectionTitle sub={t("registerPatientSub")}>{t("registerPatientTitle")}</SectionTitle>
-            <div className="flex gap-2">
-              <input style={inputStyle} placeholder={t("fullName")} value={newName} onChange={(e) => setNewName(e.target.value)} />
-              <PrimaryButton small disabled={!newName.trim()} onClick={() => { onRegisterPatient(newName.trim()); setNewName(""); }}>{t("register")}</PrimaryButton>
-            </div>
-          </Card>
+          <RegisterPatientCard onRegister={onRegisterPatient} />
+        </div>
+      )}
+
+      {/* Director-only research export (docs/outcome-prediction.md §5) — the
+          handover point to R/lme4/brms and research cooperations. Plain <a>
+          downloads; the route enforces director + network gating server-side. */}
+      {isDirector && (
+        <Card className="p-5 mb-5">
+          <SectionTitle sub={t("exportSub")}>{t("exportTitle")}</SectionTitle>
+          <div className="flex items-center gap-3 flex-wrap">
+            <a href="/api/export/research?level=scores" className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
+              ⬇ {t("exportScores")}
+            </a>
+            <a href="/api/export/research?level=items" className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
+              ⬇ {t("exportItems")}
+            </a>
+            <span className="text-xs" style={{ color: C.muted }}>{t("exportSimNote")}</span>
+          </div>
+        </Card>
+      )}
+
+      {/* Low-priority entry point to the archive of concluded treatments —
+          deliberately at the very bottom of the page. Not shown to admin. */}
+      {!isAdmin && (
+        <div className="text-center pt-2 pb-6">
+          <button type="button" onClick={onOpenArchive} className="text-xs font-semibold"
+            style={{ color: C.muted, background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}>
+            {t("archiveLink", { n: archivedCount })}
+          </button>
         </div>
       )}
     </div>

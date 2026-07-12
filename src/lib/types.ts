@@ -3,8 +3,50 @@ import type { Lang } from "./i18n";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
 export type Role = "patient" | "therapist" | "director" | "admin";
-export type PatientStatus = "assessment" | "interview" | "therapy";
+export type PatientStatus = "assessment" | "interview" | "therapy" | "archived";
 export type SubmissionStatus = "sent" | "local" | "sending";
+
+/// Coded treatment-end labels recorded when a patient is archived
+/// (docs/outcome-prediction.md §4.2). "dropout" is therapist judgment — the
+/// concluding clinician picks the code, there is no automatic session-count rule
+/// (clinic decision on §6.2).
+export const TERMINATION_REASONS = ["completed", "dropout", "mutual", "transfer", "other"] as const;
+export type TerminationReason = (typeof TERMINATION_REASONS)[number];
+
+/// Coded intake predictors (docs/outcome-prediction.md §4.3 — the classic ETR
+/// set). Coded fields only, never free text; stored as JSON on
+/// Patient.caseCharacteristics.
+export const PROBLEM_DURATIONS = ["lt6m", "m6to24", "gt24m"] as const;
+export type ProblemDuration = (typeof PROBLEM_DURATIONS)[number];
+export const EMPLOYMENT_STATUSES = ["employed", "in_training", "unemployed", "retired", "other"] as const;
+export type EmploymentStatus = (typeof EMPLOYMENT_STATUSES)[number];
+
+export interface CaseCharacteristics {
+  /// Chronicity of the presenting problem (ordinal: <6 months / 6–24 / >24).
+  problemDuration?: ProblemDuration;
+  priorPsychotherapy?: boolean;
+  psychotropicMedication?: boolean;
+  employment?: EmploymentStatus;
+  /// Patient-rated treatment expectation, integer 0–10.
+  treatmentExpectation?: number;
+}
+
+/// Sessions without a questionnaire (docs/outcome-prediction.md §4.5):
+/// held-but-unmeasured, cancellations, no-shows. Measured sessions live in
+/// ResponseInstance — dose–response analyses join both.
+export const SESSION_LOG_TYPES = ["held", "cancelled", "no_show"] as const;
+export type SessionLogType = (typeof SESSION_LOG_TYPES)[number];
+
+export interface SessionLogRecord {
+  id: string;
+  occurredAt: string;
+  type: string;
+  conductedById: string | null;
+  note: string;
+}
+
+/// Who can fill out an instrument — shared by the clinician entry forms.
+export const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"] as const;
 
 export const DISORDER_CATEGORIES = [
   "anxiety",
@@ -39,6 +81,8 @@ export interface ResponseRecord {
   respondentRole: string;
   sessionNumber: number | null;
   wave: string | null;
+  /// Staff member who conducted/recorded this occasion, if any (see schema.prisma).
+  conductedById: string | null;
   occurredAt: string;
   rawAnswers: RawAnswers;
   status: string;
@@ -128,10 +172,24 @@ export interface Patient {
   status: PatientStatus;
   disorderCategory: string | null;
   therapistId: string | null;
+  /// Research pseudonym ("A00120"-style) — used in exports instead of the name.
+  code: string | null;
+  icdCode: string | null;
+  /// Treatment episode boundaries + coded end label (docs/outcome-prediction.md §4.2).
+  treatmentStartAt: string | null;
+  treatmentEndAt: string | null;
+  terminationReason: string | null;
+  caseCharacteristics: CaseCharacteristics;
+  /// Synthetic patient from src/lib/simulation/ (stand-in reference sample).
+  simulated: boolean;
+  /// Set when the treatment was concluded (status === "archived").
+  archivedAt: string | null;
+  archivedBy: string | null;
   demographics: Demographics;
   responses: ResponseRecord[];
   invitations: InvitationRecord[];
   documents: DocumentRecord[];
+  sessionLogs: SessionLogRecord[];
   assessment: { date: string; type: string } | null;
   /// Convenience view of the DIPS intake response (if any) for the existing
   /// DIPS summary/FHIR UI. Derived from responses, not separately stored.

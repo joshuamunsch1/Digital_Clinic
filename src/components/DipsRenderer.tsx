@@ -121,16 +121,16 @@ export function DipsItem({ item, m, set, lang }: { item: Item; m: ModuleAnswers;
   if (item.type === "textarea")
     return <div>{q}<textarea style={{ ...inputStyle, resize: "vertical", marginTop: 8 }} rows={2} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} placeholder={tr(T.optional, lang)} /></div>;
   if (item.type === "date")
-    return <div>{q}<input style={{ ...inputStyle, maxWidth: 220, marginTop: 8 }} placeholder="MM/YYYY" value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} /></div>;
+    return <div>{q}<input style={{ ...inputStyle, maxWidth: 220, marginTop: 8 }} placeholder={tr(T.monthYearPlaceholder, lang)} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} /></div>;
   if (item.type === "monthyear_range")
     return (
       <div>{q}
         <div className="flex flex-wrap gap-3 mt-2">
           <label className="text-xs" style={{ color: C.muted }}>{tr(T.from, lang)}
-            <input style={{ ...inputStyle, maxWidth: 160, marginTop: 4 }} placeholder="MM/YYYY" value={(m[`${item.id}_from`] as string) || ""} onChange={(e) => set(`${item.id}_from`, e.target.value)} />
+            <input style={{ ...inputStyle, maxWidth: 160, marginTop: 4 }} placeholder={tr(T.monthYearPlaceholder, lang)} value={(m[`${item.id}_from`] as string) || ""} onChange={(e) => set(`${item.id}_from`, e.target.value)} />
           </label>
           <label className="text-xs" style={{ color: C.muted }}>{tr(T.to, lang)}
-            <input style={{ ...inputStyle, maxWidth: 160, marginTop: 4 }} placeholder="MM/YYYY" value={(m[`${item.id}_to`] as string) || ""} onChange={(e) => set(`${item.id}_to`, e.target.value)} />
+            <input style={{ ...inputStyle, maxWidth: 160, marginTop: 4 }} placeholder={tr(T.monthYearPlaceholder, lang)} value={(m[`${item.id}_to`] as string) || ""} onChange={(e) => set(`${item.id}_to`, e.target.value)} />
           </label>
         </div>
       </div>

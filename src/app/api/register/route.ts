@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { setSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
+import { withNextPatientCode } from "@/lib/patient-code";
 import { PALETTE } from "@/lib/theme";
 import type { Demographics, SessionUser } from "@/lib/types";
 
@@ -34,16 +35,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "email_taken" }, { status: 409 });
 
   const count = await prisma.patient.count();
-  const patient = await prisma.patient.create({
-    data: {
-      name,
-      email,
-      passwordHash: hashPassword(password),
-      color: PALETTE[count % PALETTE.length],
-      status: "assessment",
-      demographics: JSON.stringify(body.demographics ?? {}),
-    },
-  });
+  const patient = await withNextPatientCode(prisma, (code) =>
+    prisma.patient.create({
+      data: {
+        name,
+        email,
+        code,
+        passwordHash: hashPassword(password),
+        color: PALETTE[count % PALETTE.length],
+        status: "assessment",
+        demographics: JSON.stringify(body.demographics ?? {}),
+      },
+    }),
+  );
 
   const user: SessionUser = { role: "patient", id: patient.id, name: patient.name };
   setSession(user);

@@ -92,7 +92,10 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
     () => instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery"),
     [instruments],
   );
-  const fillableIds = useMemo(() => new Set(patientFillable(instruments).map((i) => i.id)), [instruments]);
+  const fillableIds = useMemo(
+    () => new Set(patientFillable(instruments, patient).map((i) => i.id)),
+    [instruments, patient],
+  );
   const [instId, setInstId] = useState(candidates[0]?.id ?? "");
   const inst = candidates.find((i) => i.id === instId);
   const inAppPossible = fillableIds.has(instId);

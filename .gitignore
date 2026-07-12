@@ -8,7 +8,7 @@ build
 prisma/dev.db
 prisma/dev.db-journal
 /documents/
+archive/
 .DS_Store
 next-env.d.ts
-archive/
 tsconfig.tsbuildinfo

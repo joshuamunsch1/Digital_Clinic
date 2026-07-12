@@ -3,16 +3,23 @@
 // therapist2026), every demo patient uses patient2026 — see README.
 import { clamp } from "./format";
 import { PALETTE } from "./theme";
-import type { Demographics, DipsAnswers } from "./types";
+import type {
+  CaseCharacteristics,
+  Demographics,
+  DipsAnswers,
+  SessionLogType,
+  TerminationReason,
+} from "./types";
 import type { RawAnswers } from "./instruments/types";
 
+// Staff titles are stored data (not UI strings) — German, like the real clinic.
 export const THERAPISTS = [
-  { id: "t1", name: "Dr. Anna Keller", title: "Clinical psychologist", role: "therapist" as const, email: "anna.keller@linden-clinic.ch" },
-  { id: "t2", name: "Dr. Lukas Brunner", title: "Psychotherapist", role: "therapist" as const, email: "lukas.brunner@linden-clinic.ch" },
-  { id: "t3", name: "Dr. Sofia Ricci", title: "Clinical psychologist", role: "therapist" as const, email: "sofia.ricci@linden-clinic.ch" },
+  { id: "t1", name: "Dr. Anna Keller", title: "Klinische Psychologin", role: "therapist" as const, email: "anna.keller@linden-clinic.ch" },
+  { id: "t2", name: "Dr. Lukas Brunner", title: "Psychotherapeut", role: "therapist" as const, email: "lukas.brunner@linden-clinic.ch" },
+  { id: "t3", name: "Dr. Sofia Ricci", title: "Klinische Psychologin", role: "therapist" as const, email: "sofia.ricci@linden-clinic.ch" },
 ];
-export const DIRECTOR = { id: "d1", name: "Dr. Margrit Steiner", title: "Clinic director", role: "director" as const, email: "margrit.steiner@linden-clinic.ch" };
-export const ADMIN = { id: "a1", name: "Kurt Iseli", title: "Practice administration", role: "admin" as const, email: "kurt.iseli@linden-clinic.ch" };
+export const DIRECTOR = { id: "d1", name: "Dr. Margrit Steiner", title: "Klinikleitung", role: "director" as const, email: "margrit.steiner@linden-clinic.ch" };
+export const ADMIN = { id: "a1", name: "Kurt Iseli", title: "Praxisadministration", role: "admin" as const, email: "kurt.iseli@linden-clinic.ch" };
 
 export const DEMO_PASSWORDS = {
   director: "director2026",
@@ -34,9 +41,10 @@ export interface DemoSession {
 
 /// Deterministic per-session PSTB answers around a wellbeing level (0-10 →
 /// scale mean −3..+3). Reverse-scored items are stored "unrecoded" (raw), the
-/// scoring engine flips them, matching the legacy data layout.
-export function pstbSessionsFor(levels: number[]): DemoSession[] {
-  const base = new Date("2026-06-08").getTime();
+/// scoring engine flips them, matching the legacy data layout. endIso is the
+/// date of the LAST session (archived demo patients end in earlier years).
+export function pstbSessionsFor(levels: number[], endIso = "2026-06-08"): DemoSession[] {
+  const base = new Date(endIso).getTime();
   const n = levels.length;
   return levels.map((v, i) => {
     const target = v * 0.6 - 3; // 0→−3, 10→+3
@@ -46,6 +54,30 @@ export function pstbSessionsFor(levels: number[]): DemoSession[] {
       const wobble = (((i * 3 + item * 5) % 5) - 2) * 0.5;
       const val = clamp(Math.round(target + wobble), -3, 3);
       answers[id] = PSTB_REVERSED.has(id) ? -val : val; // raw (unrecoded) storage
+    }
+    return {
+      session: i, // 0 = pre-therapy baseline
+      date: new Date(base - (n - 1 - i) * 7 * 864e5).toISOString(),
+      answers,
+      note: "",
+    };
+  });
+}
+
+// --- PHQ-4 session series (4 items, 0-3, symptom screener) ----------------------
+
+/// Deterministic per-session PHQ-4 answers: symptom load falls as the wellbeing
+/// level rises (level 0-10 → total ≈ 12..0), so the symptom trajectory mirrors
+/// the PSTB process trajectory. Same dates/session numbers as the PSTB series.
+export function phq4SessionsFor(levels: number[], endIso = "2026-06-08"): DemoSession[] {
+  const base = new Date(endIso).getTime();
+  const n = levels.length;
+  return levels.map((v, i) => {
+    const targetItem = (10 - v) * 0.3; // per-item 0..3, inverse of wellbeing level
+    const answers: RawAnswers = {};
+    for (let item = 1; item <= 4; item++) {
+      const wobble = (((i * 7 + item * 3) % 3) - 1) * 0.4;
+      answers[`PHQ${item}`] = clamp(Math.round(targetItem + wobble), 0, 3);
     }
     return {
       session: i, // 0 = pre-therapy baseline
@@ -148,11 +180,24 @@ export interface DemoPatient {
   email: string;
   color: string;
   therapistId: string | null;
-  status: "assessment" | "interview" | "therapy";
+  status: "assessment" | "interview" | "therapy" | "archived";
   demographics: Demographics;
   levels: number[];
   diagnosis: string | null;
   disorderCategory: string | null;
+  /// ICD-10 code next to the coarse category (docs/outcome-prediction.md §4.7).
+  icd?: string;
+  /// Coded intake predictors (§4.3) — the classic ETR set.
+  caseCharacteristics?: CaseCharacteristics;
+  /// Sessions without questionnaires / cancellations / no-shows (§4.5).
+  sessionLogs?: { daysAgo: number; type: SessionLogType; note?: string }[];
+  /// Concluded treatments (populate the archive view + filesystem export).
+  /// reason is the coded termination label — therapist judgment (§6.2).
+  archived?: { at: string; reason: TerminationReason };
+  /// Date of the last PSTB/PHQ-4 session (defaults to the 2026 demo window).
+  seriesEnd?: string;
+  /// Diagnosis date override (defaults to the 2026 demo constant).
+  diagnosedOn?: string;
   hasSampleDips?: boolean;
   hasBdiSeries?: boolean;
   hasBdiAlertSeries?: boolean;
@@ -162,13 +207,23 @@ export interface DemoPatient {
   hasSdqSeries?: boolean;
 }
 
+// Free-text demo content (occupations, siblings, diagnoses) is German — the
+// clinic's working language. sex/living keep the canonical English tokens the
+// registration forms store; the UI translates those on display (trDemoValue).
 export const DEMO_PATIENTS: DemoPatient[] = [
-  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Swiss", city: "Bern", occupation: "Primary school teacher", living: "With partner", siblings: "1 — older brother" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panic disorder (DSM-5) — placeholder", disorderCategory: "anxiety", hasSampleDips: true, hasBdiSeries: true },
-  { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Swiss", city: "Thun", occupation: "Logistics manager", living: "With family", siblings: "2 — middle child" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Adjustment disorder with anxiety (placeholder)", disorderCategory: "anxiety" },
-  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Turkish", city: "Biel/Bienne", occupation: "Nursing student", living: "Shared flat", siblings: "3 — youngest" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalised anxiety disorder (placeholder)", disorderCategory: "anxiety" },
-  { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Swiss", city: "Fribourg", occupation: "Software engineer", living: "Alone", siblings: "None" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / exhaustion syndrome (placeholder)", disorderCategory: "burnout", hasFggSeries: true },
-  { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "French", city: "Bern", occupation: "Pharmacist", living: "With partner", siblings: "1 — younger sister" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; recurrent depressive episodes (placeholder)", disorderCategory: "eating_disorder", hasEdeq8Series: true, hasBdiAlertSeries: true },
-  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Swiss", city: "Köniz", occupation: "Secondary school student", living: "With family", siblings: "2 — oldest" }, levels: [], diagnosis: null, disorderCategory: null, hasSdqSeries: true, hasDikjSeries: true },
-  { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Swiss", city: "Burgdorf", occupation: "Chef", living: "Alone", siblings: "1 — twin brother" }, levels: [], diagnosis: null, disorderCategory: null },
+  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], hasSampleDips: true, hasBdiSeries: true },
+  { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 } },
+  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 } },
+  { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Schweiz", city: "Fribourg", occupation: "Software-Entwickler", living: "Alone", siblings: "Keine" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / Erschöpfungssyndrom (Platzhalter)", disorderCategory: "burnout", icd: "Z73.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 5 } },
+  { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "Frankreich", city: "Bern", occupation: "Apothekerin", living: "With partner", siblings: "1 — jüngere Schwester" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; rezidivierende depressive Episoden (Platzhalter)", disorderCategory: "eating_disorder", icd: "F50.2", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 4 }, hasEdeq8Series: true, hasBdiAlertSeries: true },
+  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, hasSdqSeries: true, hasDikjSeries: true },
+  { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null },
   { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null },
+
+  // Concluded treatments (archive demo): 2 disorder categories × 2 years,
+  // spread across therapists so the therapist-scoped archive is demoable.
+  { id: "p9", name: "Lea Schmid", email: "lea.schmid@example.org", color: PALETTE[8], therapistId: "t1", status: "archived", demographics: { age: 33, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Grafikerin", living: "Alone", siblings: "1 — ältere Schwester" }, levels: [2.5, 3, 4, 5, 5.5, 6.5, 7.5], diagnosis: "Mittelgradige depressive Episode (Platzhalter)", disorderCategory: "depression", icd: "F32.1", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: true, employment: "employed", treatmentExpectation: 7 }, archived: { at: "2024-11-15T10:00:00.000Z", reason: "completed" }, seriesEnd: "2024-11-08", diagnosedOn: "2024-08-20" },
+  { id: "p10", name: "Marc Dubois", email: "marc.dubois@example.org", color: PALETTE[9], therapistId: "t2", status: "archived", demographics: { age: 38, sex: "Male", nationality: "Schweiz", city: "Biel/Bienne", occupation: "Versicherungsberater", living: "With family", siblings: "Keine" }, levels: [3.5, 3, 3.5, 3], diagnosis: "Soziale Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F40.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "unemployed", treatmentExpectation: 3 }, archived: { at: "2024-05-21T10:00:00.000Z", reason: "dropout" }, seriesEnd: "2024-05-13", diagnosedOn: "2024-04-01" },
+  { id: "p11", name: "Rahel Steck", email: "rahel.steck@example.org", color: PALETTE[0], therapistId: "t1", status: "archived", demographics: { age: 27, sex: "Female", nationality: "Schweiz", city: "Ostermundigen", occupation: "Kauffrau", living: "With partner", siblings: "2 — mittleres Kind" }, levels: [3, 3.5, 4.5, 5, 6, 6.5, 7], diagnosis: "Panikstörung mit Agoraphobie (Platzhalter)", disorderCategory: "anxiety", icd: "F40.01", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, archived: { at: "2025-03-28T10:00:00.000Z", reason: "completed" }, seriesEnd: "2025-03-21", diagnosedOn: "2025-01-10" },
+  { id: "p12", name: "Nico Furrer", email: "nico.furrer@example.org", color: PALETTE[1], therapistId: "t3", status: "archived", demographics: { age: 45, sex: "Male", nationality: "Schweiz", city: "Münsingen", occupation: "Elektriker", living: "With family", siblings: "3 — ältester" }, levels: [2, 3, 4, 5, 6, 6.5], diagnosis: "Rezidivierende depressive Störung, remittiert (Platzhalter)", disorderCategory: "depression", icd: "F33.4", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 6 }, archived: { at: "2025-09-05T10:00:00.000Z", reason: "mutual" }, seriesEnd: "2025-08-29", diagnosedOn: "2025-06-15" },
 ];

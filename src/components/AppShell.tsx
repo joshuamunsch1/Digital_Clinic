@@ -11,14 +11,18 @@ import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { MonitoringView } from "./MonitoringView";
 import { PatientDetail } from "./PatientDetail";
+import { ArchiveView } from "./ArchiveView";
 import { LangProvider, LangSwitcher, useT } from "./LangContext";
+import type { RegisterPatientPayload } from "@/lib/api-client";
 
 type View =
   | { name: "home" }
   | { name: "form-assessment" }
   | { name: "form-instrument"; instrumentId: string; invitationId?: string }
-  | { name: "patient-detail"; patientId: string; from?: "monitoring" }
-  | { name: "monitoring" };
+  | { name: "archive" }
+  | { name: "monitoring" }
+  // from makes Back return to the originating secondary view instead of the dashboard.
+  | { name: "patient-detail"; patientId: string; from?: "monitoring" | "archive" };
 
 export function AppShell() {
   return (
@@ -42,7 +46,21 @@ function Shell() {
   const refresh = useCallback(async () => {
     try {
       const d = await api.getClinic();
-      setData(d);
+      // Archived patients arrive as summary rows (no responses) to keep the
+      // clinic payload small; keep any full dossier we already fetched instead
+      // of clobbering it with the summary.
+      setData((prev) => {
+        if (!prev) return d;
+        return {
+          ...d,
+          patients: d.patients.map((np) => {
+            const old = prev.patients.find((x) => x.id === np.id);
+            return np.status === "archived" && np.responses.length === 0 && old && old.responses.length > 0
+              ? { ...np, responses: old.responses, invitations: old.invitations, sessionLogs: old.sessionLogs, dips: old.dips }
+              : np;
+          }),
+        };
+      });
       setNetworkBlocked(false);
     } catch (e) {
       setData(null);
@@ -134,12 +152,35 @@ function Shell() {
     void refresh();
   };
 
-  const saveDiagnosis = async (id: string, text: string, category: string) => {
-    await api.saveDiagnosis(id, text, category);
+  /// Archived dossiers are summary-only in the clinic payload — load the full
+  /// record once when one is opened.
+  const openedDetailRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (view.name !== "patient-detail") {
+      openedDetailRef.current = null;
+      return;
+    }
+    if (openedDetailRef.current === view.patientId) return;
+    openedDetailRef.current = view.patientId;
+    const p = data?.patients.find((x) => x.id === view.patientId);
+    if (!p || p.status !== "archived" || p.responses.length > 0) return;
+    void api
+      .getPatient(view.patientId)
+      .then((r) =>
+        setData((prev) =>
+          prev ? { ...prev, patients: prev.patients.map((x) => (x.id === r.patient.id ? r.patient : x)) } : prev,
+        ),
+      )
+      .catch(() => {});
+  }, [view, data]);
+
+  const saveDiagnosis = async (id: string, text: string, category: string, icdCode?: string) => {
+    await api.saveDiagnosis(id, text, category, icdCode);
     await refresh();
   };
   const assignTherapist = async (id: string, therapistId: string | null) => { await api.assignTherapist(id, therapistId); await refresh(); };
-  const registerPatient = async (name: string) => { await api.registerPatient(name); await refresh(); };
+  // Errors propagate to the Dashboard registration card (e.g. email_taken).
+  const registerPatient = async (payload: RegisterPatientPayload) => { await api.registerPatient(payload); await refresh(); };
   const resendDips = async (id: string) => { await api.resendDips(id); await refresh(); };
   const resetDemo = async () => {
     await api.resetDemo();
@@ -228,16 +269,28 @@ function Shell() {
 
         {isStaff && data && view.name === "home" && (
           <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient}
-            onOpenMonitoring={user.role === "therapist" || user.role === "director" ? () => setView({ name: "monitoring" }) : undefined} />
+            onOpenMonitoring={user.role === "therapist" || user.role === "director" ? () => setView({ name: "monitoring" }) : undefined}
+            onOpenArchive={() => setView({ name: "archive" })} />
         )}
         {(user.role === "therapist" || user.role === "director") && data && view.name === "monitoring" && (
           <MonitoringView data={data} user={user} onBack={() => setView({ name: "home" })}
             onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "monitoring" })}
             onPatientUpdated={patientUpdated} onRefreshAll={() => void refresh()} />
         )}
+        {(user.role === "therapist" || user.role === "director") && data && view.name === "archive" && (
+          <ArchiveView data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "archive" })} onBack={() => setView({ name: "home" })} />
+        )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
           <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments}
-            onBack={() => setView(view.name === "patient-detail" && view.from === "monitoring" ? { name: "monitoring" } : { name: "home" })}
+            onBack={() =>
+              setView(
+                view.name === "patient-detail" && view.from === "monitoring"
+                  ? { name: "monitoring" }
+                  : view.name === "patient-detail" && view.from === "archive"
+                    ? { name: "archive" }
+                    : { name: "home" },
+              )
+            }
             onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
         )}
       </main>

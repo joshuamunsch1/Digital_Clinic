@@ -37,9 +37,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     occurredAt?: string;
     note?: string;
     invitationId?: string; // set when this submission answers an in-app task
+    conductedById?: string | null;
   };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  // Who conducted/recorded this occasion (mirrors the legacy PSTB "Therapeut"
+  // column). Patients can't attribute their own self-submission to an arbitrary
+  // staff member — always fall back to the patient's current assignment for
+  // them. Staff manual entry may pick a different clinician (co-therapy,
+  // substitution), defaulting to the current assignment when not specified.
+  const conductedById = s.role === "patient" ? patient.therapistId : (body.conductedById ?? patient.therapistId ?? null);
 
   const inst = await loadInstrument(body.instrumentId);
   if (!inst) return NextResponse.json({ error: "unknown instrument" }, { status: 400 });
@@ -73,6 +81,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     sessionNumber: body.sessionNumber ?? ctx.sessionNumber ?? null,
     wave: body.wave ?? ctx.wave ?? null,
     note: body.note,
+    conductedById,
     source: s.role === "patient" ? "in_app" : "manual_entry",
   });
 
