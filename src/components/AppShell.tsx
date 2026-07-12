@@ -7,6 +7,7 @@ import { GhostButton, LeafMark } from "./ui";
 import { Login, type RegisterPayload } from "./Login";
 import { PatientHome, type PatientTask } from "./PatientHome";
 import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
+import { DiagnosisView } from "./DiagnosisView";
 import { DipsForm, type DipsSubmission } from "./DipsForm";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
@@ -24,6 +25,8 @@ type View =
   | { name: "monitoring" }
   // Therapist-administered DIPS interview for one patient (staff-only).
   | { name: "dips-interview"; patientId: string }
+  // Full-window diagnostics: DIPS evaluation, proposal, recommendations, guidelines.
+  | { name: "diagnosis"; patientId: string }
   // from makes Back return to the originating secondary view instead of the dashboard.
   | { name: "patient-detail"; patientId: string; from?: "monitoring" | "archive" };
 
@@ -301,6 +304,15 @@ function Shell() {
             />
           ) : null;
         })()}
+        {(user.role === "therapist" || user.role === "director") && data && view.name === "diagnosis" && (() => {
+          const diagPatient = data.patients.find((p) => p.id === view.patientId);
+          return diagPatient ? (
+            <DiagnosisView patient={diagPatient} therapists={therapists} instruments={instruments}
+              onBack={() => setView({ name: "patient-detail", patientId: view.patientId })}
+              onSaveDiagnosis={saveDiagnosis}
+              onStartDips={(id) => setView({ name: "dips-interview", patientId: id })} />
+          ) : null;
+        })()}
         {(user.role === "therapist" || user.role === "director") && data && view.name === "monitoring" && (
           <MonitoringView data={data} user={user} onBack={() => setView({ name: "home" })}
             onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "monitoring" })}
@@ -320,7 +332,9 @@ function Shell() {
                     : { name: "home" },
               )
             }
-            onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated} />
+            onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated}
+            onStartDips={(id) => setView({ name: "dips-interview", patientId: id })}
+            onOpenDiagnosis={(id) => setView({ name: "diagnosis", patientId: id })} />
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">

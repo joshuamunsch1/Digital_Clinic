@@ -349,6 +349,43 @@ export const UI = {
     "No DIPS module fully meets the criteria — please base the diagnosis on clinical judgement."),
   openDiagnosisView: L("Diagnostik öffnen →", "Ouvrir le bilan diagnostique →", "Open diagnostics →"),
 
+  // diagnosis view (full window)
+  diagnosisViewTitle: L("Diagnostik", "Bilan diagnostique", "Diagnostics"),
+  diagnosisViewSub: L(
+    "DIPS-Auswertung, Diagnosevorschlag, empfohlene Fragebögen und Leitlinien.",
+    "Évaluation DIPS, proposition de diagnostic, questionnaires recommandés et lignes directrices.",
+    "DIPS evaluation, diagnosis proposal, recommended questionnaires and guidelines."),
+  mechanicalBanner: L(
+    "Mechanische DIPS-Auswertung — Vorschlag, keine automatische Diagnose. Schwellenwerte, Instrument- und Leitlinien-Zuordnungen sind Prototyp-Werte und müssen klinisch geprüft werden.",
+    "Évaluation DIPS mécanique — proposition, pas de diagnostic automatique. Les seuils et les correspondances d'instruments/lignes directrices sont des valeurs prototypes à vérifier cliniquement.",
+    "Mechanical DIPS evaluation — a proposal, not an automatic diagnosis. Thresholds and instrument/guideline mappings are prototype values requiring clinical review."),
+  proposalsHeading: L("Diagnosevorschläge (DIPS)", "Propositions de diagnostic (DIPS)", "Diagnosis proposals (DIPS)"),
+  notConfirmedYet: L("Noch keine bestätigte Diagnose.", "Pas encore de diagnostic confirmé.", "No confirmed diagnosis yet."),
+  criteriaHeading: L("Kriterien", "Critères", "Criteria"),
+  caveatsHeading: L("Hinweise", "Remarques", "Notes"),
+  screenedNotMet: L("Screening positiv — Kriterien nicht vollständig erfüllt", "Dépistage positif — critères incomplets", "Screened positive — criteria not fully met"),
+  proposalTag: L("Vorschlag", "Proposition", "Proposal"),
+  notEnteredNote: L("Screening negativ: {modules}", "Dépistage négatif : {modules}", "Screened negative: {modules}"),
+  dipsResultsHeading: L("DIPS-Interview", "Entretien DIPS", "DIPS interview"),
+  recommendedHeading: L("Empfohlene Fragebögen", "Questionnaires recommandés", "Recommended questionnaires"),
+  recommendedSub: L(
+    "Nach Diagnosevorschlag bzw. Störungsbild — die Zuordnung wird klinisch geprüft. Empfohlene Instrumente sind beim Versand markiert.",
+    "Selon la proposition de diagnostic ou la catégorie de trouble — correspondance à vérifier cliniquement. Les instruments recommandés sont marqués lors de l'envoi.",
+    "By diagnosis proposal or disorder category — the mapping is under clinical review. Recommended instruments are marked when sending questionnaires."),
+  inCatalogTag: L("im Katalog der Klinik", "dans le catalogue de la clinique", "in the clinic catalog"),
+  externalInstrumentsHeading: L("Weitere etablierte Instrumente (extern)", "Autres instruments établis (externes)", "Further established instruments (external)"),
+  guidelinesHeading: L("Leitlinien & Behandlungsempfehlungen", "Lignes directrices et recommandations", "Guidelines & treatment recommendations"),
+  guidelineOpen: L("Leitlinie öffnen ↗", "Ouvrir la ligne directrice ↗", "Open guideline ↗"),
+  noRecommendations: L(
+    "Keine Empfehlungen verfügbar — weder Diagnosevorschlag noch Störungsbild vorhanden.",
+    "Aucune recommandation disponible — ni proposition de diagnostic ni catégorie de trouble.",
+    "No recommendations available — neither a diagnosis proposal nor a disorder category is set."),
+  recommendedTag: L("Empfohlen", "Recommandé", "Recommended"),
+  recommendedHint: L(
+    "★ = empfohlen für Diagnose/Störungsbild dieser Patientin / dieses Patienten",
+    "★ = recommandé pour le diagnostic / la catégorie de ce patient",
+    "★ = recommended for this patient's diagnosis/category"),
+
   // document timeline (document titles themselves are German clinical content,
   // stored on the rows — see DOC_TITLES_DE in src/lib/document-types.ts)
   documentsTitle: L("Dokumente im Therapieverlauf", "Documents du parcours thérapeutique", "Therapy-course documents"),

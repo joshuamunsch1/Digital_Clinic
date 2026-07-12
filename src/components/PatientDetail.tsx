@@ -9,6 +9,7 @@ import { isScoreable } from "@/lib/instruments/types";
 import type { CaseCharacteristics, InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
 import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, EMPLOYMENT_STATUSES, PROBLEM_DURATIONS, RATER_ROLES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
+import { primaryProposal } from "@/lib/dips/diagnosis";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
 import { DipsSummary } from "./DipsSummary";
@@ -500,11 +501,13 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
   );
 }
 
-export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onResend, onPatientUpdated }: {
+export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onResend, onPatientUpdated, onStartDips, onOpenDiagnosis }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
   onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void; onResend: (id: string) => void;
   onPatientUpdated: (p: Patient) => void;
+  onStartDips: (id: string) => void;
+  onOpenDiagnosis: (id: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -512,6 +515,15 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const [dxText, setDxText] = useState("");
   const [dxCategory, setDxCategory] = useState<string>("other");
   const [dxIcd, setDxIcd] = useState("");
+  // Mechanical diagnosis proposal from the therapist-administered DIPS —
+  // pre-fills the (still editable) diagnosis form; never auto-saved.
+  const proposal = useMemo(() => (patient.dips ? primaryProposal(patient.dips.answers) : null), [patient.dips]);
+  useEffect(() => {
+    if (!proposal || patient.diagnosis) return;
+    setDxText((prev) => (prev.trim() ? prev : proposal.suggestedText));
+    setDxIcd((prev) => (prev.trim() ? prev : proposal.icdCode));
+    setDxCategory((prev) => (prev !== "other" ? prev : proposal.disorderCategory));
+  }, [proposal, patient.diagnosis]);
   const [manualEntry, setManualEntry] = useState<InstrumentDef | null>(null);
   const [busy, setBusy] = useState(false);
   // Therapist-facing outcome prediction (docs/outcome-prediction.md) — fetched
@@ -788,14 +800,31 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                 )}
               </p>
               <p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p>
+              {patient.dips && (
+                <div className="mt-2">
+                  <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>
+                </div>
+              )}
             </div>
           ) : isArchived ? (
             <p className="text-sm" style={{ color: C.muted }}>—</p>
           ) : patient.status === "assessment" ? (
             <p className="text-sm" style={{ color: C.muted }}>{t("diagnosisAfterIntake")}</p>
+          ) : !patient.dips ? (
+            // Gate: the DIPS interview is required before a diagnosis can be recorded.
+            <div>
+              <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
+              <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
+            </div>
           ) : (
             <div>
-              <p className="text-sm mb-2" style={{ color: C.muted }}>{t("diagnosisPrompt")}</p>
+              {proposal ? (
+                <p className="mb-2">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>{t("proposalChip")}</span>
+                </p>
+              ) : (
+                <p className="text-sm mb-2" style={{ color: C.muted }}>{t("noProposal")}</p>
+              )}
               <textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} placeholder={t("diagnosisPlaceholder")} value={dxText} onChange={(e) => setDxText(e.target.value)} />
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <Field label={t("disorderCategoryLabel")}>
@@ -807,7 +836,10 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                   <input style={{ ...inputStyle, width: 110 }} placeholder="F41.0" value={dxIcd} onChange={(e) => setDxIcd(e.target.value.toUpperCase())} />
                 </Field>
               </div>
-              <div className="mt-2"><PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory, dxIcd.trim() || undefined)}>{t("saveDiagnosis")}</PrimaryButton></div>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory, dxIcd.trim() || undefined)}>{t("saveDiagnosis")}</PrimaryButton>
+                <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>
+              </div>
             </div>
           )}
         </Card>

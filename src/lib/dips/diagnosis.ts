@@ -52,6 +52,8 @@ export interface CriterionCheck {
 export interface ModuleEvaluation {
   moduleId: string; // "panic" | "agora" | "social" | "phobia" | "gad" | "sep"
   diagnosis: DipsDiagnosisId;
+  /// All DIPS modules cover the anxiety spectrum.
+  disorderCategory: "anxiety";
   icdCode: string;
   label: LangNode; // trilingual diagnosis name (clinical German first)
   entered: boolean; // screening positive (module was entered)
@@ -177,6 +179,7 @@ function evalPanic(m: ModuleAnswers): ModuleEvaluation {
     diagnosis: "panic_disorder",
     icdCode: "F41.0",
     label: L("Panikstörung", "Trouble panique", "Panic disorder"),
+    disorderCategory: "anxiety",
     entered: hasPanic(m),
     met: criteria.every((c) => c.met),
     criteria,
@@ -229,6 +232,7 @@ function evalAgora(m: ModuleAnswers, panicMet: boolean): ModuleEvaluation {
     diagnosis: "agoraphobia",
     icdCode,
     label: L("Agoraphobie", "Agoraphobie", "Agoraphobia"),
+    disorderCategory: "anxiety",
     entered: mod.enter(m),
     met: criteria.every((c) => c.met),
     criteria,
@@ -281,6 +285,7 @@ function evalSocial(m: ModuleAnswers): ModuleEvaluation {
     diagnosis: "social_anxiety",
     icdCode: "F40.1",
     label: L("Soziale Angststörung (Soziale Phobie)", "Trouble d'anxiété sociale", "Social anxiety disorder"),
+    disorderCategory: "anxiety",
     entered: mod.enter(m),
     met: criteria.every((c) => c.met),
     criteria,
@@ -324,6 +329,7 @@ function evalPhobia(m: ModuleAnswers): ModuleEvaluation {
     diagnosis: "specific_phobia",
     icdCode: "F40.2",
     label: L("Spezifische Phobie", "Phobie spécifique", "Specific phobia"),
+    disorderCategory: "anxiety",
     entered: mod.enter(m),
     met: criteria.every((c) => c.met),
     criteria,
@@ -369,6 +375,7 @@ function evalGad(m: ModuleAnswers): ModuleEvaluation {
     diagnosis: "gad",
     icdCode: "F41.1",
     label: L("Generalisierte Angststörung", "Trouble d'anxiété généralisée", "Generalised anxiety disorder"),
+    disorderCategory: "anxiety",
     entered: m["1.1"] === "yes",
     met: criteria.every((c) => c.met),
     criteria,
@@ -417,6 +424,7 @@ function evalSep(m: ModuleAnswers): ModuleEvaluation {
     diagnosis: "separation_anxiety",
     icdCode: "F93.0",
     label: L("Störung mit Trennungsangst", "Trouble d'anxiété de séparation", "Separation anxiety disorder"),
+    disorderCategory: "anxiety",
     entered: mod.enter(m),
     met: criteria.every((c) => c.met),
     criteria,

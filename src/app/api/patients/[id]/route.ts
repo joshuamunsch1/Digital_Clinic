@@ -5,6 +5,7 @@ import { staffNetworkGuard } from "@/lib/network";
 import { exportPatientArchive, type ArchiveExportResult } from "@/lib/archive-export";
 import { PATIENT_INCLUDE, patientForSession } from "@/lib/serialize";
 import {
+  DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
   EMPLOYMENT_STATUSES,
   PROBLEM_DURATIONS,
@@ -114,6 +115,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const icdRaw = body.icdCode?.trim().toUpperCase() ?? "";
     if (icdRaw && !ICD_RE.test(icdRaw))
       return NextResponse.json({ error: "invalid_icd_code" }, { status: 400 });
+    // Gate: the diagnosis is derived from / justified by the DIPS interview —
+    // it must be conducted first (mirrors the UI gate in the diagnosis card).
+    const dipsDone = await prisma.responseInstance.findFirst({
+      where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID },
+      select: { id: true },
+    });
+    if (!dipsDone) return NextResponse.json({ error: "dips_required" }, { status: 409 });
     const existing = await prisma.patient.findUnique({
       where: { id: params.id },
       select: { treatmentStartAt: true },
