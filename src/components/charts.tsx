@@ -46,7 +46,8 @@ export function ChartTip({ active, payload, label }: { active?: boolean; payload
 /// the RCI markers) — overlays on a multi-scale chart would be unreadable.
 export interface ChartPrediction {
   scaleKey: string;
-  band: { points: ExpectedCoursePoint[]; label: string; simulated: boolean } | null;
+  /// color distinguishes the band source visibly (clinic = spruce, NN = blue).
+  band: { points: ExpectedCoursePoint[]; label: string; simulated: boolean; color?: string } | null;
   failureBoundary?: { session: number; value: number }[];
   etrPoints?: { session: number; expected: number }[];
   shifts: SuddenShift[];
@@ -110,10 +111,13 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     setVisible((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const visibleScalesEarly = scales.filter((s) => visible.has(s.key));
-  // Prediction overlays require the session axis and exactly the target scale.
+  // Prediction overlays require exactly the target scale to be visible. On the
+  // session axis points map to S0/S1/…; on other cadences (wave/periodic, e.g.
+  // BDI-FS) points are measurement indices attached to the patient's own
+  // chronological occasions.
+  const sessionAxis = instrument.cadenceType === "every_session";
   const overlay =
     prediction &&
-    instrument.cadenceType === "every_session" &&
     visibleScalesEarly.length === 1 &&
     visibleScalesEarly[0].key === prediction.scaleKey
       ? prediction
@@ -127,7 +131,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       if (!row) { row = { label: occ.label, order: occ.order, values: {} }; byOccasion.set(occ.key, row); }
       for (const [k, v] of Object.entries(r.scores)) row.values[`${k}|${r.respondentRole}`] = v;
     }
-    if (overlay) {
+    if (overlay && sessionAxis) {
       // Overlay values live on session occasions; sessions beyond the patient's
       // last measurement extend the axis (a look-ahead window of 8 sessions).
       const lastMeasured = Math.max(0, ...scored.filter((r) => r.sessionNumber !== null).map((r) => r.sessionNumber!));
@@ -155,11 +159,27 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
         if (e.session > horizon) continue;
         sessionRow(e.session).values.__etr = Math.round(e.expected * 100) / 100;
       }
+    } else if (overlay) {
+      // Non-session cadence: overlay points are measurement indices — attach
+      // point i to the patient's i-th chronological occasion. No look-ahead:
+      // future occasions have no x position on a date/wave axis.
+      const ordered = Array.from(byOccasion.values()).sort((a, b) => a.order - b.order);
+      for (const p of overlay.band?.points ?? []) {
+        const row = ordered[p.session];
+        if (!row) continue;
+        row.values.__band = [p.p25, p.p75];
+        row.values.__p50 = p.p50;
+      }
+      for (const b of overlay.failureBoundary ?? []) {
+        const row = ordered[b.session];
+        if (row) row.values.__boundary = b.value;
+      }
+      // ETR is session-axis only and never supplied for these instruments.
     }
     return Array.from(byOccasion.values())
       .sort((a, b) => a.order - b.order)
       .map((r) => ({ label: r.label, ...r.values }));
-  }, [scored, instrument, overlay]);
+  }, [scored, instrument, overlay, sessionAxis]);
 
   if (!scored.length)
     return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
@@ -249,13 +269,14 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
               <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
                 label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
             ))}
-            {/* Expected-course overlays render BEFORE the patient lines (paint order). */}
+            {/* Expected-course overlays render BEFORE the patient lines (paint order).
+                Band color follows the source toggle (clinic = spruce, NN = blue). */}
             {overlay?.band && (
-              <Area dataKey="__band" name={overlay.band.label} fill={C.spruce} fillOpacity={0.12}
+              <Area dataKey="__band" name={overlay.band.label} fill={overlay.band.color ?? C.spruce} fillOpacity={0.12}
                 stroke="none" activeDot={false} connectNulls={false} isAnimationActive={false} legendType="none" />
             )}
             {overlay?.band && (
-              <Line dataKey="__p50" name={t("bandMedian")} stroke={C.spruce} strokeWidth={1.2}
+              <Line dataKey="__p50" name={t("bandMedian")} stroke={overlay.band.color ?? C.spruce} strokeWidth={1.2}
                 strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
             )}
             {overlay?.failureBoundary && overlay.failureBoundary.length > 0 && (
@@ -294,7 +315,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       </div>
       {overlay?.band && (
         <p className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{ color: C.muted }}>
-          <span>{overlay.band.label}</span>
+          <span className="font-semibold" style={{ color: overlay.band.color ?? C.spruce }}>{overlay.band.label}</span>
           {overlay.shifts.length > 0 && <span>◆ = {t("suddenShiftLegend")}</span>}
           {overlay.band.simulated && (
             <span className="font-bold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
@@ -516,8 +537,8 @@ const inputSelectStyle: React.CSSProperties = {
 };
 
 /// Cross-instrument summary strip: one pill per instrument with scored data —
-/// latest primary-scale value, mini trend, and a fill bar normalized to the
-/// scale's range (green = clinically favourable direction).
+/// mini trend top-right, and the latest primary-scale value next to the fill
+/// bar it is normalized into (bar color = clinical goodness of the level).
 export function SummaryStrip({ patient, instruments }: { patient: Patient; instruments: InstrumentDef[] }) {
   const items = instruments
     .map((inst) => {
@@ -543,16 +564,18 @@ export function SummaryStrip({ patient, instruments }: { patient: Patient; instr
           title={`${inst.name} — ${primary.label}`}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold" style={{ color: C.ink }}>{inst.abbreviation}</span>
-            <span className="text-xs font-bold flex items-center gap-1" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-              {fmtScore(last)} <MiniTrend values={values} higherIsBetter={higherIsBetter} />
-            </span>
+            <MiniTrend values={values} higherIsBetter={higherIsBetter} />
           </div>
           <div className="text-xs truncate" style={{ color: C.muted, maxWidth: 170 }}>{primary.label}</div>
-          {pct !== null && goodness !== null && (
-            <div className="mt-1 rounded-full" style={{ height: 5, background: C.line }}>
-              <div className="rounded-full" style={{ height: 5, width: `${pct}%`, background: goodness >= 50 ? C.spruce : goodness >= 25 ? C.amber : C.danger }} />
-            </div>
-          )}
+          {/* The current value sits next to the bar it is normalized into. */}
+          <div className="mt-1 flex items-center gap-2">
+            {pct !== null && goodness !== null && (
+              <div className="flex-1 rounded-full" style={{ height: 5, background: C.line }}>
+                <div className="rounded-full" style={{ height: 5, width: `${pct}%`, background: goodness >= 50 ? C.spruce : goodness >= 25 ? C.amber : C.danger }} />
+              </div>
+            )}
+            <span className="text-xs font-bold" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>{fmtScore(last)}</span>
+          </div>
         </div>
       ))}
     </div>

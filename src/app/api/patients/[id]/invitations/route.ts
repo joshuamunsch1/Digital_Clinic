@@ -12,6 +12,22 @@ import { hasFullWording, isFillable } from "@/lib/instruments/types";
 const posInt = (v: unknown): number | null =>
   typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null;
 
+/// Persist a changed recipient address onto the patient record — the send
+/// forms edit the patient's e-mail (default = address on file). Returns an
+/// error response when the address belongs to another account (same
+/// patient+staff uniqueness check as registration), null on success/no-op.
+async function persistPatientEmail(patientId: string, current: string | null, next: string) {
+  if (!next || next === current) return null;
+  const [existingPatient, existingStaff] = await Promise.all([
+    prisma.patient.findUnique({ where: { email: next } }),
+    prisma.user.findUnique({ where: { email: next } }),
+  ]);
+  if ((existingPatient && existingPatient.id !== patientId) || existingStaff)
+    return NextResponse.json({ error: "email_taken" }, { status: 409 });
+  await prisma.patient.update({ where: { id: patientId }, data: { email: next } });
+  return null;
+}
+
 /// Create a questionnaire invitation for a patient.
 /// channel "limesurvey" (default): registers the patient as a LimeSurvey
 /// participant and sends the invitation e-mail through LimeSurvey's mailer.
@@ -56,12 +72,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         { error: `instrument '${inst.def.id}' cannot be filled in-app (item wording not available) — send it via LimeSurvey or enter it manually` },
         { status: 400 },
       );
+    // Optional override: a changed address is the patient's new login e-mail.
+    const email = body.email?.trim() || patient.email;
+    const emailErr = body.email?.trim()
+      ? await persistPatientEmail(patient.id, patient.email, body.email.trim())
+      : null;
+    if (emailErr) return emailErr;
     await prisma.questionnaireInvitation.create({
       data: {
         patientId: patient.id,
         instrumentId: inst.def.id,
         respondentRole: "self", // the patient fills it in their own portal
-        email: patient.email ?? "",
+        email: email ?? "",
         channel: "in_app",
         context: JSON.stringify(context),
         remindEveryDays,
@@ -72,7 +94,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({
       patient: patientFromRow(updated!),
       // warning only — the task shows up once the patient can log in
-      warning: patient.email ? undefined : "the patient has no login e-mail yet, so they cannot see the task",
+      warning: email ? undefined : "the patient has no login e-mail yet, so they cannot see the task",
     });
   }
 
@@ -96,11 +118,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { status: 400 },
     );
 
-  const email = body.email || patient.email;
+  const email = body.email?.trim() || patient.email;
   if (!email) return NextResponse.json({ error: "the patient has no e-mail address on file" }, { status: 400 });
-  if (body.email && body.email !== patient.email) {
-    await prisma.patient.update({ where: { id: patient.id }, data: { email: body.email } });
-  }
+  const emailErr = body.email?.trim()
+    ? await persistPatientEmail(patient.id, patient.email, body.email.trim())
+    : null;
+  if (emailErr) return emailErr;
 
   const invitation = await prisma.questionnaireInvitation.create({
     data: {

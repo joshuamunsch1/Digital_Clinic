@@ -9,6 +9,7 @@ import type { InstrumentDef } from "@/lib/instruments/types";
 import { isOpenInvitation, isOverdue } from "@/lib/reminders";
 import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { patientFillable } from "./PatientHome";
+import { InstrumentForm } from "./InstrumentForm";
 import { Card, Field, GhostButton, PrimaryButton, SectionTitle, Stat, StatusBadge, inputStyle } from "./ui";
 import { useT } from "./LangContext";
 
@@ -80,13 +81,17 @@ function ScheduleEditor({ inv, onSave }: {
   );
 }
 
-/// Per-patient form to send a new questionnaire: LimeSurvey e-mail invitation
-/// or an in-app task (only instruments with full item wording).
-function NewRequestForm({ patient, instruments, configured, onDone }: {
+/// Per-patient questionnaire collection (since the dossier's collect panel was
+/// folded in here): LimeSurvey e-mail invitation, in-app task, manual
+/// paper-form entry (full-window clinician form) or LimeSurvey CSV import.
+type CollectMode = "limesurvey" | "in_app" | "manual" | "csv";
+
+function NewRequestForm({ patient, instruments, configured, onDone, onStartManualEntry }: {
   patient: Patient;
   instruments: InstrumentDef[];
   configured: boolean;
   onDone: (p: Patient, message: string) => void;
+  onStartManualEntry: (patient: Patient, inst: InstrumentDef) => void;
 }) {
   const t = useT();
   // Diagnosis-/category-specific recommendations: sorted first + starred.
@@ -105,21 +110,34 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
   const [instId, setInstId] = useState(candidates[0]?.id ?? "");
   const inst = candidates.find((i) => i.id === instId);
   const inAppPossible = fillableIds.has(instId);
-  const [channel, setChannel] = useState<"limesurvey" | "in_app">(configured ? "limesurvey" : "in_app");
-  const effectiveChannel = channel === "in_app" && !inAppPossible ? "limesurvey" : channel;
+  const hasItems = (inst?.items.length ?? 0) > 0;
+  const canManual = hasItems && inst?.definitionStatus === "complete";
+  const [mode, setMode] = useState<CollectMode>(configured ? "limesurvey" : "in_app");
   const [role, setRole] = useState("self");
   const [wave, setWave] = useState("");
   const [email, setEmail] = useState(patient.email ?? "");
   const [surveyId, setSurveyId] = useState("");
   const [remindDays, setRemindDays] = useState("");
   const [maxRem, setMaxRem] = useState("");
+  const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   if (!inst) return null;
+  const modes: { key: CollectMode; label: string; enabled: boolean }[] = [
+    { key: "limesurvey", label: "LimeSurvey", enabled: configured },
+    { key: "in_app", label: t("channelInApp"), enabled: inAppPossible },
+    { key: "manual", label: t("manualEntry"), enabled: canManual },
+    { key: "csv", label: t("importCsv"), enabled: hasItems },
+  ];
+  const effectiveMode = modes.find((m) => m.key === mode)?.enabled
+    ? mode
+    : (modes.find((m) => m.enabled)?.key ?? "limesurvey");
+  const errText = (m: string) =>
+    m === "network_restricted" ? t("networkRestricted") : m === "email_taken" ? t("emailTaken") : m;
   const isWave = inst.cadenceType === "wave";
   const waves = inst.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"];
   const canSend =
-    effectiveChannel === "in_app"
+    effectiveMode === "in_app"
       ? inAppPossible
       : configured && !!email.trim() && (!!surveyId.trim() || !!inst.limesurveySurveyId);
 
@@ -131,20 +149,40 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
       const max = Number(maxRem);
       const r = await api.createInvitation(patient.id, {
         instrumentId: inst.id,
-        channel: effectiveChannel,
-        respondentRole: effectiveChannel === "in_app" ? "self" : role,
-        email: effectiveChannel === "limesurvey" ? email.trim() : undefined,
+        channel: effectiveMode === "in_app" ? "in_app" : "limesurvey",
+        respondentRole: effectiveMode === "in_app" ? "self" : role,
+        // Editable for both channels; a changed address updates the patient record.
+        email: email.trim() || undefined,
         wave: isWave && wave ? wave : undefined,
-        surveyId: effectiveChannel === "limesurvey" ? surveyId.trim() || undefined : undefined,
+        surveyId: effectiveMode === "limesurvey" ? surveyId.trim() || undefined : undefined,
         remindEveryDays: Number.isInteger(days) && days > 0 ? days : undefined,
         maxReminders: Number.isInteger(max) && max > 0 ? max : undefined,
       });
       onDone(
         r.patient,
-        `${effectiveChannel === "in_app" ? t("taskCreated") : t("invitationCreated")}${r.warning ? ` ⚠ ${r.warning}` : ""}`,
+        `${effectiveMode === "in_app" ? t("taskCreated") : t("invitationCreated")}${r.warning ? ` ⚠ ${r.warning}` : ""}`,
       );
     } catch (e) {
-      setErr(`✗ ${(e as Error).message === "network_restricted" ? t("networkRestricted") : (e as Error).message}`);
+      setErr(`✗ ${errText((e as Error).message)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importCsv = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.importCsv(patient.id, {
+        instrumentId: inst.id,
+        csv,
+        respondentRole: role,
+        wave: isWave && wave ? wave : undefined,
+      });
+      setCsv("");
+      onDone(r.patient, `✓ ${r.imported} — ${r.warnings.join("; ") || t("importOk")}`);
+    } catch (e) {
+      setErr(`✗ ${errText((e as Error).message)}`);
     } finally {
       setBusy(false);
     }
@@ -165,20 +203,19 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
           {recIds.size > 0 && <p className="text-xs mt-1" style={{ color: C.spruce }}>{t("recommendedHint")}</p>}
         </Field>
         <Field label={t("channelLabel")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 130 }} value={effectiveChannel}
-            onChange={(e) => setChannel(e.target.value as "limesurvey" | "in_app")}>
-            <option value="limesurvey" disabled={!configured}>LimeSurvey</option>
-            <option value="in_app" disabled={!inAppPossible}>{t("channelInApp")}</option>
+          <select style={{ ...inputStyle, width: "auto", minWidth: 150 }} value={effectiveMode}
+            onChange={(e) => setMode(e.target.value as CollectMode)}>
+            {modes.map((m) => <option key={m.key} value={m.key} disabled={!m.enabled}>{m.label}</option>)}
           </select>
         </Field>
-        {effectiveChannel === "limesurvey" && (
+        {(effectiveMode === "limesurvey" || effectiveMode === "csv") && (
           <Field label={t("ratedBy")}>
             <select style={{ ...inputStyle, width: "auto", minWidth: 110 }} value={role} onChange={(e) => setRole(e.target.value)}>
               {["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"].map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </Field>
         )}
-        {isWave && (
+        {isWave && effectiveMode !== "manual" && (
           <Field label={t("waveLabel")}>
             <select style={{ ...inputStyle, width: "auto", minWidth: 100 }} value={wave} onChange={(e) => setWave(e.target.value)}>
               <option value="">—</option>
@@ -187,49 +224,73 @@ function NewRequestForm({ patient, instruments, configured, onDone }: {
           </Field>
         )}
       </div>
-      {effectiveChannel === "limesurvey" && (
+      {(effectiveMode === "limesurvey" || effectiveMode === "in_app") && (
         <div className="flex items-end gap-2 flex-wrap mt-2">
           <Field label={t("recipientEmail")}>
             <input style={{ ...inputStyle, width: 220 }} value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Field label={inst.limesurveySurveyId ? t("surveyIdLinked", { id: inst.limesurveySurveyId }) : t("surveyIdUnlinked")}>
-            <input style={{ ...inputStyle, width: 170 }} value={surveyId} onChange={(e) => setSurveyId(e.target.value)} />
-          </Field>
-          <Field label={t("remindEveryLabel")}>
-            <input type="number" min={1} placeholder="—" style={{ ...inputStyle, width: 80 }} value={remindDays} onChange={(e) => setRemindDays(e.target.value)} />
-          </Field>
-          <Field label={t("maxRemindersLabel")}>
-            <input type="number" min={1} placeholder="—" style={{ ...inputStyle, width: 70 }} value={maxRem} onChange={(e) => setMaxRem(e.target.value)} />
-          </Field>
+          {effectiveMode === "limesurvey" && (
+            <>
+              <Field label={inst.limesurveySurveyId ? t("surveyIdLinked", { id: inst.limesurveySurveyId }) : t("surveyIdUnlinked")}>
+                <input style={{ ...inputStyle, width: 170 }} value={surveyId} onChange={(e) => setSurveyId(e.target.value)} />
+              </Field>
+              <Field label={t("remindEveryLabel")}>
+                <input type="number" min={1} placeholder="—" style={{ ...inputStyle, width: 80 }} value={remindDays} onChange={(e) => setRemindDays(e.target.value)} />
+              </Field>
+              <Field label={t("maxRemindersLabel")}>
+                <input type="number" min={1} placeholder="—" style={{ ...inputStyle, width: 70 }} value={maxRem} onChange={(e) => setMaxRem(e.target.value)} />
+              </Field>
+            </>
+          )}
+        </div>
+      )}
+      {effectiveMode === "csv" && (
+        <div className="mt-2">
+          <textarea style={{ ...inputStyle, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} rows={3}
+            placeholder={t("csvPlaceholder", { code: inst.items[0]?.id ?? "SDQ1" })}
+            value={csv} onChange={(e) => setCsv(e.target.value)} />
         </div>
       )}
       <div className="flex items-center gap-3 flex-wrap mt-2">
-        <PrimaryButton small disabled={busy || !canSend} onClick={() => void send()}>
-          {busy ? t("working") : t("sendInvitation")}
-        </PrimaryButton>
+        {effectiveMode === "manual" ? (
+          <PrimaryButton small onClick={() => onStartManualEntry(patient, inst)}>{t("openManualForm")}</PrimaryButton>
+        ) : effectiveMode === "csv" ? (
+          <PrimaryButton small disabled={busy || !csv.trim()} onClick={() => void importCsv()}>
+            {busy ? t("working") : t("importCsv")}
+          </PrimaryButton>
+        ) : (
+          <PrimaryButton small disabled={busy || !canSend} onClick={() => void send()}>
+            {busy ? t("working") : t("sendInvitation")}
+          </PrimaryButton>
+        )}
         <p className="text-xs" style={{ color: C.muted }}>
-          {effectiveChannel === "in_app"
-            ? t("inAppChannelHint")
-            : configured
-              ? t("inviteHint")
-              : t("lsNotConfigured")}
+          {effectiveMode === "manual"
+            ? t("manualEntry")
+            : effectiveMode === "csv"
+              ? t("haveAnswers")
+              : effectiveMode === "in_app"
+                ? t("inAppChannelHint")
+                : configured
+                  ? t("inviteHint")
+                  : t("lsNotConfigured")}
         </p>
       </div>
-      {!inAppPossible && channel === "in_app" && (
-        <p className="text-xs mt-1" style={{ color: C.amber }}>{t("inAppNotPossible")}</p>
+      {(effectiveMode === "limesurvey" || effectiveMode === "in_app") && (
+        <p className="text-xs mt-1" style={{ color: C.muted }}>{t("emailSavedHint")}</p>
       )}
       {err && <p className="text-xs mt-2" style={{ color: C.danger }}>{err}</p>}
     </div>
   );
 }
 
-function PatientBlock({ patient, instruments, configured, now, onOpenPatient, onPatientUpdated }: {
+function PatientBlock({ patient, instruments, configured, now, onOpenPatient, onPatientUpdated, onStartManualEntry }: {
   patient: Patient;
   instruments: InstrumentDef[];
   configured: boolean;
   now: Date;
   onOpenPatient: (id: string) => void;
   onPatientUpdated: (p: Patient) => void;
+  onStartManualEntry: (patient: Patient, inst: InstrumentDef) => void;
 }) {
   const t = useT();
   const [showForm, setShowForm] = useState(false);
@@ -273,7 +334,8 @@ function PatientBlock({ patient, instruments, configured, now, onOpenPatient, on
 
       {showForm && (
         <NewRequestForm patient={patient} instruments={instruments} configured={configured}
-          onDone={(p, message) => { onPatientUpdated(p); setMsg(message); setShowForm(false); }} />
+          onDone={(p, message) => { onPatientUpdated(p); setMsg(message); setShowForm(false); }}
+          onStartManualEntry={onStartManualEntry} />
       )}
 
       {open.length === 0 && completedRecent.length === 0 && !showForm && (
@@ -363,10 +425,17 @@ export function MonitoringView({ data, user, onBack, onOpenPatient, onPatientUpd
   const [therapistFilter, setTherapistFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Manual paper-form entry launched from a patient block — takes over the
+  // whole view with the clinician InstrumentForm (same flow the dossier's
+  // collect panel used to host).
+  const [manualEntry, setManualEntry] = useState<{ patient: Patient; instrument: InstrumentDef } | null>(null);
   const now = new Date();
   const configured = data.limesurveyConfigured;
 
-  const scoped = isDirector ? data.patients : data.patients.filter((p) => p.therapistId === user.id);
+  // Concluded treatments are read-only — they don't belong in questionnaire
+  // monitoring (and must not receive new questionnaires).
+  const active = data.patients.filter((p) => p.status !== "archived");
+  const scoped = isDirector ? active : active.filter((p) => p.therapistId === user.id);
   const allInvs = scoped.flatMap((p) => p.invitations);
   const openCount = allInvs.filter((i) => isOpenInvitation(i.status)).length;
   const overdueCount = allInvs.filter((i) => isOverdue(i, now)).length;
@@ -409,6 +478,32 @@ export function MonitoringView({ data, user, onBack, onOpenPatient, onPatientUpd
       setBusy(false);
     }
   };
+
+  if (manualEntry) {
+    return (
+      <InstrumentForm
+        instrument={manualEntry.instrument}
+        clinicianMode
+        therapists={data.therapists}
+        defaultConductedById={user.role === "therapist" ? user.id : manualEntry.patient.therapistId}
+        busy={busy}
+        onCancel={() => setManualEntry(null)}
+        onSubmit={async (payload) => {
+          setBusy(true);
+          try {
+            const r = await api.submitResponse(manualEntry.patient.id, payload);
+            onPatientUpdated(r.patient);
+            setManualEntry(null);
+            if (r.skippedScales.length) alert(`${t("scalesNotComputed")}\n${r.skippedScales.map((s) => `${s.key}: ${s.reason}`).join("\n")}`);
+          } catch (e) {
+            alert("✗ " + (e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    );
+  }
 
   const groups: { therapist: { id: string; name: string } | null; patients: Patient[] }[] = isDirector
     ? [
@@ -467,7 +562,8 @@ export function MonitoringView({ data, user, onBack, onOpenPatient, onPatientUpd
           )}
           {g.patients.map((p) => (
             <PatientBlock key={p.id} patient={p} instruments={data.instruments} configured={configured}
-              now={now} onOpenPatient={onOpenPatient} onPatientUpdated={onPatientUpdated} />
+              now={now} onOpenPatient={onOpenPatient} onPatientUpdated={onPatientUpdated}
+              onStartManualEntry={(patient, instrument) => setManualEntry({ patient, instrument })} />
           ))}
         </Card>
       ))}

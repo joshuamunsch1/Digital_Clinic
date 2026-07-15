@@ -14,10 +14,9 @@ import {
   DIRECTOR,
   EDEQ8_SERIES,
   FGG_SERIES,
-  SAMPLE_ANSWERS,
-  SAMPLE_ANSWERS_SOCIAL,
   SDQ_SERIES,
   THERAPISTS,
+  buildDipsAnswers,
   phq4SessionsFor,
   pstbSessionsFor,
 } from "./demo";
@@ -370,29 +369,26 @@ export async function seedClinic(prisma: PrismaClient) {
     }
 
     // Therapist-administered DIPS interviews (respondentRole "clinician" since
-    // the intake split — the patient intake collects demographics only).
-    const dipsSeed = p.hasSampleDips
-      ? { answers: SAMPLE_ANSWERS, completedAt: "2026-03-09T10:00:00.000Z" }
-      : p.hasSampleDipsSocial
-        ? { answers: SAMPLE_ANSWERS_SOCIAL, completedAt: "2026-07-06T14:00:00.000Z" }
-        : null;
-    if (dipsSeed) {
+    // the intake split — the patient intake collects demographics only). Every
+    // demo patient has one so the diagnosis view opens on all dossiers.
+    {
       const lang = "de" as const;
+      const answers = buildDipsAnswers(p.dips.positive);
       const fhir = toFHIR(
         { id: p.id, name: p.name, demographics: p.demographics },
-        { answers: dipsSeed.answers, lang, completedAt: dipsSeed.completedAt },
+        { answers, lang, completedAt: p.dips.completedAt },
       );
       await createScoredResponse(prisma, {
         patientId: p.id,
         instrument: dips,
         respondentRole: "clinician",
         conductedById: p.therapistId,
-        occurredAt: new Date(dipsSeed.completedAt),
-        rawAnswers: dipsSeed.answers,
+        occurredAt: new Date(p.dips.completedAt),
+        rawAnswers: answers,
         meta: {
           lang,
           fhir,
-          submission: { status: "sent", endpoint: "clinic database (no external relay)", at: dipsSeed.completedAt },
+          submission: { status: "sent", endpoint: "clinic database (no external relay)", at: p.dips.completedAt },
         },
       });
     }

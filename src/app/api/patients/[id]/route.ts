@@ -11,6 +11,7 @@ import {
   PROBLEM_DURATIONS,
   TERMINATION_REASONS,
   type CaseCharacteristics,
+  type Demographics,
 } from "@/lib/types";
 
 /// Loose ICD-10 shape ("F41.0", "F32"): letter + 2 digits + optional .1–2 digits.
@@ -29,6 +30,20 @@ function sanitizeCaseCharacteristics(input: unknown): CaseCharacteristics {
     out.employment = raw.employment as CaseCharacteristics["employment"];
   if (typeof raw.treatmentExpectation === "number" && Number.isFinite(raw.treatmentExpectation))
     out.treatmentExpectation = Math.max(0, Math.min(10, Math.round(raw.treatmentExpectation)));
+  return out;
+}
+
+/// Whitelist-validate a demographics patch — the same 7 fields the intake form
+/// collects; unknown keys are dropped. Age may arrive as number or string.
+function sanitizeDemographics(input: unknown): Demographics {
+  const raw = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>;
+  const out: Demographics = {};
+  if (typeof raw.age === "number" && Number.isFinite(raw.age)) out.age = raw.age;
+  else if (typeof raw.age === "string" && raw.age.trim()) out.age = raw.age.trim();
+  for (const key of ["sex", "nationality", "city", "occupation", "living", "siblings"] as const) {
+    const v = raw[key];
+    if (typeof v === "string" && v.trim()) out[key] = v.trim();
+  }
   return out;
 }
 
@@ -58,6 +73,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     terminationReason?: string;
     icdCode?: string;
     characteristics?: unknown;
+    demographics?: unknown;
   };
   let archiveExport: ArchiveExportResult | undefined;
   if (body.action === "archive" || body.action === "unarchive") {
@@ -159,6 +175,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await prisma.patient.update({
       where: { id: params.id },
       data: { caseCharacteristics: JSON.stringify(merged) },
+    });
+  } else if (body.action === "demographics") {
+    // Staff correction/update of the intake demographics. Unlike the patient
+    // assessment route this changes NOTHING besides the demographics JSON —
+    // no status transition, no assessmentDate.
+    if (s.role !== "director" && s.role !== "therapist")
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    await prisma.patient.update({
+      where: { id: params.id },
+      data: { demographics: JSON.stringify(sanitizeDemographics(body.demographics)) },
     });
   } else if (body.action === "contact") {
     if (s.role !== "director" && s.role !== "therapist")

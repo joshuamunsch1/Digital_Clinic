@@ -7,6 +7,7 @@ import type {
   CaseCharacteristics,
   Demographics,
   DipsAnswers,
+  ModuleAnswers,
   SessionLogType,
   TerminationReason,
 } from "./types";
@@ -158,8 +159,20 @@ export const SDQ_SERIES: { wave: string; daysAgo: number; role: string; answers:
   { wave: "zm", daysAgo: 5, role: "mother", answers: sdqAnswers(6, 1.0) },
 ];
 
-// A completed multi-module DIPS for one demo patient (panic screens positive).
-export const SAMPLE_ANSWERS: DipsAnswers = {
+// --- Therapist-administered DIPS interviews ----------------------------------------
+//
+// Every demo patient carries a full interview record so the diagnosis view opens
+// for all dossiers. Answers are assembled per module: a POSITIVE block satisfies
+// the module's screening predicate AND the full mechanical rule in
+// src/lib/dips/diagnosis.ts (met = true); a NEGATIVE block answers the screening
+// questions "no" (interview conducted, module not entered).
+
+export type DipsModuleId = "panic" | "agora" | "social" | "phobia" | "gad" | "sep";
+const DIPS_MODULE_IDS: DipsModuleId[] = ["panic", "agora", "social", "phobia", "gad", "sep"];
+
+/// Clinically coherent positive interview blocks. No demo patient needs a
+/// positive separation-anxiety module, so "sep" has no fixture.
+const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
   panic: {
     "1.1": "yes", "1.1_text": "Im Supermarkt und beim Autofahren", "1.2": "yes", "1.3_from": "11/2025", "1.3_to": "—",
     "2.1": "Oft ganz plötzlich, auch zu Hause", "2.2": "yes", "2.2_unexpected": true, "3": "yes", "4": "05/2026",
@@ -172,12 +185,21 @@ export const SAMPLE_ANSWERS: DipsAnswers = {
     onset_age: "28", hist1: "yes", hist1_text: "Stress bei der Arbeit", hist2: "yes", hist2_text: "Hohe Belastung im Beruf",
     impact_impair: 6, impact_distress: 7, earlier: "no",
   },
-};
-
-/// Therapist-conducted DIPS with a clearly positive social-anxiety module
-/// (meets all rule criteria) — no diagnosis recorded yet, so the diagnosis
-/// card demos the mechanical proposal pre-fill (Soziale Angststörung F40.1).
-export const SAMPLE_ANSWERS_SOCIAL: DipsAnswers = {
+  // ≥ 2 of 5 situation categories at clinical level (transport, enclosed, crowds).
+  agora: {
+    "1.1": "yes", "1.1_text": "Einkaufszentren, Bus und Bahn, Menschenmengen",
+    "1.2": "yes", "1.3": "yes", companion: "yes",
+    grid_bus_primary: "yes", grid_bus_sev: 2, grid_bus_avoid: "yes",
+    grid_train_primary: "yes", grid_train_sev: 2, grid_train_avoid: "no",
+    grid_shops_primary: "yes", grid_shops_sev: 3, grid_shops_avoid: "yes",
+    grid_crowd_primary: "yes", grid_crowd_sev: 2, grid_crowd_avoid: "yes",
+    "4": "yes", safety: "yes", safety_text: "Notfalltropfen und Handy immer dabei",
+    cog: "Angst, ohnmächtig zu werden und nicht rechtzeitig wegzukommen",
+    cope: "Verlässt die Situation, wartet draußen",
+    approp: "no", subst1: "no", subst2: "no", organic: "no",
+    onset_age: "24", dur6: "yes", hist1: "no", hist2: "yes", hist2_text: "Umzug und Stellenwechsel",
+    impact_impair: 5, impact_distress: 5, earlier: "no",
+  },
   social: {
     "1.1": "yes", "1.1_text": "Referate in der Schule, Gespräche mit Unbekannten",
     "1.2": "yes", "1.3": "yes",
@@ -192,7 +214,58 @@ export const SAMPLE_ANSWERS_SOCIAL: DipsAnswers = {
     onset_age: "13", hist1: "yes", hist1_text: "Bloßstellung vor der Klasse",
     hist2: "no", impact_impair: 5, impact_distress: 6, earlier: "no",
   },
+  phobia: {
+    "1.1": "yes", "1.1_text": "Spinnen — schon beim Anblick von Bildern",
+    grid_animal1_primary: "yes", grid_animal1_sev: 3, grid_animal1_avoid: "yes",
+    "3": "yes",
+    cog: "Die Spinne könnte plötzlich auf mich zukommen",
+    cope: "Betritt Keller und Estrich nur nach Kontrolle durch andere",
+    approp: "no", subst1: "no", subst2: "no", organic: "no",
+    onset_age: "9", dur6: "yes", hist1: "no", hist2: "no",
+    impact_impair: 4, impact_distress: 6, earlier: "no",
+  },
+  // Screening + uncontrollability + ≥ 3 of 6 accompanying symptoms.
+  gad: {
+    "1.1": "yes", "1.2": "Arbeit, Gesundheit der Eltern, Finanzen, Alltagskleinigkeiten", "1.3": "yes",
+    worries_family_primary: "yes", worries_family_expr: 2, worries_family_unc: 2,
+    worries_work_primary: "yes", worries_work_expr: 3, worries_work_unc: 3,
+    worries_finance_primary: "yes", worries_finance_expr: 2, worries_finance_unc: 2,
+    worries_minor_primary: "yes", worries_minor_expr: 2, worries_minor_unc: 3,
+    symptoms_restless_primary: "yes", symptoms_restless_sev: 2, symptoms_restless_maj: "yes",
+    symptoms_concentration_primary: "yes", symptoms_concentration_sev: 2, symptoms_concentration_maj: "yes",
+    symptoms_tension_primary: "yes", symptoms_tension_sev: 3, symptoms_tension_maj: "yes",
+    symptoms_sleep_primary: "yes", symptoms_sleep_sev: 2, symptoms_sleep_maj: "yes",
+    cog: "Die Sorgen beginnen oft schon beim Aufwachen",
+    cope: "Rückversicherung bei der Familie, Listen schreiben",
+    subst1: "no", subst2: "no", organic: "no",
+    onset_age: "19", hist1: "no", hist2: "yes", hist2_text: "Prüfungsphase im Studium",
+    impact_impair: 5, impact_distress: 6, earlier: "yes", earlier_text: "2022, mehrere Monate",
+  },
 };
+
+/// Screening answered "no" for every module entry question — the module was
+/// asked but not entered (keys per src/lib/dips/schema.ts screening predicates).
+const DIPS_NEGATIVE: Record<DipsModuleId, ModuleAnswers> = {
+  panic: { "1.1": "no", "1.2": "no" },
+  agora: { "1.1": "no", "1.4": "no" },
+  social: { "1.1": "no", "1.4": "no" },
+  phobia: { "1.1": "no", "1.2": "no" },
+  gad: { "1.1": "no" },
+  sep: { "1.1": "no", "1.3": "no" },
+};
+
+/// Assemble a complete interview: positive blocks for the named modules,
+/// negative screens everywhere else.
+export function buildDipsAnswers(positive: DipsModuleId[]): DipsAnswers {
+  const out: DipsAnswers = {};
+  for (const id of DIPS_MODULE_IDS) {
+    out[id] = positive.includes(id) && DIPS_POSITIVE[id] ? DIPS_POSITIVE[id]! : DIPS_NEGATIVE[id];
+  }
+  return out;
+}
+
+/// Back-compat fixture (referenced by tests): Mara's panic-positive interview.
+export const SAMPLE_ANSWERS: DipsAnswers = { panic: DIPS_POSITIVE.panic! };
 
 export interface DemoPatient {
   id: string;
@@ -218,10 +291,10 @@ export interface DemoPatient {
   seriesEnd?: string;
   /// Diagnosis date override (defaults to the 2026 demo constant).
   diagnosedOn?: string;
-  hasSampleDips?: boolean;
-  /// Therapist-conducted DIPS with a positive social-anxiety module and NO
-  /// diagnosis yet — demos the mechanical diagnosis proposal pre-fill.
-  hasSampleDipsSocial?: boolean;
+  /// Therapist-conducted DIPS interview: which modules screen positive (empty =
+  /// all screens negative) and when the interview was held. Every demo patient
+  /// has one so the diagnosis view opens on all dossiers.
+  dips: { positive: DipsModuleId[]; completedAt: string };
   hasBdiSeries?: boolean;
   hasBdiAlertSeries?: boolean;
   hasEdeq8Series?: boolean;
@@ -234,19 +307,19 @@ export interface DemoPatient {
 // clinic's working language. sex/living keep the canonical English tokens the
 // registration forms store; the UI translates those on display (trDemoValue).
 export const DEMO_PATIENTS: DemoPatient[] = [
-  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], hasSampleDips: true, hasBdiSeries: true },
-  { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 } },
-  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 } },
-  { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Schweiz", city: "Fribourg", occupation: "Software-Entwickler", living: "Alone", siblings: "Keine" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / Erschöpfungssyndrom (Platzhalter)", disorderCategory: "burnout", icd: "Z73.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 5 } },
-  { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "Frankreich", city: "Bern", occupation: "Apothekerin", living: "With partner", siblings: "1 — jüngere Schwester" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; rezidivierende depressive Episoden (Platzhalter)", disorderCategory: "eating_disorder", icd: "F50.2", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 4 }, hasEdeq8Series: true, hasBdiAlertSeries: true },
-  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, hasSampleDipsSocial: true, hasSdqSeries: true, hasDikjSeries: true },
-  { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null },
-  { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null },
+  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true },
+  { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 }, dips: { positive: [], completedAt: "2026-03-09T09:00:00.000Z" } },
+  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" } },
+  { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Schweiz", city: "Fribourg", occupation: "Software-Entwickler", living: "Alone", siblings: "Keine" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / Erschöpfungssyndrom (Platzhalter)", disorderCategory: "burnout", icd: "Z73.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 5 }, dips: { positive: [], completedAt: "2026-03-09T13:00:00.000Z" } },
+  { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "Frankreich", city: "Bern", occupation: "Apothekerin", living: "With partner", siblings: "1 — jüngere Schwester" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; rezidivierende depressive Episoden (Platzhalter)", disorderCategory: "eating_disorder", icd: "F50.2", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 4 }, dips: { positive: [], completedAt: "2026-03-09T15:00:00.000Z" }, hasEdeq8Series: true, hasBdiAlertSeries: true },
+  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["social"], completedAt: "2026-07-06T14:00:00.000Z" }, hasSdqSeries: true, hasDikjSeries: true },
+  { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["phobia"], completedAt: "2026-07-01T10:00:00.000Z" } },
+  { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: [], completedAt: "2026-07-08T10:00:00.000Z" } },
 
   // Concluded treatments (archive demo): 2 disorder categories × 2 years,
   // spread across therapists so the therapist-scoped archive is demoable.
-  { id: "p9", name: "Lea Schmid", email: "lea.schmid@example.org", color: PALETTE[8], therapistId: "t1", status: "archived", demographics: { age: 33, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Grafikerin", living: "Alone", siblings: "1 — ältere Schwester" }, levels: [2.5, 3, 4, 5, 5.5, 6.5, 7.5], diagnosis: "Mittelgradige depressive Episode (Platzhalter)", disorderCategory: "depression", icd: "F32.1", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: true, employment: "employed", treatmentExpectation: 7 }, archived: { at: "2024-11-15T10:00:00.000Z", reason: "completed" }, seriesEnd: "2024-11-08", diagnosedOn: "2024-08-20" },
-  { id: "p10", name: "Marc Dubois", email: "marc.dubois@example.org", color: PALETTE[9], therapistId: "t2", status: "archived", demographics: { age: 38, sex: "Male", nationality: "Schweiz", city: "Biel/Bienne", occupation: "Versicherungsberater", living: "With family", siblings: "Keine" }, levels: [3.5, 3, 3.5, 3], diagnosis: "Soziale Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F40.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "unemployed", treatmentExpectation: 3 }, archived: { at: "2024-05-21T10:00:00.000Z", reason: "dropout" }, seriesEnd: "2024-05-13", diagnosedOn: "2024-04-01" },
-  { id: "p11", name: "Rahel Steck", email: "rahel.steck@example.org", color: PALETTE[0], therapistId: "t1", status: "archived", demographics: { age: 27, sex: "Female", nationality: "Schweiz", city: "Ostermundigen", occupation: "Kauffrau", living: "With partner", siblings: "2 — mittleres Kind" }, levels: [3, 3.5, 4.5, 5, 6, 6.5, 7], diagnosis: "Panikstörung mit Agoraphobie (Platzhalter)", disorderCategory: "anxiety", icd: "F40.01", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, archived: { at: "2025-03-28T10:00:00.000Z", reason: "completed" }, seriesEnd: "2025-03-21", diagnosedOn: "2025-01-10" },
-  { id: "p12", name: "Nico Furrer", email: "nico.furrer@example.org", color: PALETTE[1], therapistId: "t3", status: "archived", demographics: { age: 45, sex: "Male", nationality: "Schweiz", city: "Münsingen", occupation: "Elektriker", living: "With family", siblings: "3 — ältester" }, levels: [2, 3, 4, 5, 6, 6.5], diagnosis: "Rezidivierende depressive Störung, remittiert (Platzhalter)", disorderCategory: "depression", icd: "F33.4", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 6 }, archived: { at: "2025-09-05T10:00:00.000Z", reason: "mutual" }, seriesEnd: "2025-08-29", diagnosedOn: "2025-06-15" },
+  { id: "p9", name: "Lea Schmid", email: "lea.schmid@example.org", color: PALETTE[8], therapistId: "t1", status: "archived", demographics: { age: 33, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Grafikerin", living: "Alone", siblings: "1 — ältere Schwester" }, levels: [2.5, 3, 4, 5, 5.5, 6.5, 7.5], diagnosis: "Mittelgradige depressive Episode (Platzhalter)", disorderCategory: "depression", icd: "F32.1", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: true, employment: "employed", treatmentExpectation: 7 }, archived: { at: "2024-11-15T10:00:00.000Z", reason: "completed" }, seriesEnd: "2024-11-08", diagnosedOn: "2024-08-20", dips: { positive: [], completedAt: "2024-08-13T10:00:00.000Z" } },
+  { id: "p10", name: "Marc Dubois", email: "marc.dubois@example.org", color: PALETTE[9], therapistId: "t2", status: "archived", demographics: { age: 38, sex: "Male", nationality: "Schweiz", city: "Biel/Bienne", occupation: "Versicherungsberater", living: "With family", siblings: "Keine" }, levels: [3.5, 3, 3.5, 3], diagnosis: "Soziale Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F40.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "unemployed", treatmentExpectation: 3 }, archived: { at: "2024-05-21T10:00:00.000Z", reason: "dropout" }, seriesEnd: "2024-05-13", diagnosedOn: "2024-04-01", dips: { positive: ["social"], completedAt: "2024-03-25T10:00:00.000Z" } },
+  { id: "p11", name: "Rahel Steck", email: "rahel.steck@example.org", color: PALETTE[0], therapistId: "t1", status: "archived", demographics: { age: 27, sex: "Female", nationality: "Schweiz", city: "Ostermundigen", occupation: "Kauffrau", living: "With partner", siblings: "2 — mittleres Kind" }, levels: [3, 3.5, 4.5, 5, 6, 6.5, 7], diagnosis: "Panikstörung mit Agoraphobie (Platzhalter)", disorderCategory: "anxiety", icd: "F40.01", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, archived: { at: "2025-03-28T10:00:00.000Z", reason: "completed" }, seriesEnd: "2025-03-21", diagnosedOn: "2025-01-10", dips: { positive: ["panic", "agora"], completedAt: "2025-01-03T10:00:00.000Z" } },
+  { id: "p12", name: "Nico Furrer", email: "nico.furrer@example.org", color: PALETTE[1], therapistId: "t3", status: "archived", demographics: { age: 45, sex: "Male", nationality: "Schweiz", city: "Münsingen", occupation: "Elektriker", living: "With family", siblings: "3 — ältester" }, levels: [2, 3, 4, 5, 6, 6.5], diagnosis: "Rezidivierende depressive Störung, remittiert (Platzhalter)", disorderCategory: "depression", icd: "F33.4", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 6 }, archived: { at: "2025-09-05T10:00:00.000Z", reason: "mutual" }, seriesEnd: "2025-08-29", diagnosedOn: "2025-06-15", dips: { positive: [], completedAt: "2025-06-08T10:00:00.000Z" } },
 ];

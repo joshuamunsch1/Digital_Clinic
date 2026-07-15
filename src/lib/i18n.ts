@@ -171,6 +171,15 @@ export const UI = {
   therapistLabel: L("Therapeut*in:", "Thérapeute :", "Therapist:"),
   demographicsTitle: L("Demografie & persönliche Angaben", "Démographie et informations personnelles", "Demographics & personal information"),
   noIntakeYet: L("Die Aufnahme wurde noch nicht ausgefüllt.", "L'admission n'a pas encore été remplie.", "The patient has not completed intake yet."),
+  // Merged intake card (diagnosis + demographics + predictors) and its edit window.
+  intakeCardTitle: L("Aufnahme & Diagnose", "Admission & diagnostic", "Intake & diagnosis"),
+  editIntake: L("Aufnahmedaten bearbeiten", "Modifier les données d'admission", "Edit intake data"),
+  intakeEditTitle: L("Aufnahmedaten", "Données d'admission", "Intake data"),
+  intakeEditSub: L(
+    "Demografie und Prognosemerkmale — werden einmalig bei Aufnahme erfasst und hier nachgeführt.",
+    "Démographie et facteurs pronostiques — saisis une fois à l'admission et mis à jour ici.",
+    "Demographics and intake predictors — recorded once at intake and updated here."),
+  intakeSaved: L("Gespeichert.", "Enregistré.", "Saved."),
   diagnosisTitle: L("Diagnose", "Diagnostic", "Diagnosis"),
   recordedOn: L("Erfasst", "Enregistré le", "Recorded"),
   diagnosisAfterIntake: L("Die Diagnose wird nach dem Erstgespräch erfasst.", "Le diagnostic est enregistré après le premier entretien.", "A diagnosis is recorded after the intake interview."),
@@ -181,21 +190,25 @@ export const UI = {
   diagnosisPlaceholder: L("Diagnose aus dem Erstgespräch…", "Diagnostic du premier entretien…", "Diagnosis from intake interview…"),
   disorderCategoryLabel: L("Störungsbild (für Filter)", "Catégorie de trouble (pour filtres)", "Disorder category (for filtering)"),
   saveDiagnosis: L("Diagnose speichern & Therapie starten", "Enregistrer le diagnostic et démarrer la thérapie", "Save diagnosis & start therapy"),
-  dipsTitle: L("DIPS · Angst-Screening (Selbstbericht)", "DIPS · Dépistage de l'anxiété (auto-évaluation)", "DIPS · Anxiety screening (self-report)"),
   summaryTitle: L("Fragebogen-Kurzübersicht", "Aperçu des questionnaires", "Questionnaire summary"),
-  summarySub: L(
-    "Aktuellster Wert der Hauptskala je Instrument, normiert auf den Wertebereich. Grün = klinisch günstige Richtung.",
-    "Dernière valeur de l'échelle principale par instrument, normalisée sur l'étendue. Vert = évolution cliniquement favorable.",
-    "Latest primary-scale value per instrument, normalized to its range. Green = clinically favourable direction."),
+  // Legend fragments for the summary strip (glyphs are colored in JSX).
+  legendTrend: L(
+    "Veränderung zur Vormessung (grün = klinisch günstig, rot = ungünstig)",
+    "évolution depuis la mesure précédente (vert = cliniquement favorable, rouge = défavorable)",
+    "change since the previous measurement (green = clinically favourable, red = unfavourable)"),
+  legendStable: L("unverändert", "inchangé", "unchanged"),
+  legendNoTrend: L("zu wenige Messungen", "mesures insuffisantes", "too few measurements"),
+  legendBar: L(
+    "Balken = aktueller Wert im Wertebereich der Hauptskala",
+    "barre = valeur actuelle sur l'étendue de l'échelle principale",
+    "bar = current value within the primary scale's range"),
   clinicalAlert: L("Klinischer Hinweis", "Alerte clinique", "Clinical alert"),
-  collectTitle: L("Fragebogen erheben", "Recueillir un questionnaire", "Collect a questionnaire"),
   instrumentLabel: L("Instrument", "Instrument", "Instrument"),
   ratedBy: L("Beurteilt durch", "Évalué par", "Rated by"),
   waveLabel: L("Messzeitpunkt", "Temps de mesure", "Measurement wave"),
   dateAdministered: L("Erhebungsdatum", "Date de passation", "Date administered"),
   conductedBy: L("Durchgeführt von", "Réalisé par", "Conducted by"),
   conductedByUnset: L("— keine Angabe —", "— non précisé —", "— unspecified —"),
-  inviteHeading: L("LimeSurvey-Link per E-Mail senden", "Envoyer le lien LimeSurvey par e-mail", "Send LimeSurvey link by e-mail"),
   recipientEmail: L("Empfänger-E-Mail", "E-mail du destinataire", "Recipient e-mail"),
   surveyIdLinked: L("LimeSurvey-Umfrage-ID (verknüpft: {id})", "ID du sondage LimeSurvey (lié : {id})", "LimeSurvey survey id (linked: {id})"),
   surveyIdUnlinked: L("LimeSurvey-Umfrage-ID (noch nicht verknüpft)", "ID du sondage LimeSurvey (pas encore lié)", "LimeSurvey survey id (not linked yet)"),
@@ -211,10 +224,11 @@ export const UI = {
     "Paste a LimeSurvey CSV response export here (headers = question codes, e.g. {code}, …)"),
   importCsv: L("CSV importieren", "Importer le CSV", "Import CSV"),
   manualEntry: L("Manuelle Eingabe (Papierbogen)", "Saisie manuelle (papier)", "Manual entry (paper form)"),
-  itemsNotVerified: L(
-    "Die Item-Liste dieses Instruments ist noch nicht verifiziert — Importe können noch nicht interpretiert werden.",
-    "La liste d'items de cet instrument n'est pas encore vérifiée — les imports ne peuvent pas encore être interprétés.",
-    "This instrument's item list is not verified yet — imports can't be interpreted until the definition is completed."),
+  openManualForm: L("Formular öffnen", "Ouvrir le formulaire", "Open form"),
+  emailSavedHint: L(
+    "Eine geänderte Adresse wird als E-Mail der Patient*in gespeichert.",
+    "Une adresse modifiée est enregistrée comme e-mail du patient / de la patiente.",
+    "A changed address is saved as the patient's e-mail."),
   invitationsTitle: L("Fragebogen-Einladungen (LimeSurvey)", "Invitations aux questionnaires (LimeSurvey)", "Questionnaire invitations (LimeSurvey)"),
   syncNow: L("Abgeschlossene Antworten jetzt abholen", "Récupérer les réponses terminées", "Sync completed responses now"),
   working: L("Läuft…", "En cours…", "Working…"),
@@ -562,8 +576,6 @@ export const UI = {
   predYes: L("ja", "oui", "yes"),
   predNo: L("nein", "non", "no"),
   notRecorded: L("— nicht erfasst —", "— non renseigné —", "— not recorded —"),
-  savePredictors: L("Prognosemerkmale speichern", "Enregistrer les facteurs", "Save intake predictors"),
-  predictorsSaved: L("Gespeichert.", "Enregistré.", "Saved."),
   icdLabel: L("ICD-10-Code (optional)", "Code CIM-10 (facultatif)", "ICD-10 code (optional)"),
   patientCodeLabel: L("Forschungscode", "Code de recherche", "Research code"),
 
@@ -611,7 +623,8 @@ export const UI = {
   endorsedOf: L("{n} von {total} bejaht", "{n} sur {total} confirmés", "{n} of {total} endorsed"),
   noneEndorsed: L("keine bejaht", "aucun confirmé", "none endorsed"),
   impairDistress: L("Beeinträchtigung / Belastung (0–8)", "Altération / détresse (0–8)", "Impairment / distress (0–8)"),
-  showAllResponses: L("Alle Antworten anzeigen", "Afficher toutes les réponses", "Show all responses"),
+  showModuleResponses: L("Antworten zu {modules} anzeigen", "Afficher les réponses — {modules}", "Show responses for {modules}"),
+  downloadDips: L("DIPS-Daten herunterladen (JSON)", "Télécharger les données DIPS (JSON)", "Download DIPS data (JSON)"),
 
   // misc clinician strings
   definitionBadgeTitle: L(

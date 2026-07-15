@@ -178,6 +178,10 @@ export const api = {
       handle<{ patient: Patient }>(r),
     ),
 
+  /// Staff correction of the intake demographics (no status side effects).
+  updateDemographics: (id: string, demographics: Demographics) =>
+    patch(`/api/patients/${id}`, { action: "demographics", demographics }).then((r) => handle<{ patient: Patient }>(r)),
+
   savePatientEmail: (id: string, email: string) =>
     patch(`/api/patients/${id}`, { action: "contact", email }).then((r) => handle<{ patient: Patient }>(r)),
 

@@ -29,9 +29,14 @@ import {
 /// PRIMARY target (the symptom measure — Lutz's HSCL-11 slot): it drives the
 /// not-on-track flag, early-change classification and the dropout features.
 /// The PSTB headline scale gets bands and sudden-shift markers as well.
+/// axis "session" aligns cases by sessionNumber; "index" by measurement order
+/// (0, 1, 2… chronologically) — used for the wave-/date-cadenced BDI-FS, whose
+/// responses carry no sessionNumber (sim cohort: pre/zm/post waves).
+export type TargetAxis = "session" | "index";
 export const PREDICTION_TARGETS = [
-  { instrumentId: "phq4", scaleKey: "PHQ_total" },
-  { instrumentId: SESSION_INSTRUMENT_ID, scaleKey: SESSION_PRIMARY_SCALE },
+  { instrumentId: "phq4", scaleKey: "PHQ_total", axis: "session" },
+  { instrumentId: SESSION_INSTRUMENT_ID, scaleKey: SESSION_PRIMARY_SCALE, axis: "session" },
+  { instrumentId: "bdi_fs", scaleKey: "BDI_FS_total", axis: "index" },
 ] as const;
 export const PRIMARY_TARGET = PREDICTION_TARGETS[0];
 export const PRIMARY_KEY = seriesKeyOf(PRIMARY_TARGET.instrumentId, PRIMARY_TARGET.scaleKey);
@@ -123,6 +128,8 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
   }
 
   // Lean load: labeled archived patients with ONLY the target-series scores.
+  // No sessionNumber filter here — index-axis targets (BDI-FS) live on
+  // wave-/date-based responses whose sessionNumber is null.
   const rows = await prisma.patient.findMany({
     where: { status: "archived", terminationReason: { not: null }, code: { not: null } },
     select: {
@@ -133,7 +140,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
       caseCharacteristics: true,
       terminationReason: true,
       responses: {
-        where: { instrumentId: { in: targetIds }, sessionNumber: { not: null } },
+        where: { instrumentId: { in: targetIds } },
         select: {
           instrumentId: true,
           sessionNumber: true,
@@ -145,19 +152,30 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
   });
 
   const targetKeys = new Set(PREDICTION_TARGETS.map((t) => `${t.instrumentId}|${t.scaleKey}`));
+  const axisByKey = new Map<string, TargetAxis>(
+    PREDICTION_TARGETS.map((t) => [seriesKeyOf(t.instrumentId, t.scaleKey), t.axis]),
+  );
   const cases: ReferenceCase[] = rows.map((r) => {
     const series: Record<string, SessionPoint[]> = {};
     const bySessionKey = new Map<string, Map<number, { at: number; value: number }>>();
+    const byIndexKey = new Map<string, { at: number; value: number }[]>();
     for (const resp of r.responses) {
       for (const sc of resp.scaleScores) {
         const key = `${sc.scale.instrumentId}|${sc.scale.key}`;
         if (!targetKeys.has(key)) continue;
+        if (axisByKey.get(key) === "index") {
+          const list = byIndexKey.get(key) ?? [];
+          list.push({ at: resp.occurredAt.getTime(), value: sc.value });
+          byIndexKey.set(key, list);
+          continue;
+        }
+        if (resp.sessionNumber === null) continue;
         const m = bySessionKey.get(key) ?? new Map();
-        const prev = m.get(resp.sessionNumber!);
+        const prev = m.get(resp.sessionNumber);
         // Duplicate session numbers keep the later record (same convention as
         // sessionSeriesOf over serialized responses).
         if (!prev || resp.occurredAt.getTime() >= prev.at)
-          m.set(resp.sessionNumber!, { at: resp.occurredAt.getTime(), value: sc.value });
+          m.set(resp.sessionNumber, { at: resp.occurredAt.getTime(), value: sc.value });
         bySessionKey.set(key, m);
       }
     }
@@ -165,6 +183,9 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
       series[key] = Array.from(m.entries())
         .map(([session, { value }]) => ({ session, value }))
         .sort((a, b) => a.session - b.session);
+    }
+    for (const [key, list] of byIndexKey) {
+      series[key] = list.sort((a, b) => a.at - b.at).map(({ value }, i) => ({ session: i, value }));
     }
     const primary = series[PRIMARY_KEY] ?? [];
     return {
@@ -187,6 +208,9 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
 
   const etrModels = new Map<string, EtrModel>();
   for (const t of PREDICTION_TARGETS) {
+    // ETR is a log-linear model over the SESSION axis — meaningless on
+    // measurement-index series, so index-axis targets get no ETR curve.
+    if (t.axis === "index") continue;
     const key = seriesKeyOf(t.instrumentId, t.scaleKey);
     const model = trainEtr(
       cases

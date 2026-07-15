@@ -124,8 +124,11 @@ export function DipsSummary({ patient }: { patient: Patient }) {
           {entered.map((mod) => <ModuleSummary key={mod.id} mod={mod} m={answers[mod.id] || {}} />)}
         </>
       )}
+      {entered.length > 0 && (
       <details className="mt-2">
-        <summary className="text-xs font-semibold cursor-pointer" style={{ color: C.spruce }}>{t("showAllResponses")}</summary>
+        <summary className="text-xs font-semibold cursor-pointer" style={{ color: C.spruce }}>
+          {t("showModuleResponses", { modules: entered.map((mod) => tr(mod.title, lang)).join(", ") })}
+        </summary>
         <div className="mt-2 flex flex-col gap-3">
           {entered.map((mod) => {
             const m = answers[mod.id] || {};
@@ -143,6 +146,7 @@ export function DipsSummary({ patient }: { patient: Patient }) {
           })}
         </div>
       </details>
+      )}
       <details className="mt-2" open={showFhir} onToggle={(e) => setShowFhir((e.target as HTMLDetailsElement).open)}>
         <summary className="text-xs font-semibold cursor-pointer" style={{ color: C.spruce }}>{tr(T.viewPayload, lang)}</summary>
         {showFhir && <pre className="mt-2 text-xs overflow-auto rounded-lg p-3" style={{ background: "#1d2722", color: "#d6e2dc", maxHeight: 320 }}>{JSON.stringify(fhir, null, 2)}</pre>}

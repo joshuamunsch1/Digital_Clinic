@@ -6,17 +6,14 @@ import { fmtDate } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
-import type { CaseCharacteristics, InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, EMPLOYMENT_STATUSES, PROBLEM_DURATIONS, RATER_ROLES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import type { InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
-import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
-import { DipsSummary } from "./DipsSummary";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { ChannelChip } from "./MonitoringView";
-import { InstrumentForm } from "./InstrumentForm";
 import { PredictionPanel, type BandSource } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
 
@@ -118,135 +115,6 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction }: 
   );
 }
 
-/// Get data in: send a LimeSurvey link, upload a LimeSurvey CSV export, or type
-/// a paper form in manually. See docs/limesurvey-integration.md.
-function AddDataPanel({ patient, instruments, onStartManualEntry, onRefresh }: {
-  patient: Patient;
-  instruments: InstrumentDef[];
-  onStartManualEntry: (inst: InstrumentDef) => void;
-  onRefresh: (p: Patient) => void;
-}) {
-  const t = useT();
-  const { lang } = useLang();
-  // Diagnosis-/category-specific recommendations: sorted first + starred.
-  const recIds = useMemo(() => recommendedInstrumentIds(patient, instruments), [patient, instruments]);
-  const candidates = useMemo(
-    () =>
-      instruments
-        .filter((i) => i.id !== DIPS_INSTRUMENT_ID && i.instrumentType === "likert_battery")
-        .sort((a, b) => Number(recIds.has(b.id)) - Number(recIds.has(a.id))),
-    [instruments, recIds],
-  );
-  const [instId, setInstId] = useState(candidates[0]?.id ?? "");
-  const inst = candidates.find((i) => i.id === instId);
-  const [role, setRole] = useState("self");
-  const [wave, setWave] = useState("");
-  const [email, setEmail] = useState(patient.email ?? "");
-  const [surveyId, setSurveyId] = useState("");
-  const [csv, setCsv] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const isWave = inst?.cadenceType === "wave";
-  const waves = inst?.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"];
-
-  const run = async (fn: () => Promise<{ patient: Patient } & Record<string, unknown>>, done: (r: Record<string, unknown>) => string) => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await fn();
-      onRefresh(r.patient);
-      setMsg(done(r));
-    } catch (e) {
-      setMsg(`✗ ${(e as Error).message === "network_restricted" ? t("networkRestricted") : (e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!inst) return null;
-  const canEnterManually = inst.items.length > 0 && inst.definitionStatus === "complete";
-  return (
-    <Card className="p-5 mb-4">
-      <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("collectTitle")}</h3>
-      <div className="flex gap-3 flex-wrap mb-3">
-        <Field label={t("instrumentLabel")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 260 }} value={instId} onChange={(e) => { setInstId(e.target.value); setSurveyId(""); setMsg(null); }}>
-            {candidates.map((i) => (
-              <option key={i.id} value={i.id}>
-                {recIds.has(i.id) ? "★ " : ""}{i.abbreviation} — {trRaterRole(i.raterRole, lang)} ({trPopulation(i.population, lang)}){recIds.has(i.id) ? ` · ${t("recommendedTag")}` : ""}
-              </option>
-            ))}
-          </select>
-          {recIds.size > 0 && <p className="text-xs mt-1" style={{ color: C.spruce }}>{t("recommendedHint")}</p>}
-        </Field>
-        <Field label={t("ratedBy")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 120 }} value={role} onChange={(e) => setRole(e.target.value)}>
-            {RATER_ROLES.map((r) => <option key={r} value={r}>{trRaterRole(r, lang)}</option>)}
-          </select>
-        </Field>
-        {isWave && (
-          <Field label={t("waveLabel")}>
-            <select style={{ ...inputStyle, width: "auto", minWidth: 110 }} value={wave} onChange={(e) => setWave(e.target.value)}>
-              <option value="">—</option>
-              {waves.map((w) => <option key={w} value={w}>{w}</option>)}
-            </select>
-          </Field>
-        )}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="rounded-lg p-3" style={{ background: C.surfaceAlt }}>
-          <p className="text-xs font-bold mb-2" style={{ color: C.ink }}>{t("inviteHeading")}</p>
-          <div className="flex flex-col gap-2">
-            <input style={inputStyle} placeholder={t("recipientEmail")} value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input
-              style={inputStyle}
-              placeholder={inst.limesurveySurveyId ? t("surveyIdLinked", { id: inst.limesurveySurveyId }) : t("surveyIdUnlinked")}
-              value={surveyId}
-              onChange={(e) => setSurveyId(e.target.value)}
-            />
-            <PrimaryButton small disabled={busy || !email.trim() || (!surveyId.trim() && !inst.limesurveySurveyId)}
-              onClick={() => run(
-                () => api.createInvitation(patient.id, {
-                  instrumentId: inst.id,
-                  respondentRole: role,
-                  email: email.trim(),
-                  wave: isWave && wave ? wave : undefined,
-                  surveyId: surveyId.trim() || undefined,
-                }),
-                () => t("invitationCreated"),
-              )}>
-              {t("sendInvitation")}
-            </PrimaryButton>
-            <p className="text-xs" style={{ color: C.muted }}>{t("inviteHint")}</p>
-          </div>
-        </div>
-        <div className="rounded-lg p-3" style={{ background: C.surfaceAlt }}>
-          <p className="text-xs font-bold mb-2" style={{ color: C.ink }}>{t("haveAnswers")}</p>
-          <div className="flex flex-col gap-2">
-            <textarea style={{ ...inputStyle, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} rows={3}
-              placeholder={t("csvPlaceholder", { code: inst.items[0]?.id ?? "SDQ1" })}
-              value={csv} onChange={(e) => setCsv(e.target.value)} />
-            <div className="flex gap-2 flex-wrap">
-              <PrimaryButton small disabled={busy || !csv.trim() || !inst.items.length}
-                onClick={() => run(
-                  () => api.importCsv(patient.id, { instrumentId: inst.id, csv, respondentRole: role, wave: isWave && wave ? wave : undefined }),
-                  (r) => `✓ ${r.imported} — ${(r.warnings as string[]).join("; ") || t("importOk")}`,
-                )}>
-                {t("importCsv")}
-              </PrimaryButton>
-              {canEnterManually && <GhostButton small onClick={() => onStartManualEntry(inst)}>{t("manualEntry")}</GhostButton>}
-            </div>
-            {!inst.items.length && (
-              <p className="text-xs" style={{ color: C.amber }}>{t("itemsNotVerified")}</p>
-            )}
-          </div>
-        </div>
-      </div>
-      {msg && <p className="text-xs mt-3" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
-    </Card>
-  );
-}
-
 function InvitationsPanel({ patient, instruments, onRefresh }: {
   patient: Patient;
   instruments: InstrumentDef[];
@@ -302,110 +170,6 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
         ))}
       </div>
       {msg && <p className="text-xs mt-3" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
-    </Card>
-  );
-}
-
-/// Coded intake predictors (docs/outcome-prediction.md §4.3): the classic ETR
-/// set, entered by the clinician on the dossier — feeds nearest-neighbor /
-/// dropout-risk prediction. Coded fields only, no free text.
-function IntakePredictorsCard({ patient, readOnly, onRefresh }: {
-  patient: Patient;
-  readOnly: boolean;
-  onRefresh: (p: Patient) => void;
-}) {
-  const t = useT();
-  const { lang } = useLang();
-  const cc = patient.caseCharacteristics;
-  const [edit, setEdit] = useState<CaseCharacteristics>(cc);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const dirty = JSON.stringify(edit) !== JSON.stringify(cc);
-
-  const save = async () => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.saveCaseCharacteristics(patient.id, edit);
-      onRefresh(r.patient);
-      setMsg(t("predictorsSaved"));
-    } catch (e) {
-      setMsg(`✗ ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const yesNo = (v: boolean | undefined, set: (b: boolean) => void) => (
-    <div className="flex gap-1">
-      {[true, false].map((b) => (
-        <button key={String(b)} type="button" disabled={readOnly} onClick={() => set(b)} aria-pressed={v === b}
-          className="rounded-md text-xs font-semibold px-3 py-1.5"
-          style={{ background: v === b ? C.spruce : C.surfaceAlt, color: v === b ? "#fff" : C.muted, border: `1px solid ${v === b ? C.spruce : C.line}`, cursor: readOnly ? "default" : "pointer" }}>
-          {b ? t("predYes") : t("predNo")}
-        </button>
-      ))}
-    </div>
-  );
-
-  if (readOnly) {
-    const rows: [string, string][] = [
-      [t("durationLabel"), cc.problemDuration ? trProblemDuration(cc.problemDuration, lang) : t("notRecorded")],
-      [t("priorTxLabel"), cc.priorPsychotherapy === undefined ? t("notRecorded") : cc.priorPsychotherapy ? t("predYes") : t("predNo")],
-      [t("medicationLabel"), cc.psychotropicMedication === undefined ? t("notRecorded") : cc.psychotropicMedication ? t("predYes") : t("predNo")],
-      [t("employmentLabel"), cc.employment ? trEmployment(cc.employment, lang) : t("notRecorded")],
-      [t("expectationLabel"), cc.treatmentExpectation === undefined ? t("notRecorded") : String(cc.treatmentExpectation)],
-    ];
-    return (
-      <Card className="p-5 mb-4">
-        <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("predictorsTitle")}</h3>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mt-2">
-          {rows.map(([k, v]) => (<React.Fragment key={k}><dt style={{ color: C.muted }}>{k}</dt><dd className="font-semibold" style={{ color: C.ink }}>{v}</dd></React.Fragment>))}
-        </dl>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="p-5 mb-4">
-      <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("predictorsTitle")}</h3>
-      <p className="text-xs mb-3" style={{ color: C.muted }}>{t("predictorsSub")}</p>
-      <div className="flex gap-4 flex-wrap items-end">
-        <Field label={t("durationLabel")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={edit.problemDuration ?? ""}
-            onChange={(e) => setEdit({ ...edit, ...(e.target.value ? { problemDuration: e.target.value as CaseCharacteristics["problemDuration"] } : {}) })}>
-            <option value="">{t("notRecorded")}</option>
-            {PROBLEM_DURATIONS.map((d) => <option key={d} value={d}>{trProblemDuration(d, lang)}</option>)}
-          </select>
-        </Field>
-        <Field label={t("employmentLabel")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={edit.employment ?? ""}
-            onChange={(e) => setEdit({ ...edit, ...(e.target.value ? { employment: e.target.value as CaseCharacteristics["employment"] } : {}) })}>
-            <option value="">{t("notRecorded")}</option>
-            {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{trEmployment(s, lang)}</option>)}
-          </select>
-        </Field>
-        <Field label={t("priorTxLabel")}>
-          {yesNo(edit.priorPsychotherapy, (b) => setEdit({ ...edit, priorPsychotherapy: b }))}
-        </Field>
-        <Field label={t("medicationLabel")}>
-          {yesNo(edit.psychotropicMedication, (b) => setEdit({ ...edit, psychotropicMedication: b }))}
-        </Field>
-        <Field label={t("expectationLabel")}>
-          <input type="number" min={0} max={10} step={1} style={{ ...inputStyle, width: 90 }}
-            value={edit.treatmentExpectation ?? ""}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === "") {
-                const { treatmentExpectation: _drop, ...rest } = edit;
-                setEdit(rest);
-              } else {
-                setEdit({ ...edit, treatmentExpectation: Math.max(0, Math.min(10, Math.round(Number(raw)))) });
-              }
-            }} />
-        </Field>
-        <PrimaryButton small disabled={busy || !dirty} onClick={save}>{t("savePredictors")}</PrimaryButton>
-      </div>
-      {msg && <p className="text-xs mt-2" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
     </Card>
   );
 }
@@ -508,13 +272,14 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
   );
 }
 
-export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onResend, onPatientUpdated, onStartDips, onOpenDiagnosis }: {
+export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
-  onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void; onResend: (id: string) => void;
+  onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void;
   onPatientUpdated: (p: Patient) => void;
   onStartDips: (id: string) => void;
   onOpenDiagnosis: (id: string) => void;
+  onEditIntake: (id: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -531,7 +296,6 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     setDxIcd((prev) => (prev.trim() ? prev : proposal.icdCode));
     setDxCategory((prev) => (prev !== "other" ? prev : proposal.disorderCategory));
   }, [proposal, patient.diagnosis]);
-  const [manualEntry, setManualEntry] = useState<InstrumentDef | null>(null);
   const [busy, setBusy] = useState(false);
   // Therapist-facing outcome prediction (docs/outcome-prediction.md) — fetched
   // for active therapy dossiers; the API rejects unassigned therapists (403),
@@ -549,7 +313,16 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     [tr(T.age, lang), d.age], [tr(T.sex, lang), trDemoValue(d.sex, lang)], [tr(T.nationality, lang), d.nationality],
     [tr(T.city, lang), d.city], [tr(T.occupation, lang), d.occupation], [tr(T.living, lang), trDemoValue(d.living, lang)],
   ];
-  const sub = patient.dips && patient.dips.submission;
+  // Read-only summary of the coded intake predictors (§4.3) — edited in the
+  // IntakeEditView window together with the demographics.
+  const cc = patient.caseCharacteristics;
+  const predictorRows: [string, string][] = [
+    [t("durationLabel"), cc.problemDuration ? trProblemDuration(cc.problemDuration, lang) : t("notRecorded")],
+    [t("priorTxLabel"), cc.priorPsychotherapy === undefined ? t("notRecorded") : cc.priorPsychotherapy ? t("predYes") : t("predNo")],
+    [t("medicationLabel"), cc.psychotropicMedication === undefined ? t("notRecorded") : cc.psychotropicMedication ? t("predYes") : t("predNo")],
+    [t("employmentLabel"), cc.employment ? trEmployment(cc.employment, lang) : t("notRecorded")],
+    [t("expectationLabel"), cc.treatmentExpectation === undefined ? t("notRecorded") : String(cc.treatmentExpectation)],
+  ];
   const alerts = activeAlerts(patient, instruments);
   const isArchived = patient.status === "archived";
   const canArchive = user.role === "director" || (user.role === "therapist" && patient.therapistId === user.id);
@@ -585,6 +358,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     const s = prediction.series.find((x) => x.instrumentId === instrumentId);
     if (!s) return undefined;
     const simulated = prediction.reference.includesSimulated;
+    // NN bands are drawn blue so switching the source is visible at a glance.
     const band =
       bandSource === "clinic"
         ? {
@@ -595,7 +369,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
             simulated,
           }
         : bandSource === "nn" && s.nn.available && s.nn.points
-          ? { points: s.nn.points, label: t("bandLabelNn", { k: s.nn.k ?? 0 }), simulated }
+          ? { points: s.nn.points, label: t("bandLabelNn", { k: s.nn.k ?? 0 }), simulated, color: C.blue }
           : null;
     // The NOT flag fires on the 80% tolerance boundary (p10/p90) — draw that
     // same line the flag actually uses, direction-aware per scale.
@@ -658,32 +432,6 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     .sort((a, b) => b.responses.length - a.responses.length);
   const notes = patient.responses.filter((r) => r.note);
 
-  if (manualEntry) {
-    return (
-      <InstrumentForm
-        instrument={manualEntry}
-        clinicianMode
-        therapists={therapists}
-        defaultConductedById={user.role === "therapist" ? user.id : patient.therapistId}
-        busy={busy}
-        onCancel={() => setManualEntry(null)}
-        onSubmit={async (payload) => {
-          setBusy(true);
-          try {
-            const r = await api.submitResponse(patient.id, payload);
-            onPatientUpdated(r.patient);
-            setManualEntry(null);
-            if (r.skippedScales.length) alert(`${t("scalesNotComputed")}\n${r.skippedScales.map((s) => `${s.key}: ${s.reason}`).join("\n")}`);
-          } catch (e) {
-            alert("✗ " + (e as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto">
       <button type="button" onClick={onBack} className="text-sm font-semibold mb-3" style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>{t("backToOverview")}</button>
@@ -705,7 +453,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
             {notOnTrackSeries
               .map(
                 (s) =>
-                  `${s.instrumentId === "phq4" ? "PHQ-4" : "PSTB"}: ${s.onTrack.reasons
+                  `${instruments.find((i) => i.id === s.instrumentId)?.abbreviation ?? s.instrumentId}: ${s.onTrack.reasons
                     .map((r) => (r === "below_band" ? t("notReasonBand") : t("notReasonRci")))
                     .join(" + ")}`,
               )
@@ -768,7 +516,15 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         {instrumentsWithData.length > 0 && (
           <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
             <p className="text-xs font-bold mb-1" style={{ color: C.spruce }}>{t("summaryTitle")}</p>
-            <p className="text-xs mb-2" style={{ color: C.muted }}>{t("summarySub")}</p>
+            {/* Legend for the trend glyphs and the level bar in the pills below. */}
+            <p className="text-xs mb-2 flex items-center gap-x-3 gap-y-1 flex-wrap" style={{ color: C.muted }}>
+              <span>
+                <span style={{ color: C.spruce }}>▲</span>/<span style={{ color: C.danger }}>▼</span> {t("legendTrend")}
+              </span>
+              <span>► {t("legendStable")}</span>
+              <span>– {t("legendNoTrend")}</span>
+              <span>{t("legendBar")}</span>
+            </p>
             <SummaryStrip patient={patient} instruments={instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID)} />
           </div>
         )}
@@ -785,97 +541,94 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         </div>
       </Card>
 
-      <div className="grid md:grid-cols-2 gap-4 mb-4">
-        <Card className="p-5">
-          <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("demographicsTitle")}</h3>
-          {d && Object.keys(d).length ? (
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              {demoRows.map(([k, v]) => (<React.Fragment key={String(k)}><dt style={{ color: C.muted }}>{k}</dt><dd className="font-semibold" style={{ color: C.ink }}>{v || "—"}</dd></React.Fragment>))}
-            </dl>
-          ) : (<p className="text-sm" style={{ color: C.muted }}>{t("noIntakeYet")}</p>)}
-        </Card>
-        <Card className="p-5">
-          <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("diagnosisTitle")}</h3>
-          {patient.diagnosis ? (
-            <div>
-              <p className="text-sm font-semibold" style={{ color: C.ink }}>
-                {patient.diagnosis.text}
-                {patient.icdCode && (
-                  <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full align-middle" style={{ background: C.blueSoft, color: C.blue }}>
-                    {patient.icdCode}
-                  </span>
-                )}
-              </p>
-              <p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p>
-              {patient.dips && (
-                <div className="mt-2">
-                  <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>
-                </div>
-              )}
-            </div>
-          ) : isArchived ? (
-            <p className="text-sm" style={{ color: C.muted }}>—</p>
-          ) : patient.status === "assessment" ? (
-            <p className="text-sm" style={{ color: C.muted }}>{t("diagnosisAfterIntake")}</p>
-          ) : !patient.dips ? (
-            // Gate: the DIPS interview is required before a diagnosis can be recorded.
-            <div>
-              <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
-              <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
-            </div>
-          ) : (
-            <div>
-              {proposal ? (
-                <p className="mb-2">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>{t("proposalChip")}</span>
+      {/* Intake & diagnosis — the once-per-treatment data in one card: diagnosis
+          (left), demographics + intake predictors (right, read-only summaries;
+          edited in the full-window IntakeEditView). */}
+      <Card className="p-5 mb-4">
+        <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("intakeCardTitle")}</h3>
+        <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
+          <div>
+            <p className="text-xs font-bold mb-2" style={{ color: C.muted }}>{t("diagnosisTitle")}</p>
+            {patient.diagnosis ? (
+              <div>
+                <p className="text-sm font-semibold" style={{ color: C.ink }}>
+                  {patient.diagnosis.text}
+                  {patient.icdCode && (
+                    <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full align-middle" style={{ background: C.blueSoft, color: C.blue }}>
+                      {patient.icdCode}
+                    </span>
+                  )}
                 </p>
+                <p className="text-xs mt-1" style={{ color: C.muted }}>{t("recordedOn")} {fmtDate(patient.diagnosis.date)} · {patient.diagnosis.by}</p>
+              </div>
+            ) : isArchived ? (
+              <p className="text-sm" style={{ color: C.muted }}>—</p>
+            ) : !patient.dips ? (
+              patient.status === "assessment" ? (
+                <p className="text-sm" style={{ color: C.muted }}>{t("diagnosisAfterIntake")}</p>
               ) : (
-                <p className="text-sm mb-2" style={{ color: C.muted }}>{t("noProposal")}</p>
-              )}
-              <textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} placeholder={t("diagnosisPlaceholder")} value={dxText} onChange={(e) => setDxText(e.target.value)} />
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <Field label={t("disorderCategoryLabel")}>
-                  <select style={{ ...inputStyle, width: "auto", minWidth: 170 }} value={dxCategory} onChange={(e) => setDxCategory(e.target.value)}>
-                    {DISORDER_CATEGORIES.map((c) => <option key={c} value={c}>{trCategory(c, lang)}</option>)}
-                  </select>
-                </Field>
-                <Field label={t("icdLabel")}>
-                  <input style={{ ...inputStyle, width: 110 }} placeholder="F41.0" value={dxIcd} onChange={(e) => setDxIcd(e.target.value.toUpperCase())} />
-                </Field>
+                // Gate: the DIPS interview is required before a diagnosis can be recorded.
+                <div>
+                  <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
+                  <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
+                </div>
+              )
+            ) : (
+              <div>
+                {proposal ? (
+                  <p className="mb-2">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>{t("proposalChip")}</span>
+                  </p>
+                ) : (
+                  <p className="text-sm mb-2" style={{ color: C.muted }}>{t("noProposal")}</p>
+                )}
+                <textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} placeholder={t("diagnosisPlaceholder")} value={dxText} onChange={(e) => setDxText(e.target.value)} />
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <Field label={t("disorderCategoryLabel")}>
+                    <select style={{ ...inputStyle, width: "auto", minWidth: 170 }} value={dxCategory} onChange={(e) => setDxCategory(e.target.value)}>
+                      {DISORDER_CATEGORIES.map((c) => <option key={c} value={c}>{trCategory(c, lang)}</option>)}
+                    </select>
+                  </Field>
+                  <Field label={t("icdLabel")}>
+                    <input style={{ ...inputStyle, width: 110 }} placeholder="F41.0" value={dxIcd} onChange={(e) => setDxIcd(e.target.value.toUpperCase())} />
+                  </Field>
+                </div>
+                <div className="mt-2">
+                  <PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory, dxIcd.trim() || undefined)}>{t("saveDiagnosis")}</PrimaryButton>
+                </div>
               </div>
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <PrimaryButton small disabled={!dxText.trim()} onClick={() => onSaveDiagnosis(patient.id, dxText.trim(), dxCategory, dxIcd.trim() || undefined)}>{t("saveDiagnosis")}</PrimaryButton>
-                <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>
-              </div>
-            </div>
-          )}
-        </Card>
-      </div>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-bold mb-2" style={{ color: C.muted }}>{t("demographicsTitle")}</p>
+            {d && Object.keys(d).length ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                {demoRows.map(([k, v]) => (<React.Fragment key={String(k)}><dt style={{ color: C.muted }}>{k}</dt><dd className="font-semibold" style={{ color: C.ink }}>{v || "—"}</dd></React.Fragment>))}
+              </dl>
+            ) : (<p className="text-sm" style={{ color: C.muted }}>{t("noIntakeYet")}</p>)}
+            <p className="text-xs font-bold mb-2 mt-4" style={{ color: C.muted }}>{t("predictorsTitle")}</p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              {predictorRows.map(([k, v]) => (<React.Fragment key={k}><dt style={{ color: C.muted }}>{k}</dt><dd className="font-semibold" style={{ color: C.ink }}>{v}</dd></React.Fragment>))}
+            </dl>
+          </div>
+        </div>
+        <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap" style={{ borderTop: `1px solid ${C.line}` }}>
+          {patient.dips && <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>}
+          {!isArchived && <GhostButton small onClick={() => onEditIntake(patient.id)}>{t("editIntake")}</GhostButton>}
+        </div>
+      </Card>
 
       <DocumentsPanel patient={patient} user={user} onRefresh={onPatientUpdated} />
 
-      {/* Therapist-facing outcome prediction — active therapy dossiers only. */}
+      {/* Archived dossiers are read-only — no new data collection. */}
+      {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
+      <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
+
+      {/* Therapist-facing outcome prediction — active therapy dossiers only.
+          Sits directly above the trajectory charts its source toggle drives. */}
       {showPrediction && (
         <PredictionPanel prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
       )}
-
-      {/* Intake predictors (§4.3) — read-only on archived dossiers. */}
-      <IntakePredictorsCard patient={patient} readOnly={isArchived} onRefresh={onPatientUpdated} />
-
-      {patient.dips && (
-        <Card className="p-5 mb-4">
-          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-            <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("dipsTitle")}</h3>
-            {sub && sub.status !== "sent" && <GhostButton small onClick={() => onResend(patient.id)}>{tr(T.retry, lang)}</GhostButton>}
-          </div>
-          <DipsSummary patient={patient} />
-        </Card>
-      )}
-
-      {/* Archived dossiers are read-only — no new data collection. */}
-      {!isArchived && <AddDataPanel patient={patient} instruments={instruments} onStartManualEntry={setManualEntry} onRefresh={onPatientUpdated} />}
-      {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
-      <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
 
       {instrumentsWithData.length === 0 && (
         <Card className="p-5 mb-4"><p className="text-sm" style={{ color: C.muted }}>{t("noDataYet")}</p></Card>

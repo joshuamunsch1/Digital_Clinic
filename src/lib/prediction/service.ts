@@ -16,6 +16,7 @@ import { dynamicNeighbors, nnExpectedCourse } from "../analytics/nearest-neighbo
 import { percentile } from "../analytics/stats";
 import { detectSuddenShifts } from "../analytics/sudden-shifts";
 import {
+  indexedSeriesOf,
   seriesKeyOf,
   sessionSeriesOf,
   type EarlyChange,
@@ -188,13 +189,13 @@ export async function buildPrediction(prisma: PrismaClient, patientId: string): 
 
   const series: SeriesPrediction[] = [];
   for (const t of PREDICTION_TARGETS) {
-    const s = predictSeries(
-      ref,
-      sessionSeriesOf(patient.responses, t.instrumentId, t.scaleKey),
-      features,
-      t.instrumentId,
-      t.scaleKey,
-    );
+    // Index-axis targets (BDI-FS) align by measurement order, mirroring how
+    // the reference series were built in reference.ts.
+    const patientSeries =
+      t.axis === "index"
+        ? indexedSeriesOf(patient.responses, t.instrumentId, t.scaleKey)
+        : sessionSeriesOf(patient.responses, t.instrumentId, t.scaleKey);
+    const s = predictSeries(ref, patientSeries, features, t.instrumentId, t.scaleKey);
     if (s) series.push(s);
   }
 

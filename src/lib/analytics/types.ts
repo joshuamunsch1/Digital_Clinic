@@ -49,6 +49,22 @@ export function sessionSeriesOf(
     .sort((a, b) => a.session - b.session);
 }
 
+/// Extract a measurement-index series (0, 1, 2… in chronological order) for one
+/// (instrument, scale) — the axis used for wave-/date-cadenced prediction
+/// targets like the BDI-FS, whose responses carry no sessionNumber. `session`
+/// holds the occasion index so all downstream algorithms work unchanged.
+export function indexedSeriesOf(
+  responses: ResponseRecord[],
+  instrumentId: string,
+  scaleKey: string,
+): SessionPoint[] {
+  return responses
+    .filter((r) => r.instrumentId === instrumentId && typeof r.scores[scaleKey] === "number")
+    .map((r) => ({ at: Date.parse(r.occurredAt), value: r.scores[scaleKey] }))
+    .sort((a, b) => a.at - b.at)
+    .map(({ value }, i) => ({ session: i, value }));
+}
+
 // --- Early change (Lutz: strongest process predictor of outcome) ---------------
 
 export type EarlyChange = "early_response" | "early_deterioration" | "indeterminate";

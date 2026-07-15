@@ -146,6 +146,38 @@ Recommended instruments are ★-marked and sorted first in both send-forms.
 numerics were not verifiable; treat as prototype values pending clinical
 review.
 
+**Batch 9 (2026-07-13)**: **dossier/monitoring UX overhaul.** SummaryStrip
+shows the value next to its bar, with a glyph legend (▲▼►– + bar) replacing
+the "Grün = günstig" caption. **Every demo patient has a DIPS interview**
+(`demo.ts`: per-module `DIPS_POSITIVE`/`DIPS_NEGATIVE` blocks +
+`buildDipsAnswers(positive)`, `DemoPatient.dips` profile — p1 panic, p3 gad,
+p6/p10 social, p7 phobia, p11 panic+agora, rest all-negative screens), so
+the diagnosis view opens on all dossiers incl. archived; an existing DIPS
+now overrides the assessment-stage gate. New staff-only
+`GET /api/patients/[id]/dips/export` (JSON attachment: answers + FHIR +
+relay status); download link and the relay-retry button live in
+`DiagnosisView`; the dossier's "DIPS · Angst-Screening" card is gone.
+DipsSummary's responses toggle names the screened-positive modules.
+**One "Aufnahme & Diagnose" card** merged the diagnosis, demographics and
+predictor summaries; editing happens in the full-window `IntakeEditView`
+(AppShell view `intake-edit`) via new PATCH action `demographics`
+(staff-only, NO status/assessmentDate side effects — deliberately NOT the
+patient assessment route) + `caseCharacteristics`. **PredictionPanel sits
+directly above the trajectory charts**; the NN band draws blue vs clinic
+spruce so the source toggle is visible; **BDI-FS is a third prediction
+target** on a measurement-index axis (`PREDICTION_TARGETS` gained
+`axis: "session" | "index"`, `indexedSeriesOf()` in analytics/types, the
+reference loader also takes wave/date rows; ETR stays session-axis-only;
+chart overlays attach index points to the patient's chronological
+occasions). The dossier's "Fragebogen erheben" panel was removed — **manual
+paper-form entry and CSV import moved into MonitoringView** (collect-mode
+select limesurvey/in_app/manual/csv; manual opens the clinician
+`InstrumentForm` full-window with conducted-by). The monitoring e-mail field
+shows for BOTH channels, defaults to the address on file, and a changed
+address is persisted to `Patient.email` (uniqueness vs patients+staff →
+409 `email_taken`; the in-app branch accepts the override too). Archived
+patients are excluded from monitoring.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

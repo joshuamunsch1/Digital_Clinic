@@ -17,6 +17,10 @@ import { useLang, useT } from "./LangContext";
 
 export type BandSource = "clinic" | "nn" | "etr";
 
+/// Display abbreviations for the prediction-target instruments
+/// (PREDICTION_TARGETS in src/lib/prediction/reference.ts).
+const SERIES_LABELS: Record<string, string> = { phq4: "PHQ-4", pstb_adult: "PSTB", bdi_fs: "BDI-FS" };
+
 /// Germanized display names for the dropout model's top factors.
 const FEATURE_KEYS: Record<string, string> = {
   age: "featAge",
@@ -70,10 +74,12 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
   const dropout = prediction.dropoutRisk;
   const simulated = prediction.reference.includesSimulated;
 
+  // A source stays selectable if ANY monitored series supports it — the charts
+  // fall back per series when a particular one lacks the data.
   const sources: { key: BandSource; label: string; disabled: boolean; reason?: string }[] = [
     { key: "clinic", label: t("sourceClinic"), disabled: false },
-    { key: "nn", label: t("sourceNn"), disabled: !nn?.available, reason: t("nnUnavailable") },
-    { key: "etr", label: t("sourceEtr"), disabled: !primary?.etr.available, reason: t("etrUnavailable") },
+    { key: "nn", label: t("sourceNn"), disabled: !prediction.series.some((s) => s.nn.available), reason: t("nnUnavailable") },
+    { key: "etr", label: t("sourceEtr"), disabled: !prediction.series.some((s) => s.etr.available), reason: t("etrUnavailable") },
   ];
 
   const featureLabel = (feature: string): string => {
@@ -123,7 +129,7 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
       <div className="flex flex-col gap-1 mb-3">
         {prediction.series.map((s) => (
           <div key={`${s.instrumentId}|${s.scaleKey}`} className="flex items-center gap-2 flex-wrap text-xs">
-            <span className="font-semibold" style={{ color: C.ink, minWidth: 110 }}>{s.instrumentId === "phq4" ? "PHQ-4" : "PSTB"} · {s.scaleKey}</span>
+            <span className="font-semibold" style={{ color: C.ink, minWidth: 110 }}>{SERIES_LABELS[s.instrumentId] ?? s.instrumentId} · {s.scaleKey}</span>
             <EarlyChangeBadge value={s.earlyChange} />
             {s.onTrack.status === "not_on_track" ? (
               <span className="font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>

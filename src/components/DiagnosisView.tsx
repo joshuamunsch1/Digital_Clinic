@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { tr, trCategory } from "@/lib/i18n";
+import { T, tr, trCategory } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import type { Patient, Therapist } from "@/lib/types";
@@ -61,13 +61,14 @@ function EvaluationCard({ evaluation, lang }: { evaluation: ModuleEvaluation; la
 /// Full-window diagnostics: mechanical DIPS evaluation with per-criterion
 /// breakdown, the interview record, the (proposed or confirmed) diagnosis,
 /// diagnosis-specific questionnaire recommendations and guideline references.
-export function DiagnosisView({ patient, therapists, instruments, onBack, onSaveDiagnosis, onStartDips }: {
+export function DiagnosisView({ patient, therapists, instruments, onBack, onSaveDiagnosis, onStartDips, onResend }: {
   patient: Patient;
   therapists: Therapist[];
   instruments: InstrumentDef[];
   onBack: () => void;
   onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void;
   onStartDips: (id: string) => void;
+  onResend: (id: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -175,6 +176,16 @@ export function DiagnosisView({ patient, therapists, instruments, onBack, onSave
             <span className="text-xs" style={{ color: C.muted }}>
               {fmtDate(patient.dips.completedAt)}
               {conductedBy ? ` · ${t("conductedByLabel")} ${conductedBy.name}` : ""}
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              {/* Plain <a> download; the route enforces staff + network gating. */}
+              <a href={`/api/patients/${patient.id}/dips/export`} className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
+                ⬇ {t("downloadDips")}
+              </a>
+              {patient.dips.submission && patient.dips.submission.status !== "sent" && (
+                <GhostButton small onClick={() => onResend(patient.id)}>{tr(T.retry, lang)}</GhostButton>
+              )}
             </span>
           </div>
           <DipsSummary patient={patient} />

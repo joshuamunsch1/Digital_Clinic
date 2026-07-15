@@ -9,6 +9,7 @@ import { PatientHome, type PatientTask } from "./PatientHome";
 import { AssessmentForm, type AssessmentPayload } from "./AssessmentForm";
 import { DiagnosisView } from "./DiagnosisView";
 import { DipsForm, type DipsSubmission } from "./DipsForm";
+import { IntakeEditView } from "./IntakeEditView";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { MonitoringView } from "./MonitoringView";
@@ -27,6 +28,8 @@ type View =
   | { name: "dips-interview"; patientId: string }
   // Full-window diagnostics: DIPS evaluation, proposal, recommendations, guidelines.
   | { name: "diagnosis"; patientId: string }
+  // Staff editor for the once-per-treatment intake data (demographics + predictors).
+  | { name: "intake-edit"; patientId: string }
   // from makes Back return to the originating secondary view instead of the dashboard.
   | { name: "patient-detail"; patientId: string; from?: "monitoring" | "archive" };
 
@@ -310,7 +313,16 @@ function Shell() {
             <DiagnosisView patient={diagPatient} therapists={therapists} instruments={instruments}
               onBack={() => setView({ name: "patient-detail", patientId: view.patientId })}
               onSaveDiagnosis={saveDiagnosis}
-              onStartDips={(id) => setView({ name: "dips-interview", patientId: id })} />
+              onStartDips={(id) => setView({ name: "dips-interview", patientId: id })}
+              onResend={resendDips} />
+          ) : null;
+        })()}
+        {(user.role === "therapist" || user.role === "director") && data && view.name === "intake-edit" && (() => {
+          const intakePatient = data.patients.find((p) => p.id === view.patientId);
+          return intakePatient ? (
+            <IntakeEditView patient={intakePatient}
+              onBack={() => setView({ name: "patient-detail", patientId: view.patientId })}
+              onSaved={patientUpdated} />
           ) : null;
         })()}
         {(user.role === "therapist" || user.role === "director") && data && view.name === "monitoring" && (
@@ -332,9 +344,10 @@ function Shell() {
                     : { name: "home" },
               )
             }
-            onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onResend={resendDips} onPatientUpdated={patientUpdated}
+            onAssign={assignTherapist} onSaveDiagnosis={saveDiagnosis} onPatientUpdated={patientUpdated}
             onStartDips={(id) => setView({ name: "dips-interview", patientId: id })}
-            onOpenDiagnosis={(id) => setView({ name: "diagnosis", patientId: id })} />
+            onOpenDiagnosis={(id) => setView({ name: "diagnosis", patientId: id })}
+            onEditIntake={(id) => setView({ name: "intake-edit", patientId: id })} />
         )}
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">
