@@ -6,6 +6,7 @@ import type { Patient, Therapist } from "@/lib/types";
 import { responsesFor } from "@/lib/types";
 import { hasFullWording, isFillable, type InstrumentDef } from "@/lib/instruments/types";
 import { Card, PrimaryButton, SectionTitle } from "./ui";
+import { GoalLadder } from "./GoalLadder";
 import { useT } from "./LangContext";
 
 export type PatientTask =
@@ -138,6 +139,20 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
                 </div>
               );
             })}
+          </div>
+        </Card>
+      )}
+
+      {/* GAS therapy goals, read-only: the patient sees the goals they set with
+          their therapist (entry and attainment ratings are staff-side). */}
+      {patient.goals.length > 0 && (
+        <Card className="p-5 mb-4">
+          <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("goalsPatientTitle")}</h3>
+          <p className="text-xs mb-3" style={{ color: C.muted }}>{t("goalsPatientHint")}</p>
+          <div className="flex flex-col gap-4">
+            {patient.goals.map((g) => (
+              <GoalLadder key={g.id} goal={g} readOnly />
+            ))}
           </div>
         </Card>
       )}

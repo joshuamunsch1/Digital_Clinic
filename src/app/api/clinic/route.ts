@@ -39,7 +39,7 @@ export async function GET(req: Request) {
       therapistsQ,
     ]);
     return NextResponse.json({
-      patients: patients.map((p) => patientLiteFromRow({ ...p, responses: [], invitations: [], sessionLogs: [] })),
+      patients: patients.map((p) => patientLiteFromRow({ ...p, responses: [], invitations: [], sessionLogs: [], goals: [] })),
       therapists: therapists.map((t) => ({ id: t.id, name: t.name, title: t.title })),
       instruments: [],
       limesurveyConfigured: limesurveyConfigured(),

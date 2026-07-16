@@ -9,6 +9,8 @@ export const DOCUMENT_TYPES = [
   "consent",
   "confidentiality",
   "emergency_contacts",
+  // Filed-PDF doc type; conceptually superseded by the structured GAS goals
+  // (TherapyGoal model), kept for scanned paper forms.
   "personal_goals",
   "report",
   "other",

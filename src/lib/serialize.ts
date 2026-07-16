@@ -5,6 +5,9 @@ import type {
   DipsAnswers,
   DipsRecord,
   DocumentRecord,
+  GoalLevels,
+  GoalRating,
+  GoalRecord,
   InvitationContext,
   InvitationRecord,
   Patient,
@@ -102,6 +105,13 @@ interface SessionLogRow {
   conductedById: string | null;
   note: string;
 }
+interface GoalRow {
+  id: string;
+  title: string;
+  levels: string;
+  ratings: string;
+  createdAt: Date;
+}
 interface PatientRow {
   id: string;
   name: string;
@@ -128,6 +138,7 @@ interface PatientRow {
   invitations?: InvitationRow[];
   documents?: DocumentRow[];
   sessionLogs?: SessionLogRow[];
+  goals?: GoalRow[];
 }
 
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -259,6 +270,16 @@ export function sessionLogFromRow(l: SessionLogRow): SessionLogRecord {
   };
 }
 
+export function goalFromRow(g: GoalRow): GoalRecord {
+  return {
+    id: g.id,
+    title: g.title,
+    levels: parse<GoalLevels>(g.levels, {}),
+    ratings: parse<GoalRating[]>(g.ratings, []),
+    createdAt: g.createdAt.toISOString(),
+  };
+}
+
 export function patientFromRow(p: PatientRow): Patient {
   const responses = [...p.responses].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
@@ -290,6 +311,9 @@ export function patientFromRow(p: PatientRow): Patient {
     sessionLogs: [...(p.sessionLogs ?? [])]
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
       .map(sessionLogFromRow),
+    goals: [...(p.goals ?? [])]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map(goalFromRow),
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: dipsRow ? dipsFromResponse(dipsRow) : null,
     diagnosis:
@@ -305,7 +329,7 @@ export function patientFromRow(p: PatientRow): Patient {
 /// invitation/session-log payloads — with a couple hundred archived reference
 /// cases those would dominate the transfer. The full dossier is fetched via
 /// GET /api/patients/[id] when an archived patient is opened.
-export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs" | "documents">): Patient {
+export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs" | "documents" | "goals">): Patient {
   return {
     id: p.id,
     name: p.name,
@@ -328,6 +352,7 @@ export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitat
     invitations: [],
     documents: [],
     sessionLogs: [],
+    goals: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis:
@@ -367,6 +392,7 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     invitations: [],
     documents: [],
     sessionLogs: [],
+    goals: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis: null,
@@ -379,6 +405,9 @@ export function patientLiteFromRow(p: PatientRow): Patient {
 export function patientForSession(p: PatientRow, role: string): Patient {
   if (role === "admin") return patientLiteFromRow(p);
   const full = patientFromRow(p);
+  // Goals are deliberately NOT stripped for the patient role: they are the
+  // patient's own therapy contract (read-only in the portal), unlike the
+  // staff-facing document timeline and session-log notes.
   return role === "patient" ? { ...full, documents: [], sessionLogs: [] } : full;
 }
 
@@ -388,4 +417,5 @@ export const PATIENT_INCLUDE = {
   invitations: true,
   documents: { include: { uploadedBy: { select: { id: true, name: true } } } },
   sessionLogs: true,
+  goals: true,
 } as const;

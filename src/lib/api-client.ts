@@ -5,6 +5,7 @@ import type {
   ClinicData,
   Demographics,
   DipsAnswers,
+  GoalLevels,
   Patient,
   SessionUser,
 } from "./types";
@@ -193,6 +194,22 @@ export const api = {
 
   deleteSessionLog: (logId: string) =>
     fetch(`/api/session-logs/${logId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),
+
+  // GAS therapy goals (staff-only writes; patients receive goals read-only).
+  createGoal: (id: string, payload: { title: string; levels: GoalLevels }) =>
+    post(`/api/patients/${id}/goals`, payload).then((r) => handle<{ patient: Patient }>(r)),
+
+  updateGoal: (id: string, goalId: string, payload: { title?: string; levels?: GoalLevels }) =>
+    patch(`/api/patients/${id}/goals`, { action: "update", goalId, ...payload }).then((r) => handle<{ patient: Patient }>(r)),
+
+  rateGoal: (id: string, goalId: string, payload: { level: number; at?: string }) =>
+    patch(`/api/patients/${id}/goals`, { action: "rate", goalId, ...payload }).then((r) => handle<{ patient: Patient }>(r)),
+
+  removeGoalRating: (id: string, goalId: string, at: string) =>
+    patch(`/api/patients/${id}/goals`, { action: "removeRating", goalId, at }).then((r) => handle<{ patient: Patient }>(r)),
+
+  deleteGoal: (id: string, goalId: string) =>
+    patch(`/api/patients/${id}/goals`, { action: "delete", goalId }).then((r) => handle<{ patient: Patient }>(r)),
 
   /// terminationReason is required — the server rejects unlabeled conclusions
   /// (docs/outcome-prediction.md §4.2).

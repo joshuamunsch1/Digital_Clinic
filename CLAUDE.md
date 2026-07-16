@@ -178,6 +178,29 @@ address is persisted to `Patient.email` (uniqueness vs patients+staff →
 409 `email_taken`; the in-app branch accepts the override too). Archived
 patients are excluded from monitoring.
 
+**Batch 10 (2026-07-15)**: **GAS therapy goals** (Zielerreichungsskala nach
+Kiresuk & Sherman — clinic paper template: per goal a title + free-text
+descriptions for levels +3/+2/+1 positive erwünschte Veränderung, 0
+Ausgangslage/Ist-Zustand, −1 negative Veränderung). New `TherapyGoal` model
+(`levels` JSON `{"-1".."3": string}`, `ratings` JSON `[{at, level, by}]` —
+by-name attribution like `diagnosisBy`); staff-only
+`/api/patients/[id]/goals` (POST create, PATCH
+update/rate/removeRating/delete; director-or-assigned-therapist, archived →
+400 `archived`, ≤10 goals, integer level −1..+3). Goals are
+**patient-visible read-only** (deliberately NOT stripped in
+`patientForSession`; rendered as read-only ladders in `PatientHome`). The
+intake card's left column shows a goals summary (title + current-level chip
++ MiniTrend) under the diagnosis info; entry/edit/rating live in the
+full-window **`GoalsView`** (AppShell view `goals`): `GoalLadder` cards
+(5 rungs +3→−1, baseline 0 blue, current rung highlighted, `LevelPicker`
+−1..+3 + date + rating history) and `GoalChart` in charts.tsx (fixed −1..3
+axis, dashed "Ausgangslage" ReferenceLine at 0, tinted negative zone, one
+PALETTE line per goal, toggle chips). Demo goals: p1 improving, p3 dips to
+−1, p6 unrated, p10 archived with absolute 2024 rating dates; seeding
+staggers `createdAt` for stable order. `personal_goals` stays a filed-PDF
+doc type; the archive JSON export includes goals automatically via
+`patientFromRow`.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

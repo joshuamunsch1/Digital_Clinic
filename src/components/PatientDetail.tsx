@@ -7,11 +7,12 @@ import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
 import type { InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, currentGoalRating, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
-import { Card, Field, GhostButton, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
+import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
+import { GoalLevelChip } from "./GoalLadder";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { ChannelChip } from "./MonitoringView";
 import { PredictionPanel, type BandSource } from "./PredictionPanel";
@@ -272,7 +273,7 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
   );
 }
 
-export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake }: {
+export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake, onOpenGoals }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
   onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void;
@@ -280,6 +281,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   onStartDips: (id: string) => void;
   onOpenDiagnosis: (id: string) => void;
   onEditIntake: (id: string) => void;
+  onOpenGoals: (id: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -598,6 +600,30 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
                 </div>
               </div>
             )}
+            {/* GAS therapy goals at a glance: title + current attainment chip +
+                trend. Entry/rating happens in the full-window GoalsView. */}
+            <p className="text-xs font-bold mb-2 mt-4" style={{ color: C.muted }}>{t("goalsTitle")}</p>
+            {patient.goals.length ? (
+              <div className="flex flex-col gap-1">
+                {patient.goals.map((g) => {
+                  const cur = currentGoalRating(g);
+                  return (
+                    <div key={g.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ background: C.surfaceAlt }}>
+                      <span className="text-sm truncate flex-1" style={{ color: C.ink }} title={g.title}>{g.title}</span>
+                      <MiniTrend values={g.ratings.map((r) => r.level)} />
+                      {cur ? <GoalLevelChip level={cur.level} /> : <span className="text-xs" style={{ color: C.muted }}>—</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm" style={{ color: C.muted }}>{t("goalsNone")}</p>
+                {!isArchived && (
+                  <div className="mt-2"><GhostButton small onClick={() => onOpenGoals(patient.id)}>{t("goalsDefine")}</GhostButton></div>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <p className="text-xs font-bold mb-2" style={{ color: C.muted }}>{t("demographicsTitle")}</p>
@@ -615,6 +641,9 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap" style={{ borderTop: `1px solid ${C.line}` }}>
           {patient.dips && <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>}
           {!isArchived && <GhostButton small onClick={() => onEditIntake(patient.id)}>{t("editIntake")}</GhostButton>}
+          {!(isArchived && patient.goals.length === 0) && (
+            <GhostButton small onClick={() => onOpenGoals(patient.id)}>{t("openGoalsView")}</GhostButton>
+          )}
         </div>
       </Card>
 

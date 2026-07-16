@@ -45,6 +45,37 @@ export interface SessionLogRecord {
   note: string;
 }
 
+/// Goal Attainment Scaling (Zielerreichungsskala nach Kiresuk & Sherman — the
+/// clinic's paper template): per goal a title plus free-text descriptions of
+/// five attainment levels, and a series of dated therapist ratings.
+/// GAS_LEVELS is the ladder display order (+3 on top … −1 at the bottom);
+/// 0 is the Ausgangslage/Ist-Zustand baseline.
+export const GAS_LEVELS = [3, 2, 1, 0, -1] as const;
+export type GasLevel = (typeof GAS_LEVELS)[number];
+export type GoalLevelKey = "-1" | "0" | "1" | "2" | "3";
+export type GoalLevels = Partial<Record<GoalLevelKey, string>>;
+
+export interface GoalRating {
+  at: string;
+  level: number;
+  /// Staff display name at rating time (mirrors diagnosisBy/archivedBy).
+  by: string;
+}
+
+export interface GoalRecord {
+  id: string;
+  title: string;
+  levels: GoalLevels;
+  /// Kept date-sorted by the API; last entry = current attainment.
+  ratings: GoalRating[];
+  createdAt: string;
+}
+
+/// The most recent attainment rating of a goal, or null if unrated.
+export function currentGoalRating(g: GoalRecord): GoalRating | null {
+  return g.ratings.length ? g.ratings[g.ratings.length - 1] : null;
+}
+
 /// Who can fill out an instrument — shared by the clinician entry forms.
 export const RATER_ROLES = ["self", "mother", "father", "parent", "teacher", "caregiver", "clinician"] as const;
 
@@ -194,6 +225,8 @@ export interface Patient {
   invitations: InvitationRecord[];
   documents: DocumentRecord[];
   sessionLogs: SessionLogRecord[];
+  /// GAS therapy goals — staff-entered, patient-visible read-only.
+  goals: GoalRecord[];
   assessment: { date: string; type: string } | null;
   /// Convenience view of the DIPS intake response (if any) for the existing
   /// DIPS summary/FHIR UI. Derived from responses, not separately stored.

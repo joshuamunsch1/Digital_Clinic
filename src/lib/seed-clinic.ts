@@ -230,6 +230,7 @@ export async function seedClinic(prisma: PrismaClient) {
   await prisma.questionnaireInvitation.deleteMany();
   await prisma.patientDocument.deleteMany();
   await prisma.sessionLog.deleteMany();
+  await prisma.therapyGoal.deleteMany();
   await prisma.scale.deleteMany();
   await prisma.instrument.deleteMany();
   await prisma.patient.deleteMany();
@@ -306,6 +307,29 @@ export async function seedClinic(prisma: PrismaClient) {
           type: log.type,
           conductedById: p.therapistId,
           note: log.note ?? "",
+        },
+      });
+    }
+
+    // GAS therapy goals. Ratings are attributed by staff display name (the
+    // assigned therapist), matching the goals route's `by: s.name` convention;
+    // createdAt is staggered so the goal order stays stable.
+    const goalBy = THERAPISTS.find((th) => th.id === p.therapistId)?.name ?? DIRECTOR.name;
+    for (const [gi, g] of (p.goals ?? []).entries()) {
+      const ratings = (g.ratings ?? [])
+        .map((r) => ({
+          at: r.at ?? new Date(now - (r.daysAgo ?? 0) * 864e5).toISOString(),
+          level: r.level,
+          by: goalBy,
+        }))
+        .sort((a, b) => a.at.localeCompare(b.at));
+      await prisma.therapyGoal.create({
+        data: {
+          patientId: p.id,
+          title: g.title,
+          levels: JSON.stringify(g.levels),
+          ratings: JSON.stringify(ratings),
+          createdAt: new Date(now - 60 * 864e5 + gi * 60000),
         },
       });
     }

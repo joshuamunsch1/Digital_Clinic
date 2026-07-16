@@ -10,7 +10,7 @@ import { trCategory, trRaterRole } from "@/lib/i18n";
 import type { ExpectedCoursePoint, SuddenShift } from "@/lib/analytics/types";
 import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
 import { classifyChange } from "@/lib/instruments/rci";
-import type { Patient, ResponseRecord } from "@/lib/types";
+import type { GoalRecord, Patient, ResponseRecord } from "@/lib/types";
 import {
   DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
@@ -330,6 +330,77 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
           {t("lineStylesNote")} {roles.map((r, i) => `${i === 0 ? "———" : i === 1 ? "– – –" : "· · ·"} = ${trRaterRole(r, lang)}`).join(" · ")}
         </p>
       )}
+    </div>
+  );
+}
+
+/// GAS goal-attainment trajectory: one line per therapy goal across its dated
+/// therapist ratings on the fixed −1…+3 attainment axis. The dashed reference
+/// line at 0 is the Ausgangslage baseline; the zone below it (negative change)
+/// is tinted. Rating dates are unioned across goals; goals rated on different
+/// days connect across the gaps.
+export function GoalChart({ goals, height = 260 }: { goals: GoalRecord[]; height?: number }) {
+  const t = useT();
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setHidden((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const rated = goals.filter((g) => g.ratings.length > 0);
+  const rows = useMemo(() => {
+    const byDay = new Map<string, { label: string; order: number } & Record<string, string | number>>();
+    for (const g of rated) {
+      for (const r of g.ratings) {
+        const day = r.at.slice(0, 10);
+        let row = byDay.get(day);
+        if (!row) {
+          row = { label: fmtDate(r.at), order: new Date(day).getTime() };
+          byDay.set(day, row);
+        }
+        row[g.id] = r.level; // ratings are date-sorted → same-day duplicates keep the latest
+      }
+    }
+    return Array.from(byDay.values()).sort((a, b) => a.order - b.order);
+  }, [rated]);
+
+  if (!rated.length) return null;
+  const colorOf = (g: GoalRecord) => PALETTE[goals.indexOf(g) % PALETTE.length];
+
+  return (
+    <div>
+      {rated.length > 1 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {rated.map((g) => {
+            const on = !hidden.has(g.id);
+            const color = colorOf(g);
+            const label = g.title.length > 26 ? `${g.title.slice(0, 25)}…` : g.title;
+            return (
+              <button key={g.id} type="button" onClick={() => toggle(g.id)} aria-pressed={on} className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
+                style={{ background: on ? C.surface : C.surfaceAlt, border: `1px solid ${on ? color : C.line}`, color: on ? C.ink : C.muted, opacity: on ? 1 : 0.6 }}>
+                <span className="rounded-full" style={{ width: 9, height: 9, background: on ? color : "transparent", border: `2px solid ${color}` }} />{label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ width: "100%", height }}>
+        <ResponsiveContainer>
+          <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -24 }}>
+            <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+            <YAxis domain={[-1, 3]} ticks={[-1, 0, 1, 2, 3]} allowDecimals={false}
+              tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+            <Tooltip content={<ChartTip />} />
+            <ReferenceArea y1={-1} y2={0} fill={C.danger} fillOpacity={0.05} />
+            <ReferenceLine y={0} stroke={C.muted} strokeDasharray="4 4"
+              label={{ value: t("goalBaseline"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
+            {rated.filter((g) => !hidden.has(g.id)).map((g) => (
+              <Line key={g.id} dataKey={g.id} name={g.title} stroke={colorOf(g)} strokeWidth={2.5}
+                dot={{ r: 3, fill: colorOf(g), strokeWidth: 0 }}
+                connectNulls type="monotone" isAnimationActive={false} />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

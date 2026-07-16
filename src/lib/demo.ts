@@ -284,6 +284,14 @@ export interface DemoPatient {
   caseCharacteristics?: CaseCharacteristics;
   /// Sessions without questionnaires / cancellations / no-shows (§4.5).
   sessionLogs?: { daysAgo: number; type: SessionLogType; note?: string }[];
+  /// GAS therapy goals (Zielerreichungsskala). Ratings take daysAgo for active
+  /// patients or an absolute `at` ISO date for archived ones (whose treatment
+  /// episode lies in an earlier year than the demo window).
+  goals?: {
+    title: string;
+    levels: Record<string, string>;
+    ratings?: { daysAgo?: number; at?: string; level: number }[];
+  }[];
   /// Concluded treatments (populate the archive view + filesystem export).
   /// reason is the coded termination label — therapist judgment (§6.2).
   archived?: { at: string; reason: TerminationReason };
@@ -307,19 +315,108 @@ export interface DemoPatient {
 // clinic's working language. sex/living keep the canonical English tokens the
 // registration forms store; the UI translates those on display (trDemoValue).
 export const DEMO_PATIENTS: DemoPatient[] = [
-  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true },
+  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true,
+    goals: [
+      {
+        title: "Alltagswege ohne Vermeidung bewältigen",
+        levels: {
+          "3": "Keine Vermeidung mehr im Alltag; spontane Wege ohne Sicherheitsverhalten",
+          "2": "Nutzt den Bus regelmässig allein; Wochenendeinkauf im Einkaufszentrum",
+          "1": "Fährt 1–2× pro Woche eine kurze Strecke mit dem Bus (Begleitung erlaubt)",
+          "0": "Meidet Busfahrten und grössere Menschenmengen; Einkäufe übernimmt meist der Partner",
+          "-1": "Verlässt das Haus seltener als heute",
+        },
+        ratings: [
+          { daysAgo: 56, level: 0 }, { daysAgo: 42, level: 0 }, { daysAgo: 28, level: 1 },
+          { daysAgo: 14, level: 1 }, { daysAgo: 3, level: 2 },
+        ],
+      },
+      {
+        title: "Umgang mit Panikattacken verbessern",
+        levels: {
+          "3": "Keine Attacken, oder Attacken ohne Bedeutung für die Tagesplanung",
+          "2": "Höchstens eine Attacke pro Woche; kaum Erwartungsangst",
+          "1": "Attacken treten auf, werden aber mit Atemtechnik durchgestanden",
+          "0": "3–4 Attacken pro Woche; starke Angst vor der Angst",
+          "-1": "Häufigere oder intensivere Attacken als heute",
+        },
+        ratings: [
+          { daysAgo: 56, level: 0 }, { daysAgo: 35, level: 1 }, { daysAgo: 14, level: 1 }, { daysAgo: 3, level: 2 },
+        ],
+      },
+    ] },
   { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 }, dips: { positive: [], completedAt: "2026-03-09T09:00:00.000Z" } },
-  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" } },
+  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" },
+    goals: [
+      {
+        title: "Grübeln zeitlich begrenzen",
+        levels: {
+          "3": "Sorgen werden als Gedanken erkannt und ziehen gelassen; erholsamer Schlaf",
+          "2": "Grübeln unterbricht den Alltag kaum noch; Einschlafen meist unter 30 Minuten",
+          "1": "Grübelzeit täglich auf eine festgelegte halbe Stunde begrenzt",
+          "0": "Mehrstündiges Grübeln, v. a. abends; Einschlafen dauert über eine Stunde",
+          "-1": "Grübeln nimmt zu und betrifft zusätzliche Lebensbereiche",
+        },
+        // Deliberate dip into −1 so the trajectory demo shows the negative zone.
+        ratings: [
+          { daysAgo: 49, level: 0 }, { daysAgo: 35, level: 1 }, { daysAgo: 21, level: 0 },
+          { daysAgo: 10, level: -1 }, { daysAgo: 2, level: 0 },
+        ],
+      },
+      {
+        title: "Entspannungsverfahren regelmässig anwenden",
+        levels: {
+          "3": "Setzt Entspannung gezielt in Belastungssituationen ein",
+          "2": "Tägliche kurze Übung, auch ohne Anleitung",
+          "1": "Übt 2–3× pro Woche progressive Muskelentspannung nach Anleitung",
+          "0": "Kennt keine Entspannungstechnik; ständige Anspannung",
+          "-1": "Keine Übungspraxis; Anspannung höher als zu Beginn",
+        },
+        ratings: [{ daysAgo: 49, level: 0 }, { daysAgo: 28, level: 1 }, { daysAgo: 7, level: 2 }],
+      },
+    ] },
   { id: "p4", name: "Jonas Wyss", email: "jonas.wyss@example.org", color: PALETTE[3], therapistId: "t3", status: "therapy", demographics: { age: 35, sex: "Male", nationality: "Schweiz", city: "Fribourg", occupation: "Software-Entwickler", living: "Alone", siblings: "Keine" }, levels: [4, 5, 4, 5.5, 4.5], diagnosis: "Burnout / Erschöpfungssyndrom (Platzhalter)", disorderCategory: "burnout", icd: "Z73.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 5 }, dips: { positive: [], completedAt: "2026-03-09T13:00:00.000Z" } },
   { id: "p5", name: "Camille Perret", email: "camille.perret@example.org", color: PALETTE[4], therapistId: "t2", status: "therapy", demographics: { age: 52, sex: "Female", nationality: "Frankreich", city: "Bern", occupation: "Apothekerin", living: "With partner", siblings: "1 — jüngere Schwester" }, levels: [4.5, 5, 5.5, 5.5, 5.5, 5.5, 6, 5.5], diagnosis: "Bulimia nervosa; rezidivierende depressive Episoden (Platzhalter)", disorderCategory: "eating_disorder", icd: "F50.2", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 4 }, dips: { positive: [], completedAt: "2026-03-09T15:00:00.000Z" }, hasEdeq8Series: true, hasBdiAlertSeries: true },
-  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["social"], completedAt: "2026-07-06T14:00:00.000Z" }, hasSdqSeries: true, hasDikjSeries: true },
+  { id: "p6", name: "Tim Berger", email: "tim.berger@example.org", color: PALETTE[5], therapistId: "t1", status: "interview", demographics: { age: 16, sex: "Male", nationality: "Schweiz", city: "Köniz", occupation: "Sekundarschüler", living: "With family", siblings: "2 — ältester" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["social"], completedAt: "2026-07-06T14:00:00.000Z" }, hasSdqSeries: true, hasDikjSeries: true,
+    // Goals defined at intake, not yet rated — demos the unrated state.
+    goals: [
+      {
+        title: "Mündliche Mitarbeit in der Schule",
+        levels: {
+          "3": "Beteiligt sich ohne grosse Anspannung; Referate ohne Vermeidung",
+          "2": "Hält ein kurzes Referat vor der Klasse; regelmässige Mitarbeit",
+          "1": "Meldet sich in vertrauten Fächern mindestens 1× pro Woche",
+          "0": "Meldet sich nie freiwillig; Referate werden vermieden oder abgesagt",
+          "-1": "Zunehmendes Schweigen; Schulbesuch wird vermieden",
+        },
+      },
+    ] },
   { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["phobia"], completedAt: "2026-07-01T10:00:00.000Z" } },
   { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: [], completedAt: "2026-07-08T10:00:00.000Z" } },
 
   // Concluded treatments (archive demo): 2 disorder categories × 2 years,
   // spread across therapists so the therapist-scoped archive is demoable.
   { id: "p9", name: "Lea Schmid", email: "lea.schmid@example.org", color: PALETTE[8], therapistId: "t1", status: "archived", demographics: { age: 33, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Grafikerin", living: "Alone", siblings: "1 — ältere Schwester" }, levels: [2.5, 3, 4, 5, 5.5, 6.5, 7.5], diagnosis: "Mittelgradige depressive Episode (Platzhalter)", disorderCategory: "depression", icd: "F32.1", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: true, employment: "employed", treatmentExpectation: 7 }, archived: { at: "2024-11-15T10:00:00.000Z", reason: "completed" }, seriesEnd: "2024-11-08", diagnosedOn: "2024-08-20", dips: { positive: [], completedAt: "2024-08-13T10:00:00.000Z" } },
-  { id: "p10", name: "Marc Dubois", email: "marc.dubois@example.org", color: PALETTE[9], therapistId: "t2", status: "archived", demographics: { age: 38, sex: "Male", nationality: "Schweiz", city: "Biel/Bienne", occupation: "Versicherungsberater", living: "With family", siblings: "Keine" }, levels: [3.5, 3, 3.5, 3], diagnosis: "Soziale Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F40.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "unemployed", treatmentExpectation: 3 }, archived: { at: "2024-05-21T10:00:00.000Z", reason: "dropout" }, seriesEnd: "2024-05-13", diagnosedOn: "2024-04-01", dips: { positive: ["social"], completedAt: "2024-03-25T10:00:00.000Z" } },
+  { id: "p10", name: "Marc Dubois", email: "marc.dubois@example.org", color: PALETTE[9], therapistId: "t2", status: "archived", demographics: { age: 38, sex: "Male", nationality: "Schweiz", city: "Biel/Bienne", occupation: "Versicherungsberater", living: "With family", siblings: "Keine" }, levels: [3.5, 3, 3.5, 3], diagnosis: "Soziale Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F40.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "unemployed", treatmentExpectation: 3 }, archived: { at: "2024-05-21T10:00:00.000Z", reason: "dropout" }, seriesEnd: "2024-05-13", diagnosedOn: "2024-04-01", dips: { positive: ["social"], completedAt: "2024-03-25T10:00:00.000Z" },
+    // Archived dossier with goals (absolute dates inside the 2024 episode) —
+    // exercises the read-only goals view and the summary refresh-preserve.
+    goals: [
+      {
+        title: "Bewerbungsgespräche wahrnehmen",
+        levels: {
+          "3": "Geht ohne ausgeprägte Angst in Gespräche; aktive Stellensuche",
+          "2": "Nimmt Gespräche regelmässig wahr; Anspannung ist handhabbar",
+          "1": "Nimmt ein vorbereitetes Gespräch wahr (Rollenspiel im Vorfeld)",
+          "0": "Bewerbungen werden geschrieben, Gespräche aber kurzfristig abgesagt",
+          "-1": "Auch schriftliche Bewerbungen werden eingestellt",
+        },
+        ratings: [
+          { at: "2024-04-03T10:00:00.000Z", level: 0 },
+          { at: "2024-04-24T10:00:00.000Z", level: 0 },
+          { at: "2024-05-10T10:00:00.000Z", level: -1 },
+        ],
+      },
+    ] },
   { id: "p11", name: "Rahel Steck", email: "rahel.steck@example.org", color: PALETTE[0], therapistId: "t1", status: "archived", demographics: { age: 27, sex: "Female", nationality: "Schweiz", city: "Ostermundigen", occupation: "Kauffrau", living: "With partner", siblings: "2 — mittleres Kind" }, levels: [3, 3.5, 4.5, 5, 6, 6.5, 7], diagnosis: "Panikstörung mit Agoraphobie (Platzhalter)", disorderCategory: "anxiety", icd: "F40.01", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, archived: { at: "2025-03-28T10:00:00.000Z", reason: "completed" }, seriesEnd: "2025-03-21", diagnosedOn: "2025-01-10", dips: { positive: ["panic", "agora"], completedAt: "2025-01-03T10:00:00.000Z" } },
   { id: "p12", name: "Nico Furrer", email: "nico.furrer@example.org", color: PALETTE[1], therapistId: "t3", status: "archived", demographics: { age: 45, sex: "Male", nationality: "Schweiz", city: "Münsingen", occupation: "Elektriker", living: "With family", siblings: "3 — ältester" }, levels: [2, 3, 4, 5, 6, 6.5], diagnosis: "Rezidivierende depressive Störung, remittiert (Platzhalter)", disorderCategory: "depression", icd: "F33.4", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: true, employment: "employed", treatmentExpectation: 6 }, archived: { at: "2025-09-05T10:00:00.000Z", reason: "mutual" }, seriesEnd: "2025-08-29", diagnosedOn: "2025-06-15", dips: { positive: [], completedAt: "2025-06-08T10:00:00.000Z" } },
 ];

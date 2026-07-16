@@ -84,7 +84,30 @@ model Patient {
   invitations    QuestionnaireInvitation[]
   documents      PatientDocument[]
   sessionLogs    SessionLog[]
+  goals          TherapyGoal[]
   createdAt      DateTime           @default(now())
+}
+
+/// GAS goal (Goal Attainment Scaling, Zielerreichungsskala nach Kiresuk &
+/// Sherman — clinic paper template): a patient-formulated goal with free-text
+/// descriptions of the five attainment levels (+3/+2/+1 = positive, erwünschte
+/// Veränderung; 0 = Ausgangslage/Ist-Zustand; −1 = negative Veränderung) and a
+/// series of dated therapist attainment ratings. Entered by staff; shown
+/// read-only to the patient (their own therapy contract).
+model TherapyGoal {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title     String
+  /// JSON { "-1" | "0" | "1" | "2" | "3": string } — per-level descriptions;
+  /// missing keys render as blank rungs (the paper template allows blanks).
+  levels    String   @default("{}")
+  /// JSON GoalRating[]: [{ at: ISO, level: -1..3, by: staff display name }],
+  /// kept date-sorted. By-name attribution mirrors diagnosisBy/archivedBy.
+  ratings   String   @default("[]")
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
 }
 
 /// A therapy session that happened (or didn't) WITHOUT a questionnaire —
