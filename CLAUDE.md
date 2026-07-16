@@ -201,6 +201,31 @@ staggers `createdAt` for stable order. `personal_goals` stays a filed-PDF
 doc type; the archive JSON export includes goals automatically via
 `patientFromRow`.
 
+**Batch 11 (2026-07-16)**: **platform reorganization & usability.** Dossier
+(PatientDetail): sticky **quick-nav** with jump chips (Diagnose · Monitoring &
+Einladungen · Prognose · Verlauf · Dokumente · Abschluss, conditional per
+section; anchors `dossier-*` with scrollMarginTop); **patient quick-switcher**
+(‹/select/› over the role-scoped active caseload, hidden on archived dossiers;
+AppShell passes `switchList` + `onOpenPatient` preserving `view.from`, and now
+renders PatientDetail with `key={patient.id}` so ALL local state resets per
+patient); **ONE switchable questionnaire card** ("Fragebogen-Verläufe" select
+over `instrumentsWithData`, default = most responses) replaces the stacked
+per-instrument cards — `InstrumentCard` gained a `selector` slot and MUST be
+rendered with `key={instrument.id}` (TrajectoryChart's visible-scale state
+initializes lazily; a prop swap without remount breaks lines + overlay
+gating); prediction overlays/PredictionPanel wiring unchanged. DocumentsPanel
+moved to the bottom, directly above the archive card; SessionLogPanel +
+InvitationsPanel are **collapsed by default** to one-line summaries
+(`logSummary`/`invSummary`). Dashboard is **patient-first** (lists before the
+development chart + scores matrix). New staff-only `GET
+/api/predictions/course` returns pooled (NOT stratified, NOT category-
+filtered) `ClinicCourse[]` per PREDICTION_TARGET (p25–p75 points + direction-
+aware p10/p90 failureBoundary from `buildExpectedCourse` over the cached
+reference); `GlobalChart` takes `courses?` and draws band/median/boundary
+behind the patient lines when the selection is a target (session-axis rows
+capped at the last measured session; index-axis attaches by occasion position,
+never synthesizing labels; static normBands suppressed while active).
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

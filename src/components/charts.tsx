@@ -8,6 +8,7 @@ import { C, PALETTE } from "@/lib/theme";
 import { fmtDate } from "@/lib/format";
 import { trCategory, trRaterRole } from "@/lib/i18n";
 import type { ExpectedCoursePoint, SuddenShift } from "@/lib/analytics/types";
+import type { ClinicCourse } from "@/lib/prediction/service";
 import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
 import { classifyChange } from "@/lib/instruments/rci";
 import type { GoalRecord, Patient, ResponseRecord } from "@/lib/types";
@@ -455,8 +456,14 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
 /// scale, and disorder-category filter (e.g. only eating-disorder patients'
 /// EDE-Q8 trajectories). Occasions are aligned across patients per cadence:
 /// sessions (B/S1…), waves (pre/zm/post/postF), or measurement index (M1…Mn)
-/// for periodic instruments — the legacy report convention.
-export function GlobalChart({ patients, instruments }: { patients: Patient[]; instruments: InstrumentDef[] }) {
+/// for periodic instruments — the legacy report convention. When the selected
+/// instrument+scale is a prediction target, the pooled clinic expected-course
+/// band (p25–p75 + median) and failure boundary draw behind the patient lines.
+export function GlobalChart({ patients, instruments, courses }: {
+  patients: Patient[];
+  instruments: InstrumentDef[];
+  courses?: ClinicCourse[];
+}) {
   const t = useT();
   const { lang } = useLang();
 
@@ -478,6 +485,17 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setHidden((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // Pooled clinic band for the current selection, if it is a prediction
+  // target. Deliberately pooled across ALL reference cases regardless of the
+  // category chips: stratification is a per-patient-baseline concept, and
+  // category subsets of the reference cohort routinely fall below the
+  // per-occasion minN — a per-category band would flicker in and out as
+  // filters change. Session-axis bands need the session-label axis; the
+  // index-axis target (BDI-FS) attaches to the M{n}/wave axis by position.
+  const course = courses?.find((c) => c.instrumentId === inst?.id && c.scaleKey === scale?.key);
+  const activeCourse =
+    course && (course.axis === "index" || inst?.cadenceType === "every_session") ? course : undefined;
 
   const presentCategories = useMemo(
     () => DISORDER_CATEGORIES.filter((c) => patients.some((p) => p.disorderCategory === c)),
@@ -505,7 +523,7 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
   }, [patients, inst, scale, cat]);
 
   const rows = useMemo(() => {
-    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number> }>();
+    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number | [number, number]> }>();
     for (const { p, series } of chartable) {
       for (const pt of series) {
         let row = byOccasion.get(pt.label);
@@ -513,10 +531,49 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
         row.values[p.id] = pt.value;
       }
     }
+    if (activeCourse) {
+      if (activeCourse.axis === "session") {
+        // Cap the band at the last measured session — a 60-session reference
+        // horizon would dwarf the patient lines. Missing intermediate rows are
+        // created so the band stays continuous (patient lines connectNulls).
+        const maxOrder = Math.max(...Array.from(byOccasion.values()).map((r) => r.order));
+        const rowFor = (session: number) => {
+          const label = session === 0 ? "B" : `S${session}`;
+          let row = byOccasion.get(label);
+          if (!row) { row = { label, order: session, values: {} }; byOccasion.set(label, row); }
+          return row;
+        };
+        for (const p of activeCourse.points) {
+          if (p.session > maxOrder) continue;
+          const row = rowFor(p.session);
+          row.values.__band = [p.p25, p.p75];
+          row.values.__p50 = p.p50;
+        }
+        for (const b of activeCourse.failureBoundary) {
+          if (b.session > maxOrder) continue;
+          rowFor(b.session).values.__boundary = b.value;
+        }
+      } else {
+        // Index axis (BDI-FS): attach reference point i to the i-th existing
+        // occasion column — never synthesize labels (the axis may carry wave
+        // codes), and never extend beyond what patients have measured.
+        const ordered = Array.from(byOccasion.values()).sort((a, b) => a.order - b.order);
+        for (const p of activeCourse.points) {
+          const row = ordered[p.session];
+          if (!row) continue;
+          row.values.__band = [p.p25, p.p75];
+          row.values.__p50 = p.p50;
+        }
+        for (const b of activeCourse.failureBoundary) {
+          const row = ordered[b.session];
+          if (row) row.values.__boundary = b.value;
+        }
+      }
+    }
     return Array.from(byOccasion.values())
       .sort((a, b) => a.order - b.order)
       .map((r) => ({ label: r.label, ...r.values }));
-  }, [chartable]);
+  }, [chartable, activeCourse]);
 
   if (!available.length)
     return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
@@ -581,7 +638,9 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
                   tick={{ fontSize: 11, fill: C.muted }} stroke={C.line}
                 />
                 <Tooltip content={<ChartTip />} />
-                {scale.normBands?.map((b, i) => (
+                {/* Static norm bands are suppressed while the reference band is
+                    drawn — two shaded areas are illegible (TrajectoryChart rule). */}
+                {!activeCourse && scale.normBands?.map((b, i) => (
                   <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
                     label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
                 ))}
@@ -589,12 +648,36 @@ export function GlobalChart({ patients, instruments }: { patients: Patient[]; in
                   <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
                     label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
                 )}
+                {/* Reference overlays paint BEFORE the patient lines. */}
+                {activeCourse && (
+                  <Area dataKey="__band" name={t("bandLabelClinic", { n: activeCourse.n })} fill={C.spruce} fillOpacity={0.12}
+                    stroke="none" activeDot={false} connectNulls={false} isAnimationActive={false} legendType="none" />
+                )}
+                {activeCourse && (
+                  <Line dataKey="__p50" name={t("bandMedian")} stroke={C.spruce} strokeWidth={1.2}
+                    strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+                )}
+                {activeCourse && activeCourse.failureBoundary.length > 0 && (
+                  <Line dataKey="__boundary" name={t("failureBoundary")} stroke={C.danger} strokeWidth={1.4}
+                    strokeDasharray="7 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+                )}
                 {chartable.filter(({ p }) => !hidden.has(p.id)).map(({ p }) => (
                   <Line key={p.id} dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: p.color }} connectNulls type="monotone" isAnimationActive={false} />
                 ))}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          {activeCourse && (
+            <p className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{ color: C.muted }}>
+              <span className="font-semibold" style={{ color: C.spruce }}>{t("bandLabelClinic", { n: activeCourse.n })}</span>
+              <span style={{ color: C.danger }}>— — {t("failureBoundary")}</span>
+              {activeCourse.includesSimulated && (
+                <span className="font-bold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
+                  {t("simulatedReference")}
+                </span>
+              )}
+            </p>
+          )}
           <p className="text-xs mt-1" style={{ color: C.muted }}>{scale.label}{scale.range ? ` · ${scale.range.min}–${scale.range.max}` : ""}</p>
         </>
       )}

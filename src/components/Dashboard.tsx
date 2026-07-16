@@ -4,7 +4,7 @@ import { C } from "@/lib/theme";
 import { T, tr, trCategory } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { api, type RegisterPatientPayload } from "@/lib/api-client";
-import type { PredictionSummary } from "@/lib/prediction/service";
+import type { ClinicCourse, PredictionSummary } from "@/lib/prediction/service";
 import type { ClinicData, Demographics, Patient, SessionUser, Therapist } from "@/lib/types";
 import {
   DIPS_INSTRUMENT_ID,
@@ -308,6 +308,23 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
     };
   }, [isAdmin, data.patients.length]);
 
+  // Pooled clinic expected-course bands for the development chart — one fetch,
+  // best-effort (the chart simply draws without a band when it fails).
+  const [courses, setCourses] = useState<ClinicCourse[]>([]);
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    api
+      .getClinicCourses()
+      .then((r) => {
+        if (!cancelled) setCourses(r.courses);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
   const section = (title: string, list: Patient[], emptyText: string, extra?: React.ReactNode) => (
     <Card className="p-5 mb-5">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -368,15 +385,6 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         {!isAdmin && <Stat label={t("statAvgProgress")} value={avgProgress} />}
       </div>
 
-      {!isAdmin && (
-        <Card className="p-5 mb-5">
-          <SectionTitle sub={t("patientDevelopmentSub")}>{t("patientDevelopment")}</SectionTitle>
-          <GlobalChart patients={patients} instruments={data.instruments} />
-        </Card>
-      )}
-
-      {!isAdmin && <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />}
-
       {section(
         t("sectionInTherapy"),
         inTherapy,
@@ -402,6 +410,17 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
 
       {!clinicWide && assignedIntake.length + unassigned.length > 0 &&
         section(t("sectionAssigned"), [...unassigned, ...assignedIntake], t("nonInThisCategory"))}
+
+      {/* Analytics blocks sit BELOW the patient lists (patient-first layout):
+          reaching a dossier should not require scrolling past two charts. */}
+      {!isAdmin && (
+        <Card className="p-5 mb-5">
+          <SectionTitle sub={t("patientDevelopmentSub")}>{t("patientDevelopment")}</SectionTitle>
+          <GlobalChart patients={patients} instruments={data.instruments} courses={courses} />
+        </Card>
+      )}
+
+      {!isAdmin && <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />}
 
       {clinicWide && (
         <div className="grid md:grid-cols-2 gap-4 mb-8">

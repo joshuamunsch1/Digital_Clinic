@@ -90,6 +90,20 @@ export interface PredictionPayload {
   };
 }
 
+/// Pooled (patient-independent) clinic expected course for one prediction
+/// target — the band + failure boundary the OVERVIEW chart draws behind all
+/// patient lines. Served by /api/predictions/course; client components may
+/// only `import type` this (the module chain is server-only).
+export interface ClinicCourse {
+  instrumentId: string;
+  scaleKey: string;
+  axis: "session" | "index";
+  n: number;
+  includesSimulated: boolean;
+  points: ExpectedCoursePoint[];
+  failureBoundary: { session: number; value: number }[];
+}
+
 function predictSeries(
   ref: ReferenceData,
   patientSeries: SessionPoint[],

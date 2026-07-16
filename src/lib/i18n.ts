@@ -562,6 +562,23 @@ export const UI = {
   suddenGain: L("plötzliche Verbesserung", "gain soudain", "sudden gain"),
   suddenLoss: L("plötzliche Verschlechterung", "perte soudaine", "sudden loss"),
   notOnTrackBanner: L("Nicht im erwarteten Verlauf (Entscheidungshilfe)", "Hors de l'évolution attendue (aide à la décision)", "Not on track (decision support)"),
+  // Batch 11 — dossier quick-nav, switchable questionnaire card, collapsible
+  // panels, patient quick-switcher.
+  navDiagnosis: L("Diagnose", "Diagnostic", "Diagnosis"),
+  navMonitoring: L("Monitoring & Einladungen", "Monitoring & invitations", "Monitoring & invitations"),
+  navPrognosis: L("Prognose", "Pronostic", "Prognosis"),
+  navCourse: L("Verlauf", "Évolution", "Course"),
+  navDocuments: L("Dokumente", "Documents", "Documents"),
+  navConclude: L("Abschluss", "Clôture", "Conclusion"),
+  courseCardTitle: L("Fragebogen-Verläufe", "Évolutions des questionnaires", "Questionnaire trajectories"),
+  logSummary: L("{n} Einträge · zuletzt {date}", "{n} entrées · dernière {date}", "{n} entries · latest {date}"),
+  logSummaryEmpty: L("Noch keine Einträge", "Aucune entrée", "No entries yet"),
+  invSummary: L("{open} von {n} offen", "{open} sur {n} en attente", "{open} of {n} open"),
+  panelShow: L("Anzeigen", "Afficher", "Show"),
+  panelHide: L("Einklappen", "Réduire", "Hide"),
+  prevPatient: L("Vorherige*r Patient*in", "Patient·e précédent·e", "Previous patient"),
+  nextPatient: L("Nächste*r Patient*in", "Patient·e suivant·e", "Next patient"),
+  switchPatientLabel: L("Patient*in wechseln", "Changer de patient·e", "Switch patient"),
   notReasonBand: L("≥2 Messungen auf der ungünstigen Seite des Erwartungsbands", "≥2 mesures du côté défavorable de la bande attendue", "≥2 measurements on the unfavourable side of the expected band"),
   notReasonRci: L("reliable Verschlechterung gegenüber Baseline (RCI)", "détérioration fiable par rapport à la baseline (RCI)", "reliable deterioration vs baseline (RCI)"),
   notOnTrackHint: L(

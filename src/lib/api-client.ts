@@ -11,7 +11,7 @@ import type {
 } from "./types";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 // Type-only imports — erased at compile time, no server code in the bundle.
-import type { PredictionPayload, PredictionSummary } from "./prediction/service";
+import type { ClinicCourse, PredictionPayload, PredictionSummary } from "./prediction/service";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -227,6 +227,10 @@ export const api = {
 
   getPredictionSummaries: () =>
     fetch("/api/predictions/summary").then((r) => handle<{ summaries: Record<string, PredictionSummary> }>(r)),
+
+  /// Pooled clinic expected-course bands for the overview chart (staff-only).
+  getClinicCourses: () =>
+    fetch("/api/predictions/course").then((r) => handle<{ courses: ClinicCourse[] }>(r)),
 
   resetDemo: () => post("/api/seed").then((r) => handle<{ ok: boolean }>(r)),
 };

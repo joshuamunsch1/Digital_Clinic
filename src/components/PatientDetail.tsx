@@ -80,7 +80,15 @@ function ResponseRow({ instrument, response, therapists }: { instrument: Instrum
   );
 }
 
-function InstrumentCard({ instrument, responses, therapists, chartPrediction }: { instrument: InstrumentDef; responses: ResponseRecord[]; therapists: Therapist[]; chartPrediction?: ChartPrediction }) {
+function InstrumentCard({ instrument, responses, therapists, chartPrediction, selector }: {
+  instrument: InstrumentDef;
+  responses: ResponseRecord[];
+  therapists: Therapist[];
+  chartPrediction?: ChartPrediction;
+  /// Instrument switcher of the single questionnaire card (rendered above the
+  /// heading); absent in contexts that show one fixed instrument.
+  selector?: React.ReactNode;
+}) {
   const t = useT();
   const { lang } = useLang();
   const [showAll, setShowAll] = useState(false);
@@ -89,6 +97,12 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction }: 
   const list = showAll ? [...responses].reverse() : [];
   return (
     <Card className="p-5 mb-4">
+      {selector && (
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <span className="text-xs font-bold" style={{ color: C.muted }}>{t("courseCardTitle")}</span>
+          {selector}
+        </div>
+      )}
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{instrument.abbreviation} · {instrument.name}</h3>
         <DefinitionBadge instrument={instrument} />
@@ -125,6 +139,9 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
   const { lang } = useLang();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Collapsed by default — the dossier leads with clinical content; the
+  // one-line summary (open/total) is usually all a therapist needs.
+  const [open, setOpen] = useState(false);
   if (!patient.invitations.length) return null;
   const label = (inv: InvitationRecord) => instruments.find((i) => i.id === inv.instrumentId)?.abbreviation ?? inv.instrumentId;
   const statusColor: Record<string, string> = { completed: C.spruce, error: C.danger, invited: C.blue, reminded: C.amber, created: C.muted };
@@ -146,10 +163,19 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
     finally { setBusy(false); }
   };
 
+  const openCount = patient.invitations.filter((i) => i.status !== "completed" && i.status !== "error" && i.status !== "cancelled").length;
+
   return (
     <Card className="p-5 mb-4">
-      <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 flex-wrap text-left"
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
         <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("invitationsTitle")}</h3>
+        <span className="text-xs" style={{ color: C.muted }}>{t("invSummary", { open: openCount, n: patient.invitations.length })}</span>
+        <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>{open ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}</span>
+      </button>
+      {open && (
+      <>
+      <div className="flex items-center justify-end mt-3 mb-3">
         <GhostButton small onClick={doSync}>{busy ? t("working") : t("syncNow")}</GhostButton>
       </div>
       <div className="flex flex-col gap-2">
@@ -171,6 +197,8 @@ function InvitationsPanel({ patient, instruments, onRefresh }: {
         ))}
       </div>
       {msg && <p className="text-xs mt-3" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
+      </>
+      )}
     </Card>
   );
 }
@@ -191,6 +219,9 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Collapsed by default: the one-line summary carries the essentials, the
+  // entry form + list expand on demand.
+  const [open, setOpen] = useState(false);
 
   const save = async () => {
     setBusy(true); setMsg(null);
@@ -222,10 +253,21 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
     }
   };
 
+  const lastLog = patient.sessionLogs[patient.sessionLogs.length - 1];
+
   return (
     <Card className="p-5 mb-4">
-      <h3 className="text-sm font-bold mb-1" style={{ color: C.spruce }}>{t("sessionLogTitle")}</h3>
-      <p className="text-xs mb-3" style={{ color: C.muted }}>{t("sessionLogSub")}</p>
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 flex-wrap text-left"
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("sessionLogTitle")}</h3>
+        <span className="text-xs" style={{ color: C.muted }}>
+          {lastLog ? t("logSummary", { n: patient.sessionLogs.length, date: fmtDate(lastLog.occurredAt) }) : t("logSummaryEmpty")}
+        </span>
+        <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>{open ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}</span>
+      </button>
+      {open && (
+      <>
+      <p className="text-xs mt-2 mb-3" style={{ color: C.muted }}>{t("sessionLogSub")}</p>
       <div className="flex gap-3 flex-wrap items-end">
         <Field label={t("logDateLabel")}>
           <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -269,12 +311,16 @@ function SessionLogPanel({ patient, therapists, user, onRefresh }: {
         </div>
       )}
       {msg && <p className="text-xs mt-2" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
+      </>
+      )}
     </Card>
   );
 }
 
-export function PatientDetail({ patient, user, therapists, instruments, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake, onOpenGoals }: {
+export function PatientDetail({ patient, user, therapists, instruments, switchList, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake, onOpenGoals, onOpenPatient }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
+  /// Role-scoped active caseload for the quick-switcher (dashboard order).
+  switchList: { id: string; name: string }[];
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
   onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void;
   onPatientUpdated: (p: Patient) => void;
@@ -282,6 +328,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   onOpenDiagnosis: (id: string) => void;
   onEditIntake: (id: string) => void;
   onOpenGoals: (id: string) => void;
+  onOpenPatient: (id: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -305,6 +352,8 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
   const [prediction, setPrediction] = useState<PredictionPayload | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [bandSource, setBandSource] = useState<BandSource>("clinic");
+  // Selected instrument of the single switchable questionnaire card.
+  const [selInstId, setSelInstId] = useState<string | null>(null);
   // Conclude-treatment (archive) state — see the card at the bottom of the page.
   const [archOutcome, setArchOutcome] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -432,11 +481,63 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
     .map((i) => ({ instrument: i, responses: responsesFor(patient, i.id) }))
     .filter((x) => x.responses.length > 0)
     .sort((a, b) => b.responses.length - a.responses.length);
+  // The switchable questionnaire card defaults to the most-filled instrument.
+  const selected = instrumentsWithData.find((x) => x.instrument.id === selInstId) ?? instrumentsWithData[0];
   const notes = patient.responses.filter((r) => r.note);
+
+  // Quick-nav jump targets, in page order; entries appear only when their
+  // section renders.
+  const switchIdx = switchList.findIndex((p) => p.id === patient.id);
+  const navItems = [
+    { id: "dossier-diagnosis", label: t("navDiagnosis") },
+    { id: "dossier-monitoring", label: t("navMonitoring") },
+    ...(showPrediction ? [{ id: "dossier-prognosis", label: t("navPrognosis") }] : []),
+    ...(instrumentsWithData.length ? [{ id: "dossier-course", label: t("navCourse") }] : []),
+    { id: "dossier-documents", label: t("navDocuments") },
+    ...(canArchive && !isArchived ? [{ id: "dossier-conclude", label: t("navConclude") }] : []),
+  ];
+  const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div className="max-w-4xl mx-auto">
-      <button type="button" onClick={onBack} className="text-sm font-semibold mb-3" style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>{t("backToOverview")}</button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={onBack} className="text-sm font-semibold" style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>{t("backToOverview")}</button>
+        {/* Quick-switcher through the active caseload — hidden when this
+            dossier is not in it (e.g. archived patients opened from the archive). */}
+        {switchIdx >= 0 && (
+          <span className="ml-auto flex items-center gap-2">
+            <button type="button" title={t("prevPatient")} aria-label={t("prevPatient")} disabled={switchIdx <= 0}
+              onClick={() => onOpenPatient(switchList[switchIdx - 1].id)}
+              className="rounded-lg font-semibold px-3 py-1.5 text-sm"
+              style={{ background: "transparent", color: switchIdx <= 0 ? C.muted : C.spruce, border: `1px solid ${C.line}`, cursor: switchIdx <= 0 ? "not-allowed" : "pointer" }}>
+              ‹
+            </button>
+            <select style={{ ...inputStyle, width: "auto", padding: "6px 10px", fontSize: 13 }} aria-label={t("switchPatientLabel")}
+              value={patient.id} onChange={(e) => onOpenPatient(e.target.value)}>
+              {switchList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <button type="button" title={t("nextPatient")} aria-label={t("nextPatient")} disabled={switchIdx >= switchList.length - 1}
+              onClick={() => onOpenPatient(switchList[switchIdx + 1].id)}
+              className="rounded-lg font-semibold px-3 py-1.5 text-sm"
+              style={{ background: "transparent", color: switchIdx >= switchList.length - 1 ? C.muted : C.spruce, border: `1px solid ${C.line}`, cursor: switchIdx >= switchList.length - 1 ? "not-allowed" : "pointer" }}>
+              ›
+            </button>
+          </span>
+        )}
+      </div>
+
+      {/* Sticky quick-nav — the dossier is long; one click beats scrolling.
+          The window scrolls the page (no inner container) and the app header
+          is not sticky, so top-0 pins this bar to the viewport. */}
+      <nav className="sticky top-0 z-10 py-2 mb-2 flex gap-2 flex-wrap" style={{ background: C.bg }}>
+        {navItems.map((n) => (
+          <button key={n.id} type="button" onClick={() => jumpTo(n.id)}
+            className="rounded-full px-3 py-1 text-xs font-semibold"
+            style={{ background: C.surface, color: C.spruce, border: `1px solid ${C.line}`, cursor: "pointer" }}>
+            {n.label}
+          </button>
+        ))}
+      </nav>
 
       {alerts.map((a) => (
         <Card key={`${a.instrumentId}:${a.scaleKey}`} className="p-4 mb-4" style={{ background: "#F7E9E6", border: `1px solid ${C.danger}` }}>
@@ -546,6 +647,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
       {/* Intake & diagnosis — the once-per-treatment data in one card: diagnosis
           (left), demographics + intake predictors (right, read-only summaries;
           edited in the full-window IntakeEditView). */}
+      <div id="dossier-diagnosis" style={{ scrollMarginTop: 56 }}>
       <Card className="p-5 mb-4">
         <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("intakeCardTitle")}</h3>
         <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
@@ -646,28 +748,54 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           )}
         </div>
       </Card>
-
-      <DocumentsPanel patient={patient} user={user} onRefresh={onPatientUpdated} />
+      </div>
 
       {/* Archived dossiers are read-only — no new data collection. */}
-      {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
-      <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
+      <div id="dossier-monitoring" style={{ scrollMarginTop: 56 }}>
+        {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
+        <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
+      </div>
 
       {/* Therapist-facing outcome prediction — active therapy dossiers only.
           Sits directly above the trajectory charts its source toggle drives. */}
       {showPrediction && (
-        <PredictionPanel prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
+        <div id="dossier-prognosis" style={{ scrollMarginTop: 56 }}>
+          <PredictionPanel prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
+        </div>
       )}
 
       {instrumentsWithData.length === 0 && (
         <Card className="p-5 mb-4"><p className="text-sm" style={{ color: C.muted }}>{t("noDataYet")}</p></Card>
       )}
-      {instrumentsWithData.map(({ instrument, responses }) => (
-        <InstrumentCard key={instrument.id} instrument={instrument} responses={responses} therapists={therapists} chartPrediction={chartPredictionFor(instrument.id)} />
-      ))}
+      {/* ONE switchable questionnaire card (selector like the overview's
+          patient-development tab). key= forces a clean remount per instrument:
+          TrajectoryChart's visible-scale set initializes lazily, so a prop
+          swap without remount would keep the previous instrument's scale keys
+          and break both the lines and the prediction-overlay gating. */}
+      {selected && (
+        <div id="dossier-course" style={{ scrollMarginTop: 56 }}>
+          <InstrumentCard
+            key={selected.instrument.id}
+            instrument={selected.instrument}
+            responses={selected.responses}
+            therapists={therapists}
+            chartPrediction={chartPredictionFor(selected.instrument.id)}
+            selector={
+              <select style={{ ...inputStyle, width: "auto", padding: "6px 10px", fontSize: 13, maxWidth: "100%" }}
+                aria-label={t("instrumentLabel")} value={selected.instrument.id} onChange={(e) => setSelInstId(e.target.value)}>
+                {instrumentsWithData.map(({ instrument, responses }) => (
+                  <option key={instrument.id} value={instrument.id}>
+                    {instrument.abbreviation} — {instrument.name.length > 40 ? `${instrument.name.slice(0, 40)}…` : instrument.name} ({responses.length})
+                  </option>
+                ))}
+              </select>
+            }
+          />
+        </div>
+      )}
 
       {notes.length > 0 && (
-        <Card className="p-5">
+        <Card className="p-5 mb-4">
           <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("notesTitle")}</h3>
           <div className="flex flex-col gap-2">
             {[...notes].reverse().map((r) => (
@@ -680,8 +808,15 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
         </Card>
       )}
 
+      {/* Document timeline — filed paperwork, deliberately at the bottom of
+          the dossier, directly above the conclude-&-archive card. */}
+      <div id="dossier-documents" style={{ scrollMarginTop: 56 }}>
+        <DocumentsPanel patient={patient} user={user} onRefresh={onPatientUpdated} />
+      </div>
+
       {/* Conclude treatment & archive — deliberately the last, low-key card. */}
       {canArchive && !isArchived && (
+        <div id="dossier-conclude" style={{ scrollMarginTop: 56 }}>
         <Card className="p-5 mt-4">
           <h3 className="text-sm font-bold mb-1" style={{ color: C.ink }}>{t("concludeTitle")}</h3>
           <p className="text-xs mb-3" style={{ color: C.muted }}>{t("concludeSub")}</p>
@@ -708,6 +843,7 @@ export function PatientDetail({ patient, user, therapists, instruments, onBack, 
           </div>
           {archMsg && <p className="text-xs mt-2" style={{ color: C.danger }}>{archMsg}</p>}
         </Card>
+        </div>
       )}
     </div>
   );

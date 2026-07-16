@@ -345,7 +345,21 @@ function Shell() {
           <ArchiveView data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id, from: "archive" })} onBack={() => setView({ name: "home" })} />
         )}
         {(user.role === "therapist" || user.role === "director") && detailPatient && (
-          <PatientDetail patient={detailPatient} user={user} therapists={therapists} instruments={instruments}
+          // key= remounts the dossier per patient — without it the quick-
+          // switcher would carry local state (diagnosis draft, band source,
+          // selected instrument, archive confirm) from one patient to the next.
+          <PatientDetail key={detailPatient.id} patient={detailPatient} user={user} therapists={therapists} instruments={instruments}
+            switchList={
+              // Role-scoped active caseload for the quick-switcher — the same
+              // population as the dashboard's active lists, in the same order.
+              (data ? (user.role === "director" ? data.patients : data.patients.filter((p) => p.therapistId === user.id)) : [])
+                .filter((p) => p.status !== "archived")
+                .map((p) => ({ id: p.id, name: p.name }))
+            }
+            onOpenPatient={(id) =>
+              // Preserve the monitoring/archive back-target while switching.
+              setView({ name: "patient-detail", patientId: id, from: view.name === "patient-detail" ? view.from : undefined })
+            }
             onBack={() =>
               setView(
                 view.name === "patient-detail" && view.from === "monitoring"
