@@ -48,6 +48,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     email?: string;
     wave?: string;
     sessionNumber?: number;
+    sessionLogId?: string; // ledger entry this request is sent for (held session)
     surveyId?: string; // saved onto the instrument when provided
     channel?: string;
     remindEveryDays?: number;
@@ -59,6 +60,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const channel = body.channel === "in_app" ? "in_app" : "limesurvey";
   const remindEveryDays = posInt(body.remindEveryDays);
   const maxReminders = posInt(body.maxReminders);
+
+  const sessionLogId = body.sessionLogId || null;
+  if (sessionLogId) {
+    const log = await prisma.sessionLog.findUnique({ where: { id: sessionLogId } });
+    if (!log || log.patientId !== params.id)
+      return NextResponse.json({ error: "invalid_session_log" }, { status: 400 });
+  }
 
   const context: Record<string, unknown> = {};
   if (body.wave) context.wave = body.wave;
@@ -86,6 +94,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         email: email ?? "",
         channel: "in_app",
         context: JSON.stringify(context),
+        sessionLogId,
         remindEveryDays,
         maxReminders,
       },
@@ -133,6 +142,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       email,
       surveyId,
       context: JSON.stringify(context),
+      sessionLogId,
       remindEveryDays,
       maxReminders,
     },

@@ -7,6 +7,7 @@ import type {
   DipsAnswers,
   GoalLevels,
   Patient,
+  SessionLogRecord,
   SessionUser,
 } from "./types";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
@@ -58,6 +59,8 @@ export interface CreateInvitationPayload {
   email?: string;
   wave?: string;
   sessionNumber?: number;
+  /// Ledger entry this request is sent for (held session → send step).
+  sessionLogId?: string;
   surveyId?: string;
   channel?: "limesurvey" | "in_app";
   remindEveryDays?: number;
@@ -152,6 +155,10 @@ export const api = {
   cancelInvitation: (invitationId: string) =>
     patch(`/api/invitations/${invitationId}`, { action: "cancel" }).then((r) => handle<{ patient: Patient }>(r)),
 
+  /// Close a stale open request as "the patient never answered" (terminal).
+  markNoResponse: (invitationId: string) =>
+    patch(`/api/invitations/${invitationId}`, { action: "no_response" }).then((r) => handle<{ patient: Patient }>(r)),
+
   runReminderSweep: () => post("/api/reminders/run").then((r) => handle<SweepResult>(r)),
 
   syncLimesurvey: (patientId?: string) =>
@@ -189,8 +196,15 @@ export const api = {
   assignTherapist: (id: string, therapistId: string | null) =>
     patch(`/api/patients/${id}`, { action: "assign", therapistId }).then((r) => handle<{ patient: Patient }>(r)),
 
-  logSession: (id: string, payload: { occurredAt?: string; type: string; conductedById?: string | null; note?: string }) =>
-    post(`/api/patients/${id}/session-log`, payload).then((r) => handle<{ patient: Patient }>(r)),
+  /// Returns the created ledger entry too, so the send step can link
+  /// follow-up invitations to it.
+  logSession: (
+    id: string,
+    payload: { occurredAt?: string; type: string; sessionNumber?: number | null; conductedById?: string | null; note?: string },
+  ) =>
+    post(`/api/patients/${id}/session-log`, payload).then((r) =>
+      handle<{ patient: Patient; sessionLog: SessionLogRecord }>(r),
+    ),
 
   deleteSessionLog: (logId: string) =>
     fetch(`/api/session-logs/${logId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),

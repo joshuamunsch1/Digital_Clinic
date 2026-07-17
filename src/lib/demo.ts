@@ -282,8 +282,10 @@ export interface DemoPatient {
   icd?: string;
   /// Coded intake predictors (§4.3) — the classic ETR set.
   caseCharacteristics?: CaseCharacteristics;
-  /// Sessions without questionnaires / cancellations / no-shows (§4.5).
-  sessionLogs?: { daysAgo: number; type: SessionLogType; note?: string }[];
+  /// Session-ledger entries (§4.5): held sessions (optionally numbered),
+  /// cancellations, no-shows. A fixed id lets seedInvitations link a
+  /// questionnaire request to the entry (sessionLogId FK).
+  sessionLogs?: { id?: string; daysAgo: number; type: SessionLogType; sessionNumber?: number; note?: string }[];
   /// GAS therapy goals (Zielerreichungsskala). Ratings take daysAgo for active
   /// patients or an absolute `at` ISO date for archived ones (whose treatment
   /// episode lies in an earlier year than the demo window).
@@ -315,7 +317,7 @@ export interface DemoPatient {
 // clinic's working language. sex/living keep the canonical English tokens the
 // registration forms store; the UI translates those on display (trDemoValue).
 export const DEMO_PATIENTS: DemoPatient[] = [
-  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true,
+  { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }, { id: "sl-p1-s9", daysAgo: 3, type: "held", sessionNumber: 9 }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true,
     goals: [
       {
         title: "Alltagswege ohne Vermeidung bewältigen",
@@ -346,7 +348,7 @@ export const DEMO_PATIENTS: DemoPatient[] = [
       },
     ] },
   { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 }, dips: { positive: [], completedAt: "2026-03-09T09:00:00.000Z" } },
-  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" },
+  { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, sessionLogs: [{ id: "sl-p3-s10", daysAgo: 38, type: "held", sessionNumber: 10 }], dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" },
     goals: [
       {
         title: "Grübeln zeitlich begrenzen",

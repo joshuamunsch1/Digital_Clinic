@@ -11,6 +11,8 @@ import { isOpenInvitation, nextReminderAfter } from "@/lib/reminders";
 ///   { action: "schedule", remindEveryDays, maxReminders } — set/clear the
 ///                             automatic reminder schedule
 ///   { action: "cancel" }   — close an unanswered invitation / in-app task
+///   { action: "no_response" } — close a stale open request as "the patient
+///                             never answered" (terminal, distinct from cancel)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
@@ -27,7 +29,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!inv) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   if (body.action === "remind") {
-    if (inv.status === "completed") return NextResponse.json({ error: "already completed" }, { status: 400 });
+    if (!isOpenInvitation(inv.status))
+      return NextResponse.json({ error: "invitation is closed" }, { status: 400 });
     if (inv.channel === "in_app")
       return NextResponse.json({ error: "in-app tasks have no e-mail reminders — the task stays visible to the patient" }, { status: 400 });
     if (!inv.surveyId || !inv.tokenId)
@@ -57,7 +60,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       });
     }
   } else if (body.action === "schedule") {
-    if (inv.status === "completed" || inv.status === "cancelled")
+    // error rows stay schedulable (a retry may revive them); terminal ones don't.
+    if (!isOpenInvitation(inv.status) && inv.status !== "error")
       return NextResponse.json({ error: "invitation is closed" }, { status: 400 });
     const remindEveryDays =
       body.remindEveryDays == null
@@ -93,6 +97,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await prisma.questionnaireInvitation.update({
       where: { id: inv.id },
       data: { status: "cancelled", nextReminderAt: null },
+    });
+  } else if (body.action === "no_response") {
+    // Only genuinely open requests can be declared unanswered — "error" would
+    // misstate a delivery failure as patient silence (cancel those instead).
+    if (!isOpenInvitation(inv.status))
+      return NextResponse.json({ error: "invitation is already closed" }, { status: 400 });
+    await prisma.questionnaireInvitation.update({
+      where: { id: inv.id },
+      data: { status: "no_response", nextReminderAt: null },
     });
   } else {
     return NextResponse.json({ error: "unknown action" }, { status: 400 });

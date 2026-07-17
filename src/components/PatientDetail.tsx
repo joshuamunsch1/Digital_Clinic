@@ -1,20 +1,21 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trInvitationStatus, trPopulation, trProblemDuration, trRaterRole, trSessionLogType, trSource, trTerminationReason } from "@/lib/i18n";
+import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trPopulation, trProblemDuration, trRaterRole, trSource, trTerminationReason } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
-import type { InvitationRecord, Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, SESSION_LOG_TYPES, TERMINATION_REASONS, activeAlerts, currentGoalRating, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import type { Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
 import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
 import { GoalLevelChip } from "./GoalLadder";
 import { DocumentsPanel } from "./DocumentsPanel";
-import { ChannelChip } from "./MonitoringView";
+import { InstrumentForm } from "./InstrumentForm";
+import { SessionMonitoringPanel } from "./SessionMonitoringPanel";
 import { PredictionPanel, type BandSource } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
 
@@ -130,197 +131,17 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
   );
 }
 
-function InvitationsPanel({ patient, instruments, onRefresh }: {
-  patient: Patient;
-  instruments: InstrumentDef[];
-  onRefresh: (p: Patient) => void;
-}) {
-  const t = useT();
-  const { lang } = useLang();
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  // Collapsed by default — the dossier leads with clinical content; the
-  // one-line summary (open/total) is usually all a therapist needs.
-  const [open, setOpen] = useState(false);
-  if (!patient.invitations.length) return null;
-  const label = (inv: InvitationRecord) => instruments.find((i) => i.id === inv.instrumentId)?.abbreviation ?? inv.instrumentId;
-  const statusColor: Record<string, string> = { completed: C.spruce, error: C.danger, invited: C.blue, reminded: C.amber, created: C.muted };
+// The former InvitationsPanel + SessionLogPanel were merged into the shared
+// SessionMonitoringPanel (Batch 12) — one surface for the session ledger and
+// questionnaire requests, also embedded per patient in MonitoringView.
 
-  const doRemind = async (id: string) => {
-    setBusy(true); setMsg(null);
-    try { const r = await api.remindInvitation(id); onRefresh(r.patient); setMsg(t("reminderSent")); }
-    catch (e) { setMsg(`✗ ${(e as Error).message}`); }
-    finally { setBusy(false); }
-  };
-  const doSync = async () => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.syncLimesurvey(patient.id);
-      const p = await api.getPatient(patient.id);
-      onRefresh(p.patient);
-      setMsg(`✓ ${r.imported} / ${r.checked}${r.errors.length ? ` — ${r.errors.join("; ")}` : ""}`);
-    } catch (e) { setMsg(`✗ ${(e as Error).message}`); }
-    finally { setBusy(false); }
-  };
-
-  const openCount = patient.invitations.filter((i) => i.status !== "completed" && i.status !== "error" && i.status !== "cancelled").length;
-
-  return (
-    <Card className="p-5 mb-4">
-      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 flex-wrap text-left"
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("invitationsTitle")}</h3>
-        <span className="text-xs" style={{ color: C.muted }}>{t("invSummary", { open: openCount, n: patient.invitations.length })}</span>
-        <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>{open ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}</span>
-      </button>
-      {open && (
-      <>
-      <div className="flex items-center justify-end mt-3 mb-3">
-        <GhostButton small onClick={doSync}>{busy ? t("working") : t("syncNow")}</GhostButton>
-      </div>
-      <div className="flex flex-col gap-2">
-        {[...patient.invitations].reverse().map((inv) => (
-          <div key={inv.id} className="flex items-center gap-3 flex-wrap rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
-            <span className="text-sm font-semibold" style={{ color: C.ink }}>{label(inv)}</span>
-            <ChannelChip channel={inv.channel} />
-            <span className="text-xs" style={{ color: C.muted }}>{trRaterRole(inv.respondentRole, lang)}{inv.channel === "limesurvey" && inv.email ? ` · ${inv.email}` : ""}{inv.context.wave ? ` · ${inv.context.wave}` : ""}</span>
-            <span className="text-xs font-bold" style={{ color: statusColor[inv.status] ?? C.muted }}>
-              {trInvitationStatus(inv.status, lang)}{inv.sentAt ? ` · ${fmtDate(inv.sentAt)}` : ""}{inv.completedAt ? ` · ✓ ${fmtDate(inv.completedAt)}` : ""}
-            </span>
-            {inv.lastError && <span className="text-xs" style={{ color: C.danger }}>{inv.lastError}</span>}
-            <span className="ml-auto flex gap-2">
-              {(inv.status === "invited" || inv.status === "reminded") && (
-                <GhostButton small onClick={() => doRemind(inv.id)}>{t("sendReminder")}</GhostButton>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-      {msg && <p className="text-xs mt-3" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
-      </>
-      )}
-    </Card>
-  );
-}
-
-/// Session-attendance log (§4.5): sessions without questionnaires, cancellations
-/// and no-shows — the "session without questionnaire" quick action.
-function SessionLogPanel({ patient, therapists, user, onRefresh }: {
-  patient: Patient;
-  therapists: Therapist[];
-  user: SessionUser;
-  onRefresh: (p: Patient) => void;
-}) {
-  const t = useT();
-  const { lang } = useLang();
-  const [type, setType] = useState<string>("held");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [conductedById, setConductedById] = useState<string>(user.role === "therapist" ? user.id : patient.therapistId ?? "");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  // Collapsed by default: the one-line summary carries the essentials, the
-  // entry form + list expand on demand.
-  const [open, setOpen] = useState(false);
-
-  const save = async () => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.logSession(patient.id, {
-        occurredAt: `${date}T12:00:00`,
-        type,
-        conductedById: conductedById || null,
-        note: note.trim() || undefined,
-      });
-      onRefresh(r.patient);
-      setNote("");
-      setMsg(t("logSaved"));
-    } catch (e) {
-      setMsg(`✗ ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const doDelete = async (logId: string) => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.deleteSessionLog(logId);
-      onRefresh(r.patient);
-    } catch (e) {
-      setMsg(`✗ ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const lastLog = patient.sessionLogs[patient.sessionLogs.length - 1];
-
-  return (
-    <Card className="p-5 mb-4">
-      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 flex-wrap text-left"
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("sessionLogTitle")}</h3>
-        <span className="text-xs" style={{ color: C.muted }}>
-          {lastLog ? t("logSummary", { n: patient.sessionLogs.length, date: fmtDate(lastLog.occurredAt) }) : t("logSummaryEmpty")}
-        </span>
-        <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>{open ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}</span>
-      </button>
-      {open && (
-      <>
-      <p className="text-xs mt-2 mb-3" style={{ color: C.muted }}>{t("sessionLogSub")}</p>
-      <div className="flex gap-3 flex-wrap items-end">
-        <Field label={t("logDateLabel")}>
-          <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <Field label={t("logTypeLabel")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 200 }} value={type} onChange={(e) => setType(e.target.value)}>
-            {SESSION_LOG_TYPES.map((v) => <option key={v} value={v}>{trSessionLogType(v, lang)}</option>)}
-          </select>
-        </Field>
-        <Field label={t("conductedBy")}>
-          <select style={{ ...inputStyle, width: "auto", minWidth: 180 }} value={conductedById} onChange={(e) => setConductedById(e.target.value)}>
-            <option value="">—</option>
-            {therapists.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
-          </select>
-        </Field>
-        <Field label={t("logNoteLabel")}>
-          <input style={{ ...inputStyle, width: 220 }} value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
-        <PrimaryButton small disabled={busy} onClick={save}>{t("logSave")}</PrimaryButton>
-      </div>
-      {patient.sessionLogs.length > 0 && (
-        <div className="mt-3">
-          <p className="text-xs font-bold mb-1" style={{ color: C.muted }}>{t("logEntries")}</p>
-          <div className="flex flex-col gap-1">
-            {[...patient.sessionLogs].reverse().map((l) => {
-              const by = therapists.find((th) => th.id === l.conductedById);
-              return (
-                <div key={l.id} className="flex items-center gap-3 flex-wrap rounded-lg px-3 py-1.5 text-xs" style={{ background: C.surfaceAlt }}>
-                  <span style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>{fmtDate(l.occurredAt)}</span>
-                  <span className="font-semibold" style={{ color: l.type === "held" ? C.spruce : C.amber }}>{trSessionLogType(l.type, lang)}</span>
-                  {by && <span style={{ color: C.muted }}>{t("conductedBy")}: {by.name}</span>}
-                  {l.note && <span style={{ color: C.muted }}>“{l.note}”</span>}
-                  <button type="button" className="ml-auto font-semibold" onClick={() => doDelete(l.id)}
-                    style={{ color: C.danger, background: "none", border: "none", cursor: "pointer", fontSize: 11 }}>
-                    {t("logDelete")}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {msg && <p className="text-xs mt-2" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
-      </>
-      )}
-    </Card>
-  );
-}
-
-export function PatientDetail({ patient, user, therapists, instruments, switchList, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake, onOpenGoals, onOpenPatient }: {
+export function PatientDetail({ patient, user, therapists, instruments, switchList, configured, onBack, onAssign, onSaveDiagnosis, onPatientUpdated, onStartDips, onOpenDiagnosis, onEditIntake, onOpenGoals, onOpenPatient }: {
   patient: Patient; user: SessionUser; therapists: Therapist[]; instruments: InstrumentDef[];
   /// Role-scoped active caseload for the quick-switcher (dashboard order).
   switchList: { id: string; name: string }[];
+  /// Whether LimeSurvey is configured (ClinicData.limesurveyConfigured) — gates
+  /// the e-mail channel + sync in the monitoring panel.
+  configured: boolean;
   onBack: () => void; onAssign: (id: string, therapistId: string | null) => void;
   onSaveDiagnosis: (id: string, text: string, category: string, icdCode?: string) => void;
   onPatientUpdated: (p: Patient) => void;
@@ -354,6 +175,10 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const [bandSource, setBandSource] = useState<BandSource>("clinic");
   // Selected instrument of the single switchable questionnaire card.
   const [selInstId, setSelInstId] = useState<string | null>(null);
+  // Manual paper-form entry launched from the monitoring panel — takes over
+  // the dossier with the clinician InstrumentForm (same pattern as
+  // MonitoringView); key={patient.id} on this component resets it per patient.
+  const [manualEntry, setManualEntry] = useState<{ instrument: InstrumentDef; sessionNumber?: number } | null>(null);
   // Conclude-treatment (archive) state — see the card at the bottom of the page.
   const [archOutcome, setArchOutcome] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -497,6 +322,33 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
     ...(canArchive && !isArchived ? [{ id: "dossier-conclude", label: t("navConclude") }] : []),
   ];
   const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  if (manualEntry) {
+    return (
+      <InstrumentForm
+        instrument={manualEntry.instrument}
+        clinicianMode
+        therapists={therapists}
+        defaultConductedById={user.role === "therapist" ? user.id : patient.therapistId}
+        defaultSessionNumber={manualEntry.sessionNumber}
+        busy={busy}
+        onCancel={() => setManualEntry(null)}
+        onSubmit={async (payload) => {
+          setBusy(true);
+          try {
+            const r = await api.submitResponse(patient.id, payload);
+            onPatientUpdated(r.patient);
+            setManualEntry(null);
+            if (r.skippedScales.length) alert(`${t("scalesNotComputed")}\n${r.skippedScales.map((s) => `${s.key}: ${s.reason}`).join("\n")}`);
+          } catch (e) {
+            alert("✗ " + (e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -750,10 +602,19 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
       </Card>
       </div>
 
-      {/* Archived dossiers are read-only — no new data collection. */}
+      {/* Sessions & questionnaires — the unified ledger + monitoring panel
+          (read-only on archived dossiers; it self-hides when empty there). */}
       <div id="dossier-monitoring" style={{ scrollMarginTop: 56 }}>
-        {!isArchived && <SessionLogPanel patient={patient} therapists={therapists} user={user} onRefresh={onPatientUpdated} />}
-        <InvitationsPanel patient={patient} instruments={instruments} onRefresh={onPatientUpdated} />
+        <SessionMonitoringPanel
+          patient={patient}
+          instruments={instruments}
+          therapists={therapists}
+          user={user}
+          configured={configured}
+          variant="dossier"
+          onPatientUpdated={onPatientUpdated}
+          onStartManualEntry={(instrument, ctx) => setManualEntry({ instrument, sessionNumber: ctx.sessionNumber })}
+        />
       </div>
 
       {/* Therapist-facing outcome prediction — active therapy dossiers only.

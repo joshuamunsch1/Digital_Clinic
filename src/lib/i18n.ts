@@ -269,7 +269,7 @@ export const UI = {
     "Eine geänderte Adresse wird als E-Mail der Patient*in gespeichert.",
     "Une adresse modifiée est enregistrée comme e-mail du patient / de la patiente.",
     "A changed address is saved as the patient's e-mail."),
-  invitationsTitle: L("Fragebogen-Einladungen (LimeSurvey)", "Invitations aux questionnaires (LimeSurvey)", "Questionnaire invitations (LimeSurvey)"),
+  invitationsTitle: L("Fragebogen-Anfragen", "Demandes de questionnaires", "Questionnaire requests"),
   syncNow: L("Abgeschlossene Antworten jetzt abholen", "Récupérer les réponses terminées", "Sync completed responses now"),
   working: L("Läuft…", "En cours…", "Working…"),
   sendReminder: L("Erinnerung senden", "Envoyer un rappel", "Send reminder"),
@@ -565,15 +565,13 @@ export const UI = {
   // Batch 11 — dossier quick-nav, switchable questionnaire card, collapsible
   // panels, patient quick-switcher.
   navDiagnosis: L("Diagnose", "Diagnostic", "Diagnosis"),
-  navMonitoring: L("Monitoring & Einladungen", "Monitoring & invitations", "Monitoring & invitations"),
+  navMonitoring: L("Sitzungen & Fragebögen", "Séances & questionnaires", "Sessions & questionnaires"),
   navPrognosis: L("Prognose", "Pronostic", "Prognosis"),
   navCourse: L("Verlauf", "Évolution", "Course"),
   navDocuments: L("Dokumente", "Documents", "Documents"),
   navConclude: L("Abschluss", "Clôture", "Conclusion"),
   courseCardTitle: L("Fragebogen-Verläufe", "Évolutions des questionnaires", "Questionnaire trajectories"),
-  logSummary: L("{n} Einträge · zuletzt {date}", "{n} entrées · dernière {date}", "{n} entries · latest {date}"),
   logSummaryEmpty: L("Noch keine Einträge", "Aucune entrée", "No entries yet"),
-  invSummary: L("{open} von {n} offen", "{open} sur {n} en attente", "{open} of {n} open"),
   panelShow: L("Anzeigen", "Afficher", "Show"),
   panelHide: L("Einklappen", "Réduire", "Hide"),
   prevPatient: L("Vorherige*r Patient*in", "Patient·e précédent·e", "Previous patient"),
@@ -636,13 +634,13 @@ export const UI = {
   icdLabel: L("ICD-10-Code (optional)", "Code CIM-10 (facultatif)", "ICD-10 code (optional)"),
   patientCodeLabel: L("Forschungscode", "Code de recherche", "Research code"),
 
-  // session log (sessions without questionnaires, §4.5)
-  sessionLogTitle: L("Sitzung ohne Fragebogen erfassen", "Consigner une séance sans questionnaire", "Log a session without questionnaire"),
+  // session ledger + unified "Sitzungen & Fragebögen" panel (Batch 12, §4.5)
+  sessionLogTitle: L("Sitzung erfassen", "Consigner une séance", "Log a session"),
   sessionLogSub: L(
-    "Für Dosis-Wirkungs- und Abbruchanalysen zählen auch Sitzungen ohne Messung — sowie Absagen und Nichterscheinen.",
-    "Pour les analyses dose-effet et d'interruption, les séances sans mesure comptent aussi — de même que les annulations et absences.",
-    "Dose–response and dropout analyses also need sessions without measurement — plus cancellations and no-shows."),
-  logTypeHeld: L("stattgefunden (ohne Fragebogen)", "a eu lieu (sans questionnaire)", "held (no questionnaire)"),
+    "Protokolliert Anwesenheit für die Akte: stattgefundene Sitzungen, Absagen und Nichterscheinen. Grundlage künftiger Dosis-Wirkungs- und Anwesenheitsanalysen — derzeit fließt das Protokoll in keine Auswertung ein.",
+    "Consigne la présence pour le dossier : séances tenues, annulations et absences. Base des futures analyses dose-effet et d'assiduité — le protocole n'alimente encore aucune analyse.",
+    "Records attendance for the file: held sessions, cancellations and no-shows. The basis for future dose–response and attendance analyses — the ledger does not feed any analysis yet."),
+  logTypeHeld: L("stattgefunden", "a eu lieu", "held"),
   logTypeCancelled: L("abgesagt", "annulée", "cancelled"),
   logTypeNoShow: L("nicht erschienen", "absence non annoncée", "no-show"),
   logTypeLabel: L("Art", "Type", "Type"),
@@ -652,6 +650,44 @@ export const UI = {
   logSaved: L("Erfasst.", "Consigné.", "Logged."),
   logDelete: L("Löschen", "Supprimer", "Delete"),
   logEntries: L("Einträge", "Entrées", "Entries"),
+  ledgerTitle: L("Sitzungsprotokoll", "Journal des séances", "Session ledger"),
+  panelSummary: L(
+    "{sessions} Sitzungen · {open} Anfragen offen",
+    "{sessions} séances · {open} demandes en attente",
+    "{sessions} sessions · {open} requests open"),
+  sessionNumberLabel: L("Sitzungsnummer", "Numéro de séance", "Session number"),
+  sessionNumberHint: L("automatisch vorgeschlagen — anpassbar", "suggéré automatiquement — modifiable", "suggested automatically — editable"),
+  sendStepTitle: L("Fragebögen zur Sitzung {n} senden", "Envoyer les questionnaires de la séance {n}", "Send questionnaires for session {n}"),
+  sendStepTitleNoNum: L("Fragebögen zur Sitzung senden", "Envoyer les questionnaires de la séance", "Send questionnaires for this session"),
+  sendStepSub: L(
+    "Sitzungsinstrumente sind vorausgewählt — bestätigen oder überspringen.",
+    "Les instruments de séance sont présélectionnés — confirmer ou passer.",
+    "The session instruments are pre-selected — confirm or skip."),
+  sendStepSend: L("Anfragen senden", "Envoyer les demandes", "Send requests"),
+  sendStepSkip: L("Überspringen", "Passer", "Skip"),
+  sendStepSent: L("{n} Anfrage(n) erstellt.", "{n} demande(s) créée(s).", "{n} request(s) created."),
+  sendStepNoInstruments: L(
+    "Keine Sitzungsinstrumente für diese Patient*in verfügbar.",
+    "Aucun instrument de séance disponible pour ce·tte patient·e.",
+    "No session instruments available for this patient."),
+  enterManually: L("manuell erfassen", "saisir manuellement", "enter manually"),
+  chipOpen: L("offen", "en attente", "open"),
+  markNoResponse: L("Keine Antwort", "Sans réponse", "No response"),
+  confirmNoResponse: L(
+    "Anfrage schließen, weil keine Antwort mehr erwartet wird? Sie gilt dann als unbeantwortet beendet.",
+    "Clore la demande car aucune réponse n'est plus attendue ? Elle sera considérée comme restée sans réponse.",
+    "Close this request because no answer is expected anymore? It will count as ended unanswered."),
+  noResponseMarked: L("Anfrage als unbeantwortet geschlossen.", "Demande close sans réponse.", "Request closed as unanswered."),
+  unloggedMeasurements: L(
+    "{n} frühere Messung(en) ohne Sitzungseintrag",
+    "{n} mesure(s) antérieure(s) sans entrée de séance",
+    "{n} earlier measurement(s) without a ledger entry"),
+  deleteLogLinked: L(
+    "Eintrag ist mit {n} Fragebogen-Anfrage(n) verknüpft — trotzdem löschen? Die Anfragen bleiben bestehen.",
+    "L'entrée est liée à {n} demande(s) de questionnaire — supprimer quand même ? Les demandes sont conservées.",
+    "This entry is linked to {n} questionnaire request(s) — delete anyway? The requests are kept."),
+  invHistoryShow: L("Alle Anfragen anzeigen ▼", "Afficher toutes les demandes ▼", "Show all requests ▼"),
+  invHistoryHide: L("Alle Anfragen ausblenden ▲", "Masquer toutes les demandes ▲", "Hide all requests ▲"),
 
   // manual registration (director/admin)
   moreDetails: L("E-Mail & persönliche Angaben", "E-mail et informations personnelles", "E-mail & personal details"),
@@ -796,13 +832,15 @@ export const trSessionLogType = slugTr({
   no_show: UI.logTypeNoShow,
 });
 
-/// LimeSurvey invitation statuses (QuestionnaireInvitation.status).
+/// Questionnaire-request statuses (QuestionnaireInvitation.status).
 export const trInvitationStatus = slugTr({
   created: L("erstellt", "créée", "created"),
   invited: L("eingeladen", "invitation envoyée", "invited"),
   reminded: L("erinnert", "rappel envoyé", "reminded"),
   completed: L("abgeschlossen", "terminée", "completed"),
   error: L("Fehler", "erreur", "error"),
+  cancelled: L("storniert", "annulée", "cancelled"),
+  no_response: L("keine Antwort", "sans réponse", "no response"),
 });
 
 /// Canonical demographics values stored by the registration forms (sex/living

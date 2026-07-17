@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
-import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
+import { PATIENT_INCLUDE, patientFromRow, sessionLogFromRow } from "@/lib/serialize";
 import { SESSION_LOG_TYPES } from "@/lib/types";
 
-// Log a therapy session that happened WITHOUT a questionnaire — or a
-// cancellation / no-show (docs/outcome-prediction.md §4.5). Director or the
-// patient's assigned therapist only.
+// Add a session-ledger entry: a held session (numbered; the client typically
+// follows up with linked questionnaire invitations), a cancellation or a
+// no-show (docs/outcome-prediction.md §4.5). Director or the patient's
+// assigned therapist only.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s || s.role === "patient" || s.role === "admin")
@@ -25,6 +26,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = (await req.json()) as {
     occurredAt?: string;
     type?: string;
+    sessionNumber?: number | null;
     conductedById?: string | null;
     note?: string;
   };
@@ -33,12 +35,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
   if (Number.isNaN(occurredAt.getTime()))
     return NextResponse.json({ error: "invalid_date" }, { status: 400 });
+  if (body.sessionNumber != null && (!Number.isInteger(body.sessionNumber) || body.sessionNumber < 0))
+    return NextResponse.json({ error: "invalid_session_number" }, { status: 400 });
 
-  await prisma.sessionLog.create({
+  const created = await prisma.sessionLog.create({
     data: {
       patientId: params.id,
       occurredAt,
       type: body.type,
+      // Only held sessions consume a number; cancellations/no-shows don't.
+      sessionNumber: body.type === "held" ? (body.sessionNumber ?? null) : null,
       // Same convention as responses: default the conducting therapist from the
       // patient's current assignment when not explicitly chosen.
       conductedById: body.conductedById ?? patient.therapistId,
@@ -46,5 +52,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-  return NextResponse.json({ patient: patientFromRow(p!) });
+  // sessionLog is returned so the send step can link follow-up invitations.
+  return NextResponse.json({ patient: patientFromRow(p!), sessionLog: sessionLogFromRow(created) });
 }

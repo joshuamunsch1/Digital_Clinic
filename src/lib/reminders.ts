@@ -4,6 +4,12 @@
 // e-mail: their reminder story is the overdue flag, which keeps the task
 // visible to the patient and amber-flagged for the therapist.
 
+// Closed statuses (everything else): "completed" | "error" | "cancelled" |
+// "no_response". A new terminal status only needs to stay out of this list —
+// isOpenInvitation / isOverdue / reminderDue and the sweep+sync queries all
+// key off the open set. no_response is terminal everywhere: a LimeSurvey
+// answer arriving afterwards is deliberately NOT auto-imported (sync/notify
+// match invited/reminded only) — revisit if late completions should win.
 export const OPEN_INVITATION_STATUSES = ["created", "invited", "reminded"] as const;
 
 export interface ReminderFields {

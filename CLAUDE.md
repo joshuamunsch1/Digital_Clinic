@@ -226,6 +226,43 @@ behind the patient lines when the selection is a target (session-axis rows
 capped at the last measured session; index-axis attaches by occasion position,
 never synthesizing labels; static normBands suppressed while active).
 
+**Batch 12 (2026-07-17)**: **unified "Sitzungen & Fragebögen" panel** — session
+logging and questionnaire monitoring are ONE workflow now. New shared
+`SessionMonitoringPanel` (`src/components/SessionMonitoringPanel.tsx`) replaces
+the dossier's `SessionLogPanel`+`InvitationsPanel` (variant `"dossier"`,
+collapse-by-default card in `#dossier-monitoring`) AND MonitoringView's
+per-patient block internals (variant `"monitoring"`, always expanded;
+`ChannelChip`/`ScheduleEditor`/`NewRequestForm` moved into it). Schema:
+`SessionLog.sessionNumber Int?` (held sessions only, 0 = baseline) and
+`QuestionnaireInvitation.sessionLogId` FK (`onDelete: SetNull` — deleting a
+mis-entered log unlinks, never deletes, the requests). **Integrated flow**:
+logging a *held* session (suggested editable number via
+`suggestNextSessionNumber` in `src/lib/session-numbers.ts` — max over held
+logs / responses / OPEN invitation contexts, +1) chains into a pre-filled
+send step (every-session likert instruments population-matched via
+`populationMatches`, now exported from PatientHome; channel+email like
+NewRequestForm; per-instrument "manuell erfassen" passes the session number
+into the clinician `InstrumentForm`, which finally grew a visible
+Sitzungsnummer input — manual entries used to save `sessionNumber: null`).
+Cancellations/no-shows skip the step. The ledger shows per-session measurement
+chips: linked invitations by FK + responses matched by `sessionNumber` (how
+manual/CSV entries earn ✓). New terminal invitation status **`no_response`**
+(PATCH action; open statuses only — `error` stays cancel-only; the closed set
+lives as a comment in `src/lib/reminders.ts`; `remind` guard tightened to
+`isOpenInvitation`; a LimeSurvey answer arriving after no_response is
+deliberately NOT auto-imported). `POST session-log` returns
+`{patient, sessionLog}`; invitations POST accepts `sessionLogId`. PatientHome
+suppresses the standing every-session card when an open in_app invitation for
+that instrument exists (invitation-driven task wins; standing card = fallback).
+PatientDetail gained `configured` (limesurveyConfigured) + its own
+manual-entry `InstrumentForm` takeover (state resets via `key={patient.id}`).
+The misleading `sessionLogSub` copy was fixed: **NO analytics wiring — the
+ledger is not consumed by any analysis yet**; `sessionSeriesOf` still reads
+`ResponseInstance.sessionNumber` only (docs/outcome-prediction.md §4 item 5).
+Demo: p1 held S9 linked to her fresh in-app task, p3 held S10 with a
+`no_response` request. Panel lists derive from props every render — the
+MonitoringView block does NOT remount on `patientUpdated` merges.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

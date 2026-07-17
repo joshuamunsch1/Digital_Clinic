@@ -31,9 +31,10 @@ export interface CaseCharacteristics {
   treatmentExpectation?: number;
 }
 
-/// Sessions without a questionnaire (docs/outcome-prediction.md §4.5):
-/// held-but-unmeasured, cancellations, no-shows. Measured sessions live in
-/// ResponseInstance — dose–response analyses join both.
+/// The session ledger (docs/outcome-prediction.md §4.5): every appointment —
+/// held sessions, cancellations, no-shows. Held sessions carry a sessionNumber;
+/// measurements stay in ResponseInstance and are matched by sessionNumber /
+/// linked via QuestionnaireInvitation.sessionLogId.
 export const SESSION_LOG_TYPES = ["held", "cancelled", "no_show"] as const;
 export type SessionLogType = (typeof SESSION_LOG_TYPES)[number];
 
@@ -41,6 +42,8 @@ export interface SessionLogRecord {
   id: string;
   occurredAt: string;
   type: string;
+  /// Set for "held" sessions (0 = pre-therapy baseline); null otherwise.
+  sessionNumber: number | null;
   conductedById: string | null;
   note: string;
 }
@@ -138,6 +141,8 @@ export interface InvitationRecord {
   status: string;
   context: InvitationContext;
   channel: string; // "limesurvey" | "in_app"
+  /// Session-ledger entry this request was sent for, if any.
+  sessionLogId: string | null;
   remindEveryDays: number | null;
   maxReminders: number | null;
   reminderCount: number;

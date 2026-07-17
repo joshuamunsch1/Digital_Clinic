@@ -75,6 +75,7 @@ interface InvitationRow {
   status: string;
   context: string;
   channel: string;
+  sessionLogId: string | null;
   remindEveryDays: number | null;
   maxReminders: number | null;
   reminderCount: number;
@@ -102,6 +103,7 @@ interface SessionLogRow {
   id: string;
   occurredAt: Date;
   type: string;
+  sessionNumber: number | null;
   conductedById: string | null;
   note: string;
 }
@@ -220,6 +222,7 @@ export function invitationFromRow(i: InvitationRow): InvitationRecord {
     status: i.status,
     context: parse<InvitationContext>(i.context, {}),
     channel: i.channel,
+    sessionLogId: i.sessionLogId,
     remindEveryDays: i.remindEveryDays,
     maxReminders: i.maxReminders,
     reminderCount: i.reminderCount,
@@ -265,6 +268,7 @@ export function sessionLogFromRow(l: SessionLogRow): SessionLogRecord {
     id: l.id,
     occurredAt: l.occurredAt.toISOString(),
     type: l.type,
+    sessionNumber: l.sessionNumber,
     conductedById: l.conductedById,
     note: l.note,
   };

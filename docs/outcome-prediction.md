@@ -133,7 +133,7 @@ in the IAPT system (Lancet Digital Health, 2021).
 | Safety alarms | ✅ data-driven `alert` rule (BDI-FS suicide item) with banner propagation |
 | Expected-course bands / NOT alarms | ✅ **implemented 2026-07-07**: `src/lib/analytics/expected-course.ts` + amber banner/badges (see notes below) |
 | Sudden-gain / early-change detection | ✅ `src/lib/analytics/sudden-shifts.ts` (exact suddengains criteria), `early-change.ts` |
-| Intake predictors, dropout labels | ✅ `Patient.caseCharacteristics` / `terminationReason` (5-code, required at archive), `SessionLog`, `Patient.code` pseudonyms |
+| Intake predictors, dropout labels | ✅ `Patient.caseCharacteristics` / `terminationReason` (5-code, required at archive), `SessionLog` (Batch 12: numbered ledger + invitation FK; not yet fed into any model), `Patient.code` pseudonyms |
 | ETR / nearest-neighbor / dropout ML | ✅ `src/lib/analytics/etr.ts` (two-stage approximation), `nearest-neighbors.ts` (dynamic Gower NN), `dropout-risk.ts` — running against a **simulated reference cohort** until real completed treatments accumulate |
 
 ---
@@ -213,10 +213,14 @@ from day one. Checklist, each with its intended storage location:
    fields, never free text.
 4. **Research pseudonym**: `Patient.code` following the legacy `A00120`-style
    convention, auto-generated, used in every export instead of names.
-5. **Session attendance log**: sessions that happened *without* a questionnaire
-   (cancellations, no-shows) — needed for true dose–response and dropout timing.
-   Lightweight future `SessionLog` table or a "session without questionnaire"
-   quick action.
+5. **Session attendance log** — ✅ shipped as the numbered session ledger
+   (Batch 12): every appointment gets a `SessionLog` row (held / cancelled /
+   no-show; held sessions carry a `sessionNumber`), and questionnaire requests
+   sent from the after-session step link back via
+   `QuestionnaireInvitation.sessionLogId`. NOTE: the ledger is collected but
+   **not yet consumed by any analysis** — the analytics session axis is still
+   `ResponseInstance.sessionNumber` only; wiring attendance into dose–response
+   and dropout-timing models remains future work.
 6. **Per-occasion therapist attribution** — ✅ already collected
    (`ResponseInstance.conductedById`), enables therapist-effect modeling.
 7. **ICD-coded diagnosis** next to the coarse `disorderCategory` — categories

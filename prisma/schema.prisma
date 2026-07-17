@@ -110,21 +110,27 @@ model TherapyGoal {
   @@index([patientId])
 }
 
-/// A therapy session that happened (or didn't) WITHOUT a questionnaire —
-/// held-but-unmeasured sessions, cancellations and no-shows. Needed for true
-/// dose–response and dropout-timing analyses (docs/outcome-prediction.md §4.5);
-/// questionnaire-measured sessions live in ResponseInstance, and analyses join
-/// both sources.
+/// The session ledger: one row per therapy appointment — held sessions,
+/// cancellations and no-shows (docs/outcome-prediction.md §4.5). Held sessions
+/// carry a sessionNumber and link outgoing questionnaire requests via
+/// QuestionnaireInvitation.sessionLogId; measurements themselves stay in
+/// ResponseInstance (matched by sessionNumber for manual/CSV entries). NOTE:
+/// no analysis consumes this table yet — the analytics session axis is still
+/// ResponseInstance.sessionNumber only.
 model SessionLog {
   id            String   @id @default(cuid())
   patientId     String
   patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   occurredAt    DateTime
   type          String // "held" | "cancelled" | "no_show"
+  /// Position in the treatment course (0 = pre-therapy baseline), set for
+  /// "held" sessions; null for cancellations/no-shows (they consume no number).
+  sessionNumber Int?
   conductedById String?
   conductedBy   User?    @relation("SessionLogConductedBy", fields: [conductedById], references: [id])
   note          String   @default("")
   createdAt     DateTime @default(now())
+  invitations   QuestionnaireInvitation[]
 
   @@index([patientId])
 }
@@ -230,9 +236,14 @@ model QuestionnaireInvitation {
   token          String? // LimeSurvey participant token
   tokenId        String? // LimeSurvey participant tid (needed for invite/remind calls)
   url            String? // direct tokenised survey URL
-  status         String     @default("created") // "created" | "invited" | "reminded" | "completed" | "error" | "cancelled"
+  status         String     @default("created") // "created" | "invited" | "reminded" | "completed" | "error" | "cancelled" | "no_response"
   context        String     @default("{}") // JSON { wave?, sessionNumber? } applied when the response is imported
   channel        String     @default("limesurvey") // "limesurvey" | "in_app" — in_app = task the patient fills in this tool, no LimeSurvey involved
+  /// The session-ledger entry this request belongs to (held session → send
+  /// step). SetNull: deleting a mis-entered log must not delete or block the
+  /// invitations — they stay, unlinked, still carrying context.sessionNumber.
+  sessionLogId   String?
+  sessionLog     SessionLog? @relation(fields: [sessionLogId], references: [id], onDelete: SetNull)
   remindEveryDays Int? // periodic reminder cadence; null = no automatic reminders
   maxReminders   Int? // cap for automatic reminders; null = uncapped (LimeSurvey itself caps at 10)
   reminderCount  Int        @default(0)

@@ -78,13 +78,20 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
   const [wave, setWave] = useState((instrument.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"])[0]);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [conductedById, setConductedById] = useState(defaultConductedById ?? "");
+  // Visible in clinician mode for every-session instruments: manual/paper
+  // entries must carry the session number so the ledger can match them.
+  const [sessionNumber, setSessionNumber] = useState(
+    defaultSessionNumber != null ? String(defaultSessionNumber) : "",
+  );
 
   const set = (id: string, v: number | string) => setAnswers((prev) => ({ ...prev, [id]: v }));
   const required = instrument.items.filter((it) => it.responseType !== "text");
   const ready = required.every((it) => answers[it.id] !== undefined && answers[it.id] !== "");
   const assumedRange = instrument.items.some((it) => it.rangeAssumed);
   const isWave = instrument.cadenceType === "wave";
-  const showConductedBy = clinicianMode && instrument.cadenceType === "every_session" && !!therapists?.length;
+  const isEverySession = instrument.cadenceType === "every_session";
+  const showConductedBy = clinicianMode && isEverySession && !!therapists?.length;
+  const showSessionNumber = clinicianMode && isEverySession;
 
   const submit = () =>
     onSubmit({
@@ -93,7 +100,9 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
       note: note || undefined,
       respondentRole: clinicianMode ? role : "self",
       wave: clinicianMode && isWave ? wave : undefined,
-      sessionNumber: defaultSessionNumber,
+      sessionNumber: showSessionNumber
+        ? sessionNumber.trim() === "" ? undefined : Number(sessionNumber)
+        : defaultSessionNumber,
       conductedById: showConductedBy ? conductedById || null : undefined,
       occurredAt: clinicianMode ? new Date(`${date}T12:00:00`).toISOString() : undefined,
     });
@@ -124,6 +133,18 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
             <Field label={t("dateAdministered")}>
               <input type="date" style={{ ...inputStyle, width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
+            {showSessionNumber && (
+              <Field label={t("sessionNumberLabel")}>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  style={{ ...inputStyle, width: 90 }}
+                  value={sessionNumber}
+                  onChange={(e) => setSessionNumber(e.target.value)}
+                />
+              </Field>
+            )}
             {showConductedBy && (
               <Field label={t("conductedBy")}>
                 <select style={{ ...inputStyle, width: "auto", minWidth: 160 }} value={conductedById} onChange={(e) => setConductedById(e.target.value)}>

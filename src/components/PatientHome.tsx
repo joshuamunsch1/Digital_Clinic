@@ -16,7 +16,8 @@ export type PatientTask =
 /// Does this instrument's target population fit the patient? Age-based
 /// heuristic over the catalog's population slugs ("adult", "child_adolescent",
 /// "adult_adolescent", "all", …); unknown age defaults to the adult forms.
-function populationMatches(inst: InstrumentDef, patient: Patient): boolean {
+/// Exported for the send-after-session step (SessionMonitoringPanel).
+export function populationMatches(inst: InstrumentDef, patient: Patient): boolean {
   if (inst.population === "all") return true;
   const age = Number(patient.demographics.age);
   if (!Number.isFinite(age)) return inst.population.includes("adult");
@@ -48,12 +49,6 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
   const sub = patient.dips && patient.dips.submission;
 
   const fillable = patientFillable(instruments, patient);
-  const dueInstruments =
-    patient.status === "therapy" ? fillable.filter((i) => i.cadenceType === "every_session") : [];
-  const optionalInstruments =
-    patient.status === "therapy"
-      ? fillable.filter((i) => i.cadenceType !== "every_session" && i.raterRole === "self")
-      : [];
   // Questionnaires the therapist explicitly requested in-app (open tasks).
   const requestedTasks = patient.invitations
     .filter((inv) => inv.channel === "in_app" && inv.status === "created")
@@ -61,6 +56,19 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
       const inst = fillable.find((i) => i.id === inv.instrumentId);
       return inst ? [{ inv, inst }] : [];
     });
+  // Standing after-session cards stay as a fallback when the therapist skipped
+  // the send step — but an open in-app request for the same instrument replaces
+  // them (the requested task completes the invitation and carries the session
+  // number, so it must win over the anonymous standing card).
+  const requestedIds = new Set(requestedTasks.map(({ inst }) => inst.id));
+  const dueInstruments =
+    patient.status === "therapy"
+      ? fillable.filter((i) => i.cadenceType === "every_session" && !requestedIds.has(i.id))
+      : [];
+  const optionalInstruments =
+    patient.status === "therapy"
+      ? fillable.filter((i) => i.cadenceType !== "every_session" && i.raterRole === "self")
+      : [];
 
   return (
     <div className="max-w-2xl mx-auto">

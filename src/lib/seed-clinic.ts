@@ -186,12 +186,18 @@ async function seedInvitations(prisma: PrismaClient, instruments: Map<string, Se
     ) ?? defs.find((d) => d.id === SESSION_INSTRUMENT_ID)!;
   const day = 864e5;
   const now = Date.now();
+  // context.sessionNumber only makes sense for per-session instruments — the
+  // ledger link (sessionLogId) works either way.
+  const ctxForSession = (n: number) =>
+    inApp.cadenceType === "every_session" ? JSON.stringify({ sessionNumber: n }) : "{}";
 
-  // p1 Mara (t1): fresh in-app task — visible in her patient portal
+  // p1 Mara (t1): fresh in-app task, sent from the after-session step of her
+  // held session 9 — the ledger shows "Sitzung 9 · … offen"
   await prisma.questionnaireInvitation.create({
     data: {
       patientId: "p1", instrumentId: inApp.id, respondentRole: "self",
       email: "mara.vogel@example.org", channel: "in_app",
+      sessionLogId: "sl-p1-s9", context: ctxForSession(9),
       createdAt: new Date(now - 2 * day),
     },
   });
@@ -201,6 +207,17 @@ async function seedInvitations(prisma: PrismaClient, instruments: Map<string, Se
       patientId: "p3", instrumentId: inApp.id, respondentRole: "self",
       email: "elif.demir@example.org", channel: "in_app",
       remindEveryDays: 7, createdAt: new Date(now - 12 * day),
+    },
+  });
+  // p3 Elif: request for her held session 10 that was never answered —
+  // closed as "no_response" (terminal, distinct from cancelled)
+  await prisma.questionnaireInvitation.create({
+    data: {
+      patientId: "p3", instrumentId: inApp.id, respondentRole: "self",
+      email: "elif.demir@example.org", channel: "in_app",
+      sessionLogId: "sl-p3-s10", context: ctxForSession(10),
+      status: "no_response",
+      createdAt: new Date(now - 38 * day),
     },
   });
   // p5 Camille (t2): completed LimeSurvey invitation after one reminder
@@ -298,13 +315,16 @@ export async function seedClinic(prisma: PrismaClient) {
       },
     });
 
-    // Sessions without questionnaires / cancellations / no-shows (§4.5).
+    // Session ledger (§4.5): held sessions (numbered), cancellations, no-shows.
+    // Fixed ids let seedInvitations link requests to their ledger entry.
     for (const log of p.sessionLogs ?? []) {
       await prisma.sessionLog.create({
         data: {
+          id: log.id,
           patientId: p.id,
           occurredAt: new Date(now - log.daysAgo * 864e5),
           type: log.type,
+          sessionNumber: log.sessionNumber ?? null,
           conductedById: p.therapistId,
           note: log.note ?? "",
         },

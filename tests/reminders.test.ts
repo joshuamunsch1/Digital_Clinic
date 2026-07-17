@@ -45,7 +45,7 @@ test("reminderDue: maxReminders caps automatic sending (null = uncapped)", () =>
 
 test("reminderDue: only for the limesurvey channel and delivered statuses", () => {
   assert.equal(reminderDue({ ...base, channel: "in_app" }, NOW), false);
-  for (const status of ["created", "completed", "cancelled", "error"]) {
+  for (const status of ["created", "completed", "cancelled", "no_response", "error"]) {
     assert.equal(reminderDue({ ...base, status }, NOW), false, status);
   }
   assert.equal(reminderDue({ ...base, status: "reminded" }, NOW), true);
@@ -73,7 +73,7 @@ test("isOverdue: default window is 7 days when no cadence is set", () => {
 });
 
 test("isOverdue: closed invitations are never overdue", () => {
-  for (const status of ["completed", "cancelled", "error"]) {
+  for (const status of ["completed", "cancelled", "no_response", "error"]) {
     assert.equal(isOverdue({ ...base, status, sentAt: daysAgo(90) }, NOW), false, status);
   }
 });

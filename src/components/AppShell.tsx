@@ -349,6 +349,7 @@ function Shell() {
           // switcher would carry local state (diagnosis draft, band source,
           // selected instrument, archive confirm) from one patient to the next.
           <PatientDetail key={detailPatient.id} patient={detailPatient} user={user} therapists={therapists} instruments={instruments}
+            configured={data?.limesurveyConfigured ?? false}
             switchList={
               // Role-scoped active caseload for the quick-switcher — the same
               // population as the dashboard's active lists, in the same order.
