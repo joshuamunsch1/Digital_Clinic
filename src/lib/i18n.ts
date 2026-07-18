@@ -167,7 +167,6 @@ export const UI = {
   backToOverview: L("← Zurück zur Übersicht", "← Retour à la vue d'ensemble", "← Back to overview"),
   questionnairesOnFile: L("Fragebogen im Dossier", "questionnaires au dossier", "questionnaire(s) on file"),
   noQuestionnairesYet: L("noch keine Fragebogen", "pas encore de questionnaires", "no questionnaires yet"),
-  latestProgress: L("Therapiefortschritt (letzte Sitzung)", "Progrès (dernière séance)", "latest session progress"),
   therapistLabel: L("Therapeut*in:", "Thérapeute :", "Therapist:"),
   demographicsTitle: L("Demografie & persönliche Angaben", "Démographie et informations personnelles", "Demographics & personal information"),
   noIntakeYet: L("Die Aufnahme wurde noch nicht ausgefüllt.", "L'admission n'a pas encore été remplie.", "The patient has not completed intake yet."),

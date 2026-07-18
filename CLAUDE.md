@@ -262,6 +262,13 @@ ledger is not consumed by any analysis yet**; `sessionSeriesOf` still reads
 Demo: p1 held S9 linked to her fresh in-app task, p3 held S10 with a
 `no_response` request. Panel lists derive from props every render — the
 MonitoringView block does NOT remount on `patientUpdated` merges.
+Same-day follow-up: the **director dashboard is analytics-first** (Therapieverlauf
++ Fragebogen-Übersicht right under the title/stats via a shared `analyticsBlocks`
+fragment; therapists keep Batch 11's patient-first order); the dossier header
+lost the big "Therapiefortschritt (letzte Sitzung)" number/arrow (i18n key
+`latestProgress` removed); SummaryStrip pills show a signed since-last-
+measurement delta next to the trend glyph (`MiniTrend` gained a `delta` prop —
+delta color = glyph color, muted when stable).
 
 ## Reference documents
 

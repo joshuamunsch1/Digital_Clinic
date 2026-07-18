@@ -3,7 +3,7 @@ import React from "react";
 import { C } from "@/lib/theme";
 import { tr, T, LANGS, type Lang } from "@/lib/i18n";
 import type { Patient, PatientStatus } from "@/lib/types";
-import { sessionSeries, SESSION_PRIMARY_SCALE } from "@/lib/types";
+import { fmtScore, sessionSeries, SESSION_PRIMARY_SCALE } from "@/lib/types";
 import { useT } from "./LangContext";
 
 export function Card({ children, className = "", style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
@@ -51,16 +51,28 @@ export function TrendArrow({ patient }: { patient: Patient }) {
 }
 
 /// Generic mini trend for any score series (direction-aware coloring).
-export function MiniTrend({ values, higherIsBetter = true }: { values: number[]; higherIsBetter?: boolean }) {
+/// `delta` additionally shows the signed change since the previous measurement
+/// next to the glyph, in the glyph's color.
+export function MiniTrend({ values, higherIsBetter = true, delta }: { values: number[]; higherIsBetter?: boolean; delta?: boolean }) {
   if (values.length < 2) return <span style={{ color: C.muted }}>–</span>;
   const prev = values[values.length - 2];
   const last = values[values.length - 1];
+  const d = last - prev;
   const span = Math.max(...values) - Math.min(...values);
   const eps = span > 0 ? span * 0.05 : 0.001;
-  if (Math.abs(last - prev) <= eps) return <span style={{ color: C.muted }}>►</span>;
-  const up = last > prev;
-  const good = up === higherIsBetter;
-  return <span style={{ color: good ? C.spruce : C.danger }}>{up ? "▲" : "▼"}</span>;
+  const stable = Math.abs(d) <= eps;
+  const good = (d > 0) === higherIsBetter;
+  const color = stable ? C.muted : good ? C.spruce : C.danger;
+  return (
+    <span style={{ color }}>
+      {stable ? "►" : d > 0 ? "▲" : "▼"}
+      {delta && (
+        <span className="ml-1 text-xs font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {d > 0 ? "+" : ""}{fmtScore(d)}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function PrimaryButton({ children, onClick, disabled, small, submit }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; small?: boolean; submit?: boolean }) {

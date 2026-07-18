@@ -348,6 +348,20 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         .map((p) => ({ p, alerts: activeAlerts(p, data.instruments) }))
         .filter((x) => x.alerts.length > 0);
 
+  // The two clinic-analytics blocks (development chart + scores matrix). Their
+  // position is role-dependent: the director reads clinic-wide trends first
+  // (right under the title/stats), therapists work patient-first (caseload
+  // lists first, analytics below) — see the render below. Admin never sees them.
+  const analyticsBlocks = !isAdmin ? (
+    <>
+      <Card className="p-5 mb-5">
+        <SectionTitle sub={t("patientDevelopmentSub")}>{t("patientDevelopment")}</SectionTitle>
+        <GlobalChart patients={patients} instruments={data.instruments} courses={courses} />
+      </Card>
+      <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />
+    </>
+  ) : null;
+
   return (
     <div className="max-w-5xl mx-auto">
       {flaggedPatients.length > 0 && (
@@ -385,6 +399,8 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         {!isAdmin && <Stat label={t("statAvgProgress")} value={avgProgress} />}
       </div>
 
+      {clinicWide && analyticsBlocks}
+
       {section(
         t("sectionInTherapy"),
         inTherapy,
@@ -411,16 +427,9 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
       {!clinicWide && assignedIntake.length + unassigned.length > 0 &&
         section(t("sectionAssigned"), [...unassigned, ...assignedIntake], t("nonInThisCategory"))}
 
-      {/* Analytics blocks sit BELOW the patient lists (patient-first layout):
+      {/* Therapists get the analytics BELOW their lists (patient-first layout):
           reaching a dossier should not require scrolling past two charts. */}
-      {!isAdmin && (
-        <Card className="p-5 mb-5">
-          <SectionTitle sub={t("patientDevelopmentSub")}>{t("patientDevelopment")}</SectionTitle>
-          <GlobalChart patients={patients} instruments={data.instruments} courses={courses} />
-        </Card>
-      )}
-
-      {!isAdmin && <ScoresMatrix patients={patients} data={data} summaries={summaries} onOpenPatient={onOpenPatient} />}
+      {!clinicWide && analyticsBlocks}
 
       {clinicWide && (
         <div className="grid md:grid-cols-2 gap-4 mb-8">

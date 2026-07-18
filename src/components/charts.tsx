@@ -718,7 +718,8 @@ export function SummaryStrip({ patient, instruments }: { patient: Patient; instr
           title={`${inst.name} — ${primary.label}`}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold" style={{ color: C.ink }}>{inst.abbreviation}</span>
-            <MiniTrend values={values} higherIsBetter={higherIsBetter} />
+            {/* Glyph + signed change since the previous measurement. */}
+            <MiniTrend values={values} higherIsBetter={higherIsBetter} delta />
           </div>
           <div className="text-xs truncate" style={{ color: C.muted, maxWidth: 170 }}>{primary.label}</div>
           {/* The current value sits next to the bar it is normalized into. */}

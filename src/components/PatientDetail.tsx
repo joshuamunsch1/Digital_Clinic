@@ -7,10 +7,10 @@ import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
 import type { Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, fmtScore, latestSessionScore, responsesFor } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
-import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, TrendArrow, inputStyle } from "./ui";
+import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
 import { GoalLevelChip } from "./GoalLadder";
 import { DocumentsPanel } from "./DocumentsPanel";
@@ -183,7 +183,6 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const [archOutcome, setArchOutcome] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [archMsg, setArchMsg] = useState<string | null>(null);
-  const lastProgress = latestSessionScore(patient);
   const d = patient.demographics;
   const demoRows: [string, React.ReactNode][] = [
     [tr(T.age, lang), d.age], [tr(T.sex, lang), trDemoValue(d.sex, lang)], [tr(T.nationality, lang), d.nationality],
@@ -461,12 +460,6 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
               </div>
             </div>
           </div>
-          {lastProgress !== null && (
-            <div className="text-right">
-              <div className="text-3xl font-bold" style={{ color: C.spruce, fontVariantNumeric: "tabular-nums" }}>{fmtScore(lastProgress)} <TrendArrow patient={patient} /></div>
-              <div className="text-xs" style={{ color: C.muted }}>{t("latestProgress")}</div>
-            </div>
-          )}
         </div>
         {instrumentsWithData.length > 0 && (
           <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
