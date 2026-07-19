@@ -22,7 +22,9 @@ export interface ScoreResult {
 
 type Env = Map<string, number | null>;
 
-function itemNumeric(item: ItemDef, raw: number | string | null | undefined): number | null {
+/// Numeric recode of one raw answer: coercion, valueMap lookup, reversal.
+/// Exported so display surfaces (item heatmap) recode EXACTLY like scoring.
+export function itemNumeric(item: ItemDef, raw: number | string | null | undefined): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   let v: number | null = null;
   if (typeof raw === "number") v = raw;

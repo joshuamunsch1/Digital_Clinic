@@ -197,7 +197,10 @@ export async function seedSimulation(
     patients.push(a.row);
     a.sessions.forEach((phqTarget, sessionIndex) => {
       const at = new Date(a.lastSessionAt.getTime() - (a.sessions.length - 1 - sessionIndex) * 7 * 864e5);
-      const pstbTarget = clampNum(3 - phqTarget / 2 + normal(activeRng, 0, 0.3), -3, 3);
+      // Draw the noise unconditionally so an override never shifts the RNG
+      // stream for the following patients.
+      const noise = normal(activeRng, 0, 0.3);
+      const pstbTarget = a.pstbSessions?.[sessionIndex] ?? clampNum(3 - phqTarget / 2 + noise, -3, 3);
       addResponse(a.row.id, pstb, pstbAnswers(activeRng, pstbTarget), at, a.row.therapistId, { sessionNumber: sessionIndex });
       addResponse(a.row.id, phq4, phq4Answers(activeRng, phqTarget), at, a.row.therapistId, { sessionNumber: sessionIndex });
     });
@@ -223,6 +226,10 @@ interface ActiveSpec {
   row: PatientRow;
   /// PHQ-4 total targets per session (0 = baseline).
   sessions: number[];
+  /// Optional explicit PSTB mean targets (same length as `sessions`) —
+  /// overrides the PHQ coupling to plant alliance-visible course shapes
+  /// (Batch 13 rupture demo). Others keep the coupled default.
+  pstbSessions?: number[];
   lastSessionAt: Date;
   logs?: { date: Date; type: string; note?: string }[];
 }
@@ -254,6 +261,7 @@ function scriptedActivePatients(therapistIds: string[], codeStart: number): Acti
     icd: string;
     cc: string;
     sessions: number[];
+    pstbSessions?: number[];
     logs?: { daysAgo: number; type: string; note?: string }[];
   }[] = [
     { slug: "on-track", name: "Sina Albrecht", sex: "Female", age: 31, category: "depression", icd: "F32.1", cc: cc({}), sessions: [8, 7, 6.5, 6, 5.5, 5, 4.5, 4] },
@@ -269,7 +277,11 @@ function scriptedActivePatients(therapistIds: string[], codeStart: number): Acti
     { slug: "early-resp", name: "Greta Hasler", sex: "Female", age: 35, category: "anxiety", icd: "F40.1", cc: cc({ treatmentExpectation: 9 }), sessions: [9, 6.5, 5, 4] },
     { slug: "indeterminate", name: "Otto Imhof", sex: "Male", age: 58, category: "burnout", icd: "Z73.0", cc: cc({ employment: "retired" }), sessions: [6, 5.5, 6, 5.5, 6, 5.5] },
     { slug: "two-sessions", name: "Nora Jung", sex: "Female", age: 29, category: "eating_disorder", icd: "F50.2", cc: cc({}), sessions: [7, 6.5] },
-    { slug: "with-logs", name: "Karin Lang", sex: "Female", age: 41, category: "depression", icd: "F32.1", cc: cc({}), sessions: [8, 7, 6, 5.5, 5, 4.5], logs: [{ daysAgo: 17, type: "cancelled", note: "Krankheit" }, { daysAgo: 38, type: "no_show" }] },
+    // with-logs also demos the alliance-rupture marker (Batch 13): symptom
+    // course keeps improving while the PSTB dips hard at S3 and recovers —
+    // a transient alliance rupture, deliberately NOT a sudden loss (the
+    // stability criterion fails on a one-session dip).
+    { slug: "with-logs", name: "Karin Lang", sex: "Female", age: 41, category: "depression", icd: "F32.1", cc: cc({}), sessions: [8, 7, 6, 5.5, 5, 4.5], pstbSessions: [1.2, 1.4, 1.7, -0.8, 1.3, 1.6], logs: [{ daysAgo: 17, type: "cancelled", note: "Krankheit" }, { daysAgo: 38, type: "no_show" }] },
   ];
 
   return specs.map((s, i) => {
@@ -298,6 +310,7 @@ function scriptedActivePatients(therapistIds: string[], codeStart: number): Acti
         archivedBy: null,
       },
       sessions: s.sessions,
+      pstbSessions: s.pstbSessions,
       lastSessionAt: LAST,
       logs: (s.logs ?? []).map((l) => ({
         date: new Date(LAST.getTime() - l.daysAgo * 864e5),

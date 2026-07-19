@@ -5,6 +5,7 @@
 import type { ScaleDef } from "../instruments/types";
 import { rciThreshold } from "../instruments/rci";
 import type { ResponseRecord } from "../types";
+import type { AttendanceFeatures } from "./attendance";
 
 /// One measured occasion of one scale on the session axis (0 = baseline).
 export interface SessionPoint {
@@ -134,6 +135,11 @@ export interface ReferenceCase {
   terminationReason: string | null;
   /// Total measured sessions (max sessionNumber of the primary series).
   sessionCount: number | null;
+  /// End of the treatment episode (ISO) — the outcomes dashboard's year axis.
+  treatmentEndAt: string | null;
+  /// Ledger-derived attendance behavior (null when the case predates the
+  /// ledger and has no measurements — consumers must skip, not zero-fill).
+  attendance: AttendanceFeatures | null;
   /// Series keyed "instrumentId|scaleKey".
   series: Record<string, SessionPoint[]>;
 }

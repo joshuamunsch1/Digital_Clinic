@@ -15,6 +15,7 @@ import type { InvitationRecord, Patient, SessionLogRecord, SessionUser, Therapis
 import { DIPS_INSTRUMENT_ID, SESSION_LOG_TYPES } from "@/lib/types";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isOpenInvitation, isOverdue } from "@/lib/reminders";
+import { adherenceStats } from "@/lib/analytics/attendance";
 import { suggestNextSessionNumber } from "@/lib/session-numbers";
 import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { patientFillable, populationMatches } from "./PatientHome";
@@ -480,6 +481,22 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
   const abbr = (inv: InvitationRecord) =>
     instruments.find((i) => i.id === inv.instrumentId)?.abbreviation ?? inv.instrumentId;
 
+  // Adherence stats over the full request history (null pieces are omitted —
+  // the module never fabricates a rate from an empty denominator).
+  const adh = adherenceStats(patient.invitations, now);
+  const pct = (v: number) => `${Math.round(v * 100)} %`;
+  const adherenceLine =
+    adh.total > 0
+      ? [
+          adh.completionRate !== null ? `${t("adherenceReturn")} ${pct(adh.completionRate)}` : null,
+          adh.medianLatencyDays !== null ? t("adherenceLatency", { d: adh.medianLatencyDays.toFixed(1) }) : null,
+          adh.remindersPerRequest !== null ? t("adherenceReminders", { n: adh.remindersPerRequest.toFixed(1) }) : null,
+          adh.openOverdue > 0 ? t("adherenceOverdue", { n: adh.openOverdue }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
+
   const openInvs = patient.invitations.filter((i) => isOpenInvitation(i.status) || i.status === "error");
   const completedRecent = patient.invitations
     .filter((i) => i.status === "completed" && i.completedAt && now.getTime() - Date.parse(i.completedAt) <= 30 * 864e5)
@@ -691,6 +708,10 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
         />
       )}
 
+      {adherenceLine && (
+        <p className="text-xs mt-3" style={{ color: C.muted }}>{adherenceLine}</p>
+      )}
+
       {/* Outstanding questionnaire requests. */}
       {openInvs.length > 0 && (
         <div className="mt-3">
@@ -812,6 +833,7 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
           {patient.sessionLogs.length || patient.invitations.length
             ? t("panelSummary", { sessions: patient.sessionLogs.length, open: openCount })
             : t("logSummaryEmpty")}
+          {adh.completionRate !== null && ` · ${t("adherenceReturn")} ${pct(adh.completionRate)}`}
         </span>
         <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>
           {expanded ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}

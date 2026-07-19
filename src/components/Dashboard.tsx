@@ -17,6 +17,7 @@ import {
 import { Card, Field, MiniTrend, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { GlobalChart } from "./charts";
 import { archivedPatientsFor } from "./ArchiveView";
+import { CaseloadCockpit } from "./Cockpit";
 import { EarlyChangeBadge } from "./PredictionPanel";
 import { useLang, useT } from "./LangContext";
 
@@ -260,13 +261,15 @@ function RegisterPatientCard({ onRegister }: { onRegister: (payload: RegisterPat
   );
 }
 
-export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient, onOpenMonitoring, onOpenArchive }: {
+export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatient, onOpenMonitoring, onOpenArchive, onOpenOutcomes }: {
   data: ClinicData; user: SessionUser;
   onOpenPatient: (id: string) => void;
   onAssign: (id: string, therapistId: string | null) => void;
   onRegisterPatient: (payload: RegisterPatientPayload) => Promise<void>;
   onOpenMonitoring?: () => void;
   onOpenArchive: () => void;
+  /// Director-only treatment-outcome evaluation view (Batch 13).
+  onOpenOutcomes?: () => void;
 }) {
   const t = useT();
   const isDirector = user.role === "director";
@@ -401,25 +404,43 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
 
       {clinicWide && analyticsBlocks}
 
-      {section(
-        t("sectionInTherapy"),
-        inTherapy,
-        clinicWide ? t("nonInThisCategory") : t("noPatientsAssigned"),
-        presentCategories.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => setCatFilter("all")} aria-pressed={catFilter === "all"} className="rounded-full px-3 py-1 text-xs font-semibold"
-              style={{ background: catFilter === "all" ? C.spruce : C.surfaceAlt, color: catFilter === "all" ? "#fff" : C.muted, border: `1px solid ${catFilter === "all" ? C.spruce : C.line}`, cursor: "pointer" }}>
-              {t("allDisorders")}
-            </button>
-            {presentCategories.map((c) => (
-              <button key={c} type="button" onClick={() => setCatFilter(c)} aria-pressed={catFilter === c} className="rounded-full px-3 py-1 text-xs font-semibold"
-                style={{ background: catFilter === c ? C.spruce : C.surfaceAlt, color: catFilter === c ? "#fff" : C.muted, border: `1px solid ${catFilter === c ? C.spruce : C.line}`, cursor: "pointer" }}>
-                {trCategory(c, lang)}
+      {(() => {
+        const categoryChips =
+          presentCategories.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setCatFilter("all")} aria-pressed={catFilter === "all"} className="rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: catFilter === "all" ? C.spruce : C.surfaceAlt, color: catFilter === "all" ? "#fff" : C.muted, border: `1px solid ${catFilter === "all" ? C.spruce : C.line}`, cursor: "pointer" }}>
+                {t("allDisorders")}
               </button>
-            ))}
-          </div>
-        ) : undefined,
-      )}
+              {presentCategories.map((c) => (
+                <button key={c} type="button" onClick={() => setCatFilter(c)} aria-pressed={catFilter === c} className="rounded-full px-3 py-1 text-xs font-semibold"
+                  style={{ background: catFilter === c ? C.spruce : C.surfaceAlt, color: catFilter === c ? "#fff" : C.muted, border: `1px solid ${catFilter === c ? C.spruce : C.line}`, cursor: "pointer" }}>
+                  {trCategory(c, lang)}
+                </button>
+              ))}
+            </div>
+          ) : undefined;
+        // Clinical roles read the caseload as the traffic-light cockpit (an
+        // information superset of the old row list); admin — who never sees
+        // clinical data — keeps the plain assignment rows.
+        if (isAdmin) return section(t("sectionInTherapy"), inTherapy, t("nonInThisCategory"), categoryChips);
+        return (
+          <Card className="p-5 mb-5">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+              <h2 className="lc-display text-lg" style={{ color: C.ink }}>
+                {t("sectionInTherapy")} <span className="text-sm" style={{ color: C.muted }}>({inTherapy.length})</span>
+              </h2>
+              {categoryChips}
+            </div>
+            {inTherapy.length === 0 ? (
+              <p className="text-sm" style={{ color: C.muted }}>{clinicWide ? t("nonInThisCategory") : t("noPatientsAssigned")}</p>
+            ) : (
+              <CaseloadCockpit patients={inTherapy} instruments={data.instruments} therapists={data.therapists}
+                user={user} summaries={summaries} onOpenPatient={onOpenPatient} />
+            )}
+          </Card>
+        );
+      })()}
 
       {clinicWide && section(t("sectionAssigned"), assignedIntake, t("nonInThisCategory"))}
       {clinicWide && section(t("sectionUnassigned"), unassigned, t("nonInThisCategory"))}
@@ -458,6 +479,12 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
         <Card className="p-5 mb-5">
           <SectionTitle sub={t("exportSub")}>{t("exportTitle")}</SectionTitle>
           <div className="flex items-center gap-3 flex-wrap">
+            {onOpenOutcomes && (
+              <button type="button" onClick={onOpenOutcomes} className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ color: "#fff", background: C.spruce, border: `1px solid ${C.spruce}`, cursor: "pointer" }}>
+                {t("openOutcomes")}
+              </button>
+            )}
             <a href="/api/export/research?level=scores" className="text-xs font-semibold px-3 py-1.5 rounded-lg"
               style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
               ⬇ {t("exportScores")}

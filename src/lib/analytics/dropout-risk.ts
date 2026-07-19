@@ -11,6 +11,7 @@
 // plus the case's own early-change classification, computed with the same
 // pipeline that runs on live patients — so the model trains identically on
 // real data once the simulated cohort is purged.
+import type { AttendanceFeatures } from "./attendance";
 import { classifyEarlyChange } from "./early-change";
 import { applyStandardization, encodeFeatures, imputeStandardize } from "./features";
 import { auc, predictLogistic, trainLogistic, type LogisticOptions } from "./logistic";
@@ -32,16 +33,32 @@ const MIN_PER_CLASS = 5;
 
 const EARLY_FEATURES = ["early_response", "early_deterioration"] as const;
 
+/// Ledger-derived attendance rates (Batch 13). Including them is a
+/// feature-selection decision, not a psychometric fact [clinician-confirm];
+/// the panel's base-rate/n/AUC display keeps the model honest either way.
+const ATTENDANCE_FEATURES = ["cancellation_rate", "no_show_rate", "unmeasured_held_rate"] as const;
+
 function earlyOneHots(early: EarlyChange | null): (number | null)[] {
   if (early === null) return [null, null];
   return [early === "early_response" ? 1 : 0, early === "early_deterioration" ? 1 : 0];
 }
 
-function rawRow(features: IntakeFeatures, early: EarlyChange | null): { names: string[]; values: (number | null)[] } {
+function attendanceCells(a: AttendanceFeatures | null): (number | null)[] {
+  // Unavailable ledger → all-null cells → mean imputation downstream, exactly
+  // like missing intake fields — never silently zeroed.
+  if (!a || !a.available) return [null, null, null];
+  return [a.cancellationRate, a.noShowRate, a.unmeasuredHeldRate];
+}
+
+function rawRow(
+  features: IntakeFeatures,
+  early: EarlyChange | null,
+  attendance: AttendanceFeatures | null,
+): { names: string[]; values: (number | null)[] } {
   const base = encodeFeatures(features);
   return {
-    names: [...base.names, ...EARLY_FEATURES],
-    values: [...base.values, ...earlyOneHots(early)],
+    names: [...base.names, ...EARLY_FEATURES, ...ATTENDANCE_FEATURES],
+    values: [...base.values, ...earlyOneHots(early), ...attendanceCells(attendance)],
   };
 }
 
@@ -62,7 +79,7 @@ export function trainDropoutModel(
   const nNeg = labeled.length - nPos;
   if (labeled.length < MIN_LABELED || nPos < MIN_PER_CLASS || nNeg < MIN_PER_CLASS) return null;
 
-  const rows = labeled.map((l) => rawRow(l.c.features, l.early));
+  const rows = labeled.map((l) => rawRow(l.c.features, l.early, l.c.attendance));
   const featureNames = rows[0].names;
   const { X, means, sds } = imputeStandardize(rows.map((r) => r.values));
   const y = labeled.map((l) => l.y);
@@ -91,9 +108,10 @@ export function predictDropoutRisk(
   model: DropoutModel,
   features: IntakeFeatures,
   early: EarlyChange | null,
+  attendance: AttendanceFeatures | null,
   topK = 3,
 ): DropoutPrediction {
-  const { values } = rawRow(features, early);
+  const { values } = rawRow(features, early, attendance);
   const x = applyStandardization(values, model);
   const probability = predictLogistic({ weights: model.weights, bias: model.bias }, x);
   const topFactors = x

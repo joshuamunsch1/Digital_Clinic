@@ -7,6 +7,8 @@
 // ones; `includesSimulated` travels with every payload so the UI can badge
 // predictions honestly, and `npm run sim:purge` is the real-data cutover.
 import type { PrismaClient } from "@prisma/client";
+import { consecutiveDeltas } from "../analytics/alliance";
+import { attendanceFeatures } from "../analytics/attendance";
 import { trainDropoutModel, type DropoutModel } from "../analytics/dropout-risk";
 import { trainEtr, type EtrModel } from "../analytics/etr";
 import {
@@ -41,6 +43,20 @@ export const PREDICTION_TARGETS = [
 export const PRIMARY_TARGET = PREDICTION_TARGETS[0];
 export const PRIMARY_KEY = seriesKeyOf(PRIMARY_TARGET.instrumentId, PRIMARY_TARGET.scaleKey);
 
+/// Session-axis alliance scales monitored for rupture signals (Batch 13).
+/// The child form works through the identical path; today it has no reference
+/// rows, so its empirical criterion stays silently gated.
+export const ALLIANCE_SERIES = [
+  { instrumentId: SESSION_INSTRUMENT_ID, scaleKey: "Therapiebeziehung" },
+  { instrumentId: "sbkj_child", scaleKey: "Therapiebeziehung" },
+] as const;
+
+/// Jacobson–Truax clinical cutoff c for the PRIMARY target: the published
+/// PHQ-4 norm-band boundary unauffällig (≤2) | mild (≥3) → 2.5. This is the
+/// pragmatic band boundary, NOT a derived JT criterion c (which would need
+/// functional/dysfunctional distributions) [clinician-confirm].
+export const PRIMARY_CLINICAL_CUTOFF = 2.5;
+
 export interface ReferenceData {
   version: string;
   cases: ReferenceCase[];
@@ -50,6 +66,9 @@ export interface ReferenceData {
   dropoutModel: DropoutModel | null;
   /// Two-stage log-linear ETR per target seriesKey.
   etrModels: Map<string, EtrModel>;
+  /// Pooled consecutive-session deltas of the reference cohort per alliance
+  /// seriesKey — the empirical rupture criterion's calibration sample.
+  allianceDeltas: Map<string, number[]>;
 }
 
 const parseJson = <T>(s: string | null | undefined, fallback: T): T => {
@@ -111,7 +130,11 @@ async function probeVersion(prisma: PrismaClient): Promise<string> {
 }
 
 async function build(prisma: PrismaClient, version: string): Promise<ReferenceData> {
-  const targetIds = PREDICTION_TARGETS.map((t) => t.instrumentId);
+  // Targets plus the alliance scales — the alliance series ride along on the
+  // same lean load (pstb_adult responses are fetched anyway; sbkj_child adds
+  // one id to the filter and has no simulated rows today).
+  const wantedScales = [...PREDICTION_TARGETS, ...ALLIANCE_SERIES];
+  const targetIds = Array.from(new Set(wantedScales.map((t) => t.instrumentId)));
 
   const instrumentRows = await prisma.instrument.findMany({
     where: { id: { in: targetIds } },
@@ -120,7 +143,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
   const scaleParamsByKey = new Map<string, ScaleParams>();
   for (const row of instrumentRows) {
     const def = instrumentFromRow(row);
-    for (const t of PREDICTION_TARGETS) {
+    for (const t of wantedScales) {
       if (t.instrumentId !== def.id) continue;
       const scale = def.scales.find((s) => s.key === t.scaleKey);
       if (scale) scaleParamsByKey.set(seriesKeyOf(def.id, t.scaleKey), scaleParams(scale));
@@ -129,7 +152,10 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
 
   // Lean load: labeled archived patients with ONLY the target-series scores.
   // No sessionNumber filter here — index-axis targets (BDI-FS) live on
-  // wave-/date-based responses whose sessionNumber is null.
+  // wave-/date-based responses whose sessionNumber is null. The 3-field
+  // sessionLogs select feeds the attendance features; the probe stays sound
+  // without covering SessionLog writes because logs are only writable on
+  // non-archived patients and archiving bumps archivedAt.
   const rows = await prisma.patient.findMany({
     where: { status: "archived", terminationReason: { not: null }, code: { not: null } },
     select: {
@@ -139,6 +165,8 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
       disorderCategory: true,
       caseCharacteristics: true,
       terminationReason: true,
+      treatmentEndAt: true,
+      sessionLogs: { select: { type: true, occurredAt: true, sessionNumber: true } },
       responses: {
         where: { instrumentId: { in: targetIds } },
         select: {
@@ -151,7 +179,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
     },
   });
 
-  const targetKeys = new Set(PREDICTION_TARGETS.map((t) => `${t.instrumentId}|${t.scaleKey}`));
+  const targetKeys = new Set(wantedScales.map((t) => `${t.instrumentId}|${t.scaleKey}`));
   const axisByKey = new Map<string, TargetAxis>(
     PREDICTION_TARGETS.map((t) => [seriesKeyOf(t.instrumentId, t.scaleKey), t.axis]),
   );
@@ -199,6 +227,11 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
       }),
       terminationReason: r.terminationReason,
       sessionCount: primary.length ? primary[primary.length - 1].session : null,
+      treatmentEndAt: r.treatmentEndAt?.toISOString() ?? null,
+      attendance: attendanceFeatures(
+        r.sessionLogs,
+        primary.map((p) => p.session),
+      ),
       series,
     };
   });
@@ -220,6 +253,14 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
     if (model) etrModels.set(key, model);
   }
 
+  const allianceDeltas = new Map<string, number[]>();
+  for (const s of ALLIANCE_SERIES) {
+    const key = seriesKeyOf(s.instrumentId, s.scaleKey);
+    const pool: number[] = [];
+    for (const c of cases) for (const d of consecutiveDeltas(c.series[key] ?? [])) pool.push(d.delta);
+    allianceDeltas.set(key, pool);
+  }
+
   return {
     version,
     cases,
@@ -227,6 +268,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
     scaleParamsByKey,
     dropoutModel,
     etrModels,
+    allianceDeltas,
   };
 }
 

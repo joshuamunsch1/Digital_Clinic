@@ -14,6 +14,7 @@ import { IntakeEditView } from "./IntakeEditView";
 import { InstrumentForm } from "./InstrumentForm";
 import { Dashboard } from "./Dashboard";
 import { MonitoringView } from "./MonitoringView";
+import { OutcomesView } from "./OutcomesView";
 import { PatientDetail } from "./PatientDetail";
 import { ArchiveView } from "./ArchiveView";
 import { LangProvider, LangSwitcher, useT } from "./LangContext";
@@ -33,6 +34,8 @@ type View =
   | { name: "intake-edit"; patientId: string }
   // Full-window GAS therapy goals: ladder cards, attainment ratings, trajectory.
   | { name: "goals"; patientId: string }
+  // Director-only treatment-outcome evaluation (Batch 13).
+  | { name: "outcomes" }
   // from makes Back return to the originating secondary view instead of the dashboard.
   | { name: "patient-detail"; patientId: string; from?: "monitoring" | "archive" };
 
@@ -295,7 +298,11 @@ function Shell() {
         {isStaff && data && view.name === "home" && (
           <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient}
             onOpenMonitoring={user.role === "therapist" || user.role === "director" ? () => setView({ name: "monitoring" }) : undefined}
-            onOpenArchive={() => setView({ name: "archive" })} />
+            onOpenArchive={() => setView({ name: "archive" })}
+            onOpenOutcomes={user.role === "director" ? () => setView({ name: "outcomes" }) : undefined} />
+        )}
+        {user.role === "director" && data && view.name === "outcomes" && (
+          <OutcomesView onBack={() => setView({ name: "home" })} />
         )}
         {(user.role === "therapist" || user.role === "director") && data && view.name === "dips-interview" && (() => {
           const dipsPatient = data.patients.find((p) => p.id === view.patientId);

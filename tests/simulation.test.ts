@@ -3,6 +3,7 @@
 // demos would be showing noise.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { attendanceFeatures, type AttendanceLogInput } from "../src/lib/analytics/attendance";
 import { predictDropoutRisk, trainDropoutModel } from "../src/lib/analytics/dropout-risk";
 import { predictEtr, trainEtr } from "../src/lib/analytics/etr";
 import { detectSuddenShifts } from "../src/lib/analytics/sudden-shifts";
@@ -16,6 +17,16 @@ function phqSeries(c: SimCase): SessionPoint[] {
   return c.sessions
     .filter((s) => s.phqTarget !== null)
     .map((s) => ({ session: s.index, value: s.phqTarget! }));
+}
+
+/// Mirror of how seed-simulation.ts writes the ledger: held rows only for
+/// unmeasured sessions (no sessionNumber), plus the cancelled/no-show extras.
+function simLogs(c: SimCase): AttendanceLogInput[] {
+  const logs: AttendanceLogInput[] = c.sessions
+    .filter((s) => s.phqTarget === null)
+    .map((s) => ({ type: "held", occurredAt: s.date, sessionNumber: null }));
+  for (const l of c.extraLogs) logs.push({ type: l.type, occurredAt: l.date, sessionNumber: null });
+  return logs;
 }
 
 function toReferenceCase(c: SimCase): ReferenceCase {
@@ -36,6 +47,8 @@ function toReferenceCase(c: SimCase): ReferenceCase {
     },
     terminationReason: c.terminationReason,
     sessionCount: series.length ? series[series.length - 1].session : null,
+    treatmentEndAt: c.treatmentEnd.toISOString(),
+    attendance: attendanceFeatures(simLogs(c), series.map((p) => p.session)),
     series: { [KEY]: series },
   };
 }
@@ -80,11 +93,13 @@ describe("simulated cohort", () => {
       model!,
       features({ problemDuration: 2, employment: "unemployed", treatmentExpectation: 2, psychotropicMedication: true, priorPsychotherapy: true, baselineSeverity: 10 }),
       "early_deterioration",
+      null,
     );
     const low = predictDropoutRisk(
       model!,
       features({ problemDuration: 0, treatmentExpectation: 9, baselineSeverity: 6 }),
       "early_response",
+      null,
     );
     assert.ok(high.probability > low.probability, `${high.probability} vs ${low.probability}`);
     assert.ok(model!.trainAuc > 0.55, `train AUC ${model!.trainAuc}`);
@@ -97,6 +112,26 @@ describe("simulated cohort", () => {
     const low = predictEtr(model!, features({ treatmentExpectation: 1 }), [10]);
     // Higher expectation → steeper improvement → lower severity at session 10.
     assert.ok(high[0].expected < low[0].expected, `${high[0].expected} vs ${low[0].expected}`);
+  });
+
+  it("reference attendance recovers the planted cancellation/no-show rate", () => {
+    // Cohort plants ~8% of transitions as cancelled/no_show (60/40 split) and
+    // ~5% of post-baseline sessions as held-but-unmeasured.
+    let missed = 0;
+    let appointments = 0;
+    let unmeasuredHeld = 0;
+    let held = 0;
+    for (const c of cases) {
+      assert.ok(c.attendance?.available, "every sim case has appointments");
+      missed += c.attendance!.cancelled + c.attendance!.noShow;
+      appointments += c.attendance!.appointments;
+      unmeasuredHeld += Math.round((c.attendance!.unmeasuredHeldRate ?? 0) * c.attendance!.held);
+      held += c.attendance!.held;
+    }
+    const missRate = missed / appointments;
+    assert.ok(missRate > 0.04 && missRate < 0.11, `pooled miss rate ${missRate}`);
+    const unmeasuredRate = unmeasuredHeld / held;
+    assert.ok(unmeasuredRate > 0.02 && unmeasuredRate < 0.08, `pooled unmeasured-held rate ${unmeasuredRate}`);
   });
 
   it("realized sudden-gain prevalence stays in the target range", () => {

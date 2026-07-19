@@ -13,6 +13,24 @@ import type {
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 // Type-only imports — erased at compile time, no server code in the bundle.
 import type { ClinicCourse, PredictionPayload, PredictionSummary } from "./prediction/service";
+import type { OutcomePoint, OutcomesSummary } from "./analytics/outcomes";
+
+/// Response of GET /api/outcomes (director-only treatment evaluation).
+export interface OutcomesPayload {
+  generatedAt: string;
+  reference: { n: number; includesSimulated: boolean };
+  target: {
+    instrumentId: string;
+    scaleKey: string;
+    rciCutoff: number | null;
+    clinicalCutoff: number;
+    higherIsBetter: boolean;
+    range: { min: number; max: number } | null;
+  };
+  points: OutcomePoint[];
+  summary: OutcomesSummary;
+  excluded: number;
+}
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -245,6 +263,9 @@ export const api = {
   /// Pooled clinic expected-course bands for the overview chart (staff-only).
   getClinicCourses: () =>
     fetch("/api/predictions/course").then((r) => handle<{ courses: ClinicCourse[] }>(r)),
+
+  /// Director-only treatment-outcome evaluation (JT classification etc.).
+  getOutcomes: () => fetch("/api/outcomes").then((r) => handle<OutcomesPayload>(r)),
 
   resetDemo: () => post("/api/seed").then((r) => handle<{ ok: boolean }>(r)),
 };

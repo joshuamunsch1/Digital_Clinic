@@ -19,7 +19,7 @@ export type BandSource = "clinic" | "nn" | "etr";
 
 /// Display abbreviations for the prediction-target instruments
 /// (PREDICTION_TARGETS in src/lib/prediction/reference.ts).
-const SERIES_LABELS: Record<string, string> = { phq4: "PHQ-4", pstb_adult: "PSTB", bdi_fs: "BDI-FS" };
+const SERIES_LABELS: Record<string, string> = { phq4: "PHQ-4", pstb_adult: "PSTB", bdi_fs: "BDI-FS", sbkj_child: "SBKJ" };
 
 /// Germanized display names for the dropout model's top factors.
 const FEATURE_KEYS: Record<string, string> = {
@@ -32,6 +32,9 @@ const FEATURE_KEYS: Record<string, string> = {
   sex_male: "featSexMale",
   early_response: "featEarlyResponse",
   early_deterioration: "featEarlyDeterioration",
+  cancellation_rate: "featCancellationRate",
+  no_show_rate: "featNoShowRate",
+  unmeasured_held_rate: "featUnmeasuredRate",
 };
 
 export function EarlyChangeBadge({ value, compact }: { value: EarlyChange | null; compact?: boolean }) {
@@ -149,6 +152,29 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
             ))}
           </div>
         ))}
+        {/* Alliance-rupture signal (Batch 13) — amber like the NOT flag, but
+            its own line: relationship signal, not symptom course. Silent when
+            no ruptures (criterion-less patients never reach here). */}
+        {prediction.alliance && prediction.alliance.signal.ruptures.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-semibold" style={{ color: C.ink, minWidth: 110 }}>
+              {SERIES_LABELS[prediction.alliance.instrumentId] ?? prediction.alliance.instrumentId} · {prediction.alliance.scaleKey}
+            </span>
+            <span className="font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
+              ◇ {t("allianceSignal")}
+            </span>
+            {prediction.alliance.signal.ruptures.map((r) => (
+              <span key={`${r.fromSession}-${r.toSession}`} style={{ color: C.amber }}>
+                {t("allianceDropAt", { from: r.fromSession, to: r.toSession })}
+              </span>
+            ))}
+            <span style={{ color: C.muted }}>
+              {prediction.alliance.signal.criterion === "rci"
+                ? t("allianceCriterionRci")
+                : t("allianceCriterionEmpirical", { n: prediction.alliance.signal.referenceN ?? 0 })}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">

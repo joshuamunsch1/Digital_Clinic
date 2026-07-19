@@ -31,6 +31,8 @@ const refCase = (code: string, f: Partial<IntakeFeatures>, series: number[]): Re
   features: features(f),
   terminationReason: "completed",
   sessionCount: series.length - 1,
+  treatmentEndAt: null,
+  attendance: null,
   series: { [KEY]: series.map((value, session) => ({ session, value })) },
 });
 

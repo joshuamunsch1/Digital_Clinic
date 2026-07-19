@@ -270,6 +270,50 @@ lost the big "Therapiefortschritt (letzte Sitzung)" number/arrow (i18n key
 measurement delta next to the trend glyph (`MiniTrend` gained a `delta` prop —
 delta color = glyph color, muted when stable).
 
+**Batch 13 (2026-07-18)**: **feedback-informed therapy tools** — five analytics/
+viz features, NO schema changes. ① **Attendance & adherence**
+(`src/lib/analytics/attendance.ts` — the first consumer of the SessionLog
+ledger, §4.5 TODO): `attendanceFeatures` dedupes the two ledger conventions
+(live: held logs may duplicate measured sessions; sim: held rows only for
+unmeasured, no sessionNumber); 3 rate columns feed the dropout model
+(model-local in `dropout-risk.ts`, `encodeFeatures` untouched;
+`predictDropoutRisk` gained an `attendance` param); `adherenceStats`
+(Rücklauf = completed/(completed+no_response) — staff cancels/errors excluded)
+in SessionMonitoringPanel; `AttendanceStrip` chips under every-session charts
+(deliberately NOT in-axis — misses have no sessionNumber). ② **Alliance
+monitoring** (`alliance.ts`): rupture = consecutive-session Therapiebeziehung
+drop ≥ threshold; criterion hierarchy RCI → empirical |p05| of pooled reference
+deltas (minN 30, tail prob [clinician-confirm]) → silent; NO raw-constant
+fallback. `ALLIANCE_SERIES` (pstb_adult + sbkj_child) ride the reference lean
+load free; `ReferenceData.allianceDeltas`; `PredictionPayload.alliance`; amber
+OPEN diamond via `ChartPrediction.ruptures`/`ruptureScaleKey` — gating separate
+from `overlay` (different scale keys, never co-render); ◇ Beziehungssignal line
+in PredictionPanel. ③ **Item heatmap + Prozessprofil**
+(`src/components/heatmap.tsx` HeatGrid — CSS grid, sequential single-hue ramp
+light→dark=worse (CVD-safe), 24-occasion cap; `item-display.ts` reuses
+scoring's now-exported `itemNumeric` so colors can't disagree with scores;
+reverse rows marked, raw value stays cell text): InstrumentCard grew a
+`Tabelle | Items | Prozessprofil` toggle for the SECONDARY block only — the
+TrajectoryChart stays always-mounted (visible-scale state + overlays). ④
+**Caseload cockpit** (`Cockpit.tsx` + pure `analytics/cockpit.ts`): traffic
+lights red(activeAlerts) > amber(NOT ∨ early_deterioration [triage policy]) >
+green > grey, latest PHQ-4 + Δ, dropout mini-gauge, days-since-measurement,
+overdue count — ALL client-side from the clinic payload + existing summaries
+endpoint (NOT extended); replaces the In-Therapie PatientRow list for clinical
+roles (admin keeps plain rows; assigned/unassigned sections unchanged). ⑤
+**Outcomes dashboard** (`outcomes.ts`, director-only `/api/outcomes` off the
+cached reference, full-window `OutcomesView`, AppShell view `outcomes`):
+Jacobson-Truax (strict >, matching rci.ts; `PRIMARY_CLINICAL_CUTOFF = 2.5` =
+PHQ-4 band boundary, NOT derived criterion c [clinician-confirm]; cutoff-null
+collapses recovered→improved), pre/post scatter with numeric axes (required for
+`ReferenceLine segment`), category bars, uncontrolled baseline-SD d (sign fixed
+so + = improvement), termination mix/year, dose–response. `ReferenceCase` gained
+`attendance` + `treatmentEndAt`. Sim: `with-logs` active (Karin Lang) has a
+planted PSTB dip `pstbSessions` override (S2→S3 rupture, transient so NOT a
+sudden loss; noise drawn unconditionally to keep the RNG stream stable). All
+surfaces verified to degrade honestly after `sim:purge` (alliance silent,
+outcomes = 4 real points, dropout unavailable). 156 tests.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

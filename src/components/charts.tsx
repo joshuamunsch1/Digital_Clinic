@@ -52,6 +52,13 @@ export interface ChartPrediction {
   failureBoundary?: { session: number; value: number }[];
   etrPoints?: { session: number; expected: number }[];
   shifts: SuddenShift[];
+  /// Alliance-rupture markers (open amber diamonds at the drop's toSession).
+  /// Gated on `ruptureScaleKey` being the SINGLE visible scale — a condition
+  /// deliberately separate from the band/ETR gating on `scaleKey`: the two
+  /// scale keys differ (Therapiebeziehung vs. Therapiefortschritte), so the
+  /// marker families never co-render.
+  ruptures?: { toSession: number }[];
+  ruptureScaleKey?: string;
 }
 
 const ROLE_DASHES = ["", "6 3", "2 3", "8 2", "4 4"];
@@ -121,6 +128,14 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     prediction &&
     visibleScalesEarly.length === 1 &&
     visibleScalesEarly[0].key === prediction.scaleKey
+      ? prediction
+      : undefined;
+  // Alliance-rupture markers gate on THEIR scale being the single visible one.
+  const ruptureOverlay =
+    prediction?.ruptures?.length &&
+    prediction.ruptureScaleKey &&
+    visibleScalesEarly.length === 1 &&
+    visibleScalesEarly[0].key === prediction.ruptureScaleKey
       ? prediction
       : undefined;
 
@@ -197,6 +212,10 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
   // Sudden gain/loss diamonds by occasion label (drawn at the shift's toSession).
   const shiftAt = new Map<string, SuddenShift>();
   if (overlay) for (const s of overlay.shifts) shiftAt.set(s.toSession === 0 ? "B" : `S${s.toSession}`, s);
+  // Alliance-rupture occasions (open diamonds; disjoint from shiftAt — the two
+  // marker families live on different scales).
+  const ruptureAt = new Set<string>();
+  if (ruptureOverlay) for (const r of ruptureOverlay.ruptures ?? []) ruptureAt.add(r.toSession === 0 ? "B" : `S${r.toSession}`);
 
   // RCI markers: only when a single scale with rci parameters is displayed.
   const rciScale: ScaleDef | undefined =
@@ -217,6 +236,15 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       if (cx === undefined || cy === undefined || !payload) return <g key={`d${props.index}`} />;
       const v = payload[seriesKey];
       if (typeof v !== "number") return <g key={`d${props.index}`} />;
+      // Alliance rupture: open amber diamond (the alliance scale's own marker).
+      if (typeof payload.label === "string" && ruptureAt.has(payload.label)) {
+        const d = 6.5;
+        return (
+          <polygon key={`d${props.index}`}
+            points={`${cx},${cy - d} ${cx + d},${cy} ${cx},${cy + d} ${cx - d},${cy}`}
+            fill="#fff" stroke={C.amber} strokeWidth={2} />
+        );
+      }
       // Sudden gain/loss diamond takes precedence over the RCI triangle.
       const shift = typeof payload.label === "string" ? shiftAt.get(payload.label) : undefined;
       if (shift) {
@@ -296,7 +324,10 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
               roles.map((role, ri) => {
                 const seriesKey = `${s.key}|${role}`;
                 const color = colorOf(s.key);
-                const withMarkers = (rciScale && s.key === rciScale.key) || (overlay && s.key === overlay.scaleKey);
+                const withMarkers =
+                  (rciScale && s.key === rciScale.key) ||
+                  (overlay && s.key === overlay.scaleKey) ||
+                  (ruptureOverlay && s.key === ruptureOverlay.ruptureScaleKey);
                 return (
                   <Line
                     key={seriesKey}
@@ -324,6 +355,9 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
             </span>
           )}
         </p>
+      )}
+      {ruptureOverlay && (
+        <p className="text-xs mt-1" style={{ color: C.amber }}>◇ = {t("allianceLegend")}</p>
       )}
       {rciScale && <p className="text-xs mt-1" style={{ color: C.muted }}>{t("rciLegend")}</p>}
       {multiRole && (

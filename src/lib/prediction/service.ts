@@ -4,6 +4,8 @@
 // data. Server-only; the routes above this never expose it to patient
 // sessions, and neighbor summaries carry research CODES only — never names.
 import type { PrismaClient } from "@prisma/client";
+import { detectAllianceRuptures, type AllianceSignal } from "../analytics/alliance";
+import { attendanceFeatures } from "../analytics/attendance";
 import { predictDropoutRisk } from "../analytics/dropout-risk";
 import { classifyEarlyChange } from "../analytics/early-change";
 import { predictEtr } from "../analytics/etr";
@@ -28,6 +30,7 @@ import {
 import { PATIENT_INCLUDE, patientFromRow } from "../serialize";
 import type { Patient } from "../types";
 import {
+  ALLIANCE_SERIES,
   PREDICTION_TARGETS,
   PRIMARY_KEY,
   baselineOf,
@@ -79,6 +82,9 @@ export interface PredictionPayload {
   generatedAt: string;
   reference: { n: number; includesSimulated: boolean };
   series: SeriesPrediction[];
+  /// Rupture signal on the patient's session-axis alliance scale (PSTB first,
+  /// else SBKJ) — null when no alliance data or no valid criterion.
+  alliance: { instrumentId: string; scaleKey: string; signal: AllianceSignal } | null;
   dropoutRisk: {
     available: boolean;
     probability?: number;
@@ -213,12 +219,31 @@ export async function buildPrediction(prisma: PrismaClient, patientId: string): 
     if (s) series.push(s);
   }
 
+  // Alliance rupture signal: first alliance series the patient has ≥2 points
+  // on (PSTB before SBKJ); omitted entirely when no criterion is available.
+  let alliance: PredictionPayload["alliance"] = null;
+  for (const s of ALLIANCE_SERIES) {
+    const key = seriesKeyOf(s.instrumentId, s.scaleKey);
+    const scale = ref.scaleParamsByKey.get(key);
+    if (!scale) continue;
+    const allianceSeries = sessionSeriesOf(patient.responses, s.instrumentId, s.scaleKey);
+    if (allianceSeries.length < 2) continue;
+    const signal = detectAllianceRuptures(allianceSeries, scale, ref.allianceDeltas.get(key) ?? []);
+    if (signal.criterion === null) continue;
+    alliance = { instrumentId: s.instrumentId, scaleKey: s.scaleKey, signal };
+    break;
+  }
+
   const primaryScale = ref.scaleParamsByKey.get(PRIMARY_KEY);
   const early = primaryScale ? classifyEarlyChange(primarySeries, primaryScale) : null;
+  const attendance = attendanceFeatures(
+    patient.sessionLogs,
+    primarySeries.map((p) => p.session),
+  );
   const dropoutRisk: PredictionPayload["dropoutRisk"] = ref.dropoutModel
     ? {
         available: true,
-        ...predictDropoutRisk(ref.dropoutModel, features, early),
+        ...predictDropoutRisk(ref.dropoutModel, features, early, attendance),
         trainN: ref.dropoutModel.n,
         baseRate: ref.dropoutModel.baseRate,
         trainAuc: ref.dropoutModel.trainAuc,
@@ -230,6 +255,7 @@ export async function buildPrediction(prisma: PrismaClient, patientId: string): 
     generatedAt: new Date().toISOString(),
     reference: { n: ref.cases.length, includesSimulated: ref.includesSimulated },
     series,
+    alliance,
     dropoutRisk,
   };
 }
@@ -258,6 +284,7 @@ export async function buildPredictionSummaries(
       demographics: true,
       disorderCategory: true,
       caseCharacteristics: true,
+      sessionLogs: { select: { type: true, occurredAt: true, sessionNumber: true } },
       responses: {
         where: { instrumentId: PREDICTION_TARGETS[0].instrumentId, sessionNumber: { not: null } },
         select: {
@@ -302,7 +329,11 @@ export async function buildPredictionSummaries(
         caseCharacteristics: parseJson(r.caseCharacteristics, {}),
         baselineSeverity: baselineOf(series),
       });
-      dropoutRisk = predictDropoutRisk(ref.dropoutModel, features, early).probability;
+      const attendance = attendanceFeatures(
+        r.sessionLogs,
+        series.map((p) => p.session),
+      );
+      dropoutRisk = predictDropoutRisk(ref.dropoutModel, features, early, attendance).probability;
     }
     out[r.id] = { earlyChange: early, onTrack: onTrack.status, dropoutRisk };
   }

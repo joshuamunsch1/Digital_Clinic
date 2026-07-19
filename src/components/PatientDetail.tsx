@@ -1,17 +1,19 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { C } from "@/lib/theme";
-import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trPopulation, trProblemDuration, trRaterRole, trSource, trTerminationReason } from "@/lib/i18n";
+import { tr, T, trCategory, trCadence, trDemoValue, trEmployment, trPopulation, trProblemDuration, trRaterRole, trSessionLogType, trSource, trTerminationReason } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { api } from "@/lib/api-client";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
-import type { Patient, ResponseRecord, SessionUser, Therapist } from "@/lib/types";
+import { attendanceFeatures } from "@/lib/analytics/attendance";
+import type { Patient, ResponseRecord, SessionLogRecord, SessionUser, Therapist } from "@/lib/types";
 import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
 import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, inputStyle } from "./ui";
 import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
+import { ItemHeatmap, ProcessProfile } from "./heatmap";
 import { GoalLevelChip } from "./GoalLadder";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { InstrumentForm } from "./InstrumentForm";
@@ -81,7 +83,48 @@ function ResponseRow({ instrument, response, therapists }: { instrument: Instrum
   );
 }
 
-function InstrumentCard({ instrument, responses, therapists, chartPrediction, selector }: {
+/// Cancelled/no-show chips + attendance rates under an every-session
+/// trajectory chart. Deliberately NOT in-axis markers: missed appointments
+/// carry no sessionNumber, and interpolating a chart position would fabricate
+/// one — a dated strip is the honest rendering.
+function AttendanceStrip({ responses, sessionLogs }: {
+  responses: ResponseRecord[];
+  sessionLogs: SessionLogRecord[];
+}) {
+  const t = useT();
+  const { lang } = useLang();
+  const misses = sessionLogs
+    .filter((l) => l.type === "cancelled" || l.type === "no_show")
+    .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+  if (!misses.length) return null;
+  const measured = Array.from(
+    new Set(responses.map((r) => r.sessionNumber).filter((n): n is number => n !== null)),
+  );
+  const a = attendanceFeatures(sessionLogs, measured);
+  const missRate = (a.cancellationRate ?? 0) + (a.noShowRate ?? 0);
+  return (
+    <div className="rounded-lg px-3 py-2 mb-3" style={{ background: C.surfaceAlt }}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-bold" style={{ color: C.muted }}>{t("attendanceTitle")}</span>
+        <span className="text-xs" style={{ color: C.muted }}>
+          {t("attendanceRates", { cancelled: a.cancelled, noShow: a.noShow, pct: `${Math.round(missRate * 100)} %` })}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+        {misses.slice(-12).map((l) => (
+          <span key={l.id} className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+            style={l.type === "cancelled"
+              ? { background: C.amberSoft, color: C.amber }
+              : { background: C.surface, color: C.danger, border: `1px solid ${C.danger}` }}>
+            {trSessionLogType(l.type, lang)} {fmtDate(l.occurredAt)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InstrumentCard({ instrument, responses, therapists, chartPrediction, selector, sessionLogs }: {
   instrument: InstrumentDef;
   responses: ResponseRecord[];
   therapists: Therapist[];
@@ -89,6 +132,8 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
   /// Instrument switcher of the single questionnaire card (rendered above the
   /// heading); absent in contexts that show one fixed instrument.
   selector?: React.ReactNode;
+  /// Session ledger for the attendance strip (every-session instruments only).
+  sessionLogs?: SessionLogRecord[];
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -96,6 +141,20 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
   const occasions = new Set(responses.map((r) => occasionOf(instrument, r).key)).size;
   const scoreable = isScoreable(instrument);
   const list = showAll ? [...responses].reverse() : [];
+  // Secondary-block sub-view (Batch 13): Tabelle | Items | Prozessprofil. The
+  // TrajectoryChart above stays ALWAYS mounted — unmounting it would reset its
+  // lazily-initialized visible-scale state and drop the prediction overlays.
+  // key={instrument.id} on this card resets the mode per instrument.
+  const hasItemAnswers = instrument.items.length > 0 && responses.some((r) => Object.keys(r.rawAnswers).length > 0);
+  const hasProcessProfile = scoreable && instrument.cadenceType === "every_session" && instrument.scales.length >= 3;
+  const [subView, setSubView] = useState<"table" | "items" | "process">("table");
+  const subViews: { key: typeof subView; label: string; show: boolean }[] = [
+    { key: "table", label: t("tableTab"), show: scoreable },
+    { key: "items", label: t("itemsTab"), show: hasItemAnswers },
+    { key: "process", label: t("processTab"), show: hasProcessProfile },
+  ];
+  const shownViews = subViews.filter((v) => v.show);
+  const activeView = shownViews.some((v) => v.key === subView) ? subView : (shownViews[0]?.key ?? "table");
   return (
     <Card className="p-5 mb-4">
       {selector && (
@@ -115,7 +174,28 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
       {scoreable && occasions >= 2 && (
         <div className="mb-3"><TrajectoryChart instrument={instrument} responses={responses} prediction={chartPrediction} /></div>
       )}
-      {scoreable && <div className="mb-3"><ScoreTable instrument={instrument} responses={responses} /></div>}
+      {instrument.cadenceType === "every_session" && sessionLogs && (
+        <AttendanceStrip responses={responses} sessionLogs={sessionLogs} />
+      )}
+      {shownViews.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          {shownViews.map((v) => (
+            <button key={v.key} type="button" onClick={() => setSubView(v.key)} aria-pressed={activeView === v.key}
+              className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={{
+                background: activeView === v.key ? C.spruce : C.surfaceAlt,
+                color: activeView === v.key ? "#fff" : C.muted,
+                border: `1px solid ${activeView === v.key ? C.spruce : C.line}`,
+                cursor: "pointer",
+              }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {activeView === "table" && scoreable && <div className="mb-3"><ScoreTable instrument={instrument} responses={responses} /></div>}
+      {activeView === "items" && <div className="mb-3"><ItemHeatmap instrument={instrument} responses={responses} /></div>}
+      {activeView === "process" && <div className="mb-3"><ProcessProfile instrument={instrument} responses={responses} /></div>}
       {!scoreable && (
         <p className="text-xs mb-3" style={{ color: C.amber }}>{t("notScored", { status: instrument.definitionStatus })}</p>
       )}
@@ -230,8 +310,19 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   /// the panel's source toggle.
   const chartPredictionFor = (instrumentId: string): ChartPrediction | undefined => {
     if (!prediction) return undefined;
+    // Alliance-rupture markers ride along whenever this instrument carries the
+    // patient's monitored alliance scale (PSTB, or SBKJ for children).
+    const alliance =
+      prediction.alliance && prediction.alliance.instrumentId === instrumentId && prediction.alliance.signal.ruptures.length
+        ? {
+            ruptures: prediction.alliance.signal.ruptures.map((r) => ({ toSession: r.toSession })),
+            ruptureScaleKey: prediction.alliance.scaleKey,
+          }
+        : undefined;
     const s = prediction.series.find((x) => x.instrumentId === instrumentId);
-    if (!s) return undefined;
+    // Not a prediction target (SBKJ): rupture markers can still apply — the
+    // empty scaleKey never matches a visible scale, so no band ever activates.
+    if (!s) return alliance ? { scaleKey: "", band: null, shifts: [], ...alliance } : undefined;
     const simulated = prediction.reference.includesSimulated;
     // NN bands are drawn blue so switching the source is visible at a glance.
     const band =
@@ -265,6 +356,7 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
             : undefined,
       etrPoints: bandSource === "etr" && s.etr.available ? s.etr.points : undefined,
       shifts: s.suddenShifts,
+      ...alliance,
     };
   };
 
@@ -634,6 +726,7 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
             responses={selected.responses}
             therapists={therapists}
             chartPrediction={chartPredictionFor(selected.instrument.id)}
+            sessionLogs={patient.sessionLogs}
             selector={
               <select style={{ ...inputStyle, width: "auto", padding: "6px 10px", fontSize: 13, maxWidth: "100%" }}
                 aria-label={t("instrumentLabel")} value={selected.instrument.id} onChange={(e) => setSelInstId(e.target.value)}>

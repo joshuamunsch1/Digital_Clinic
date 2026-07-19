@@ -654,6 +654,116 @@ export const UI = {
     "{sessions} Sitzungen · {open} Anfragen offen",
     "{sessions} séances · {open} demandes en attente",
     "{sessions} sessions · {open} requests open"),
+  // Questionnaire-adherence stats (Batch 13, src/lib/analytics/attendance.ts).
+  adherenceReturn: L("Rücklauf", "Taux de retour", "Return rate"),
+  adherenceLatency: L("Median {d} T. bis Antwort", "Médiane {d} j. avant réponse", "Median {d} d. to response"),
+  adherenceReminders: L("Ø {n} Erinnerungen", "Ø {n} rappels", "Ø {n} reminders"),
+  adherenceOverdue: L("{n} überfällig", "{n} en retard", "{n} overdue"),
+  // Attendance strip under the every-session trajectory chart.
+  attendanceTitle: L("Termintreue", "Assiduité", "Attendance"),
+  attendanceRates: L(
+    "{cancelled} Absagen · {noShow} Nichterscheinen · Quote {pct}",
+    "{cancelled} annulations · {noShow} absences · taux {pct}",
+    "{cancelled} cancellations · {noShow} no-shows · rate {pct}"),
+  // Dropout-model attendance factors (PredictionPanel top-factor display).
+  featCancellationRate: L("Absagequote", "Taux d'annulation", "Cancellation rate"),
+  featNoShowRate: L("Nichterscheinen-Quote", "Taux d'absence", "No-show rate"),
+  featUnmeasuredRate: L("Sitzungen ohne Messung", "Séances sans mesure", "Unmeasured sessions"),
+  // Alliance-rupture signal (Batch 13, src/lib/analytics/alliance.ts).
+  allianceSignal: L("Beziehungssignal", "Signal d'alliance", "Alliance signal"),
+  allianceDropAt: L("Abfall S{from}→S{to}", "Chute S{from}→S{to}", "Drop S{from}→S{to}"),
+  allianceCriterionRci: L("(RCI-Kriterium)", "(critère RCI)", "(RCI criterion)"),
+  allianceCriterionEmpirical: L(
+    "(empirisches Kriterium, n={n} Referenzübergänge)",
+    "(critère empirique, n={n} transitions de référence)",
+    "(empirical criterion, n={n} reference transitions)"),
+  allianceLegend: L(
+    "Beziehungssignal (Abfall der Therapiebeziehung)",
+    "Signal d'alliance (chute de la relation thérapeutique)",
+    "Alliance signal (drop in therapeutic relationship)"),
+  // Instrument-card sub-views (Batch 13: item heatmap + process profile).
+  tableTab: L("Tabelle", "Tableau", "Table"),
+  itemsTab: L("Items", "Items", "Items"),
+  processTab: L("Prozessprofil", "Profil de processus", "Process profile"),
+  itemHeatmapNote: L(
+    "Farbe: dunkler = klinisch ungünstiger (umgepolte Items in Skalenrichtung umkodiert). Zellwert = gespeicherte Rohantwort.",
+    "Couleur : plus foncé = cliniquement moins favorable (items inversés recodés dans le sens de l'échelle). Valeur = réponse brute enregistrée.",
+    "Color: darker = clinically less favorable (reverse-keyed items recoded into scale direction). Cell value = stored raw answer."),
+  processHeatNote: L(
+    "Farbe: dunkler = klinisch ungünstiger (Skalenwert im Wertebereich normiert, Verbesserungsrichtung berücksichtigt).",
+    "Couleur : plus foncé = cliniquement moins favorable (valeur normalisée sur la plage de l'échelle, sens d'amélioration pris en compte).",
+    "Color: darker = clinically less favorable (scale value normalized to its range, improvement direction applied)."),
+  earlierOccasionsNote: L(
+    "… {n} frühere Erhebungen ausgeblendet",
+    "… {n} mesures antérieures masquées",
+    "… {n} earlier occasions hidden"),
+  // Caseload cockpit (Batch 13, src/components/Cockpit.tsx).
+  colLight: L("Ampel", "Feu", "Light"),
+  colTherapist: L("Therapeut:in", "Thérapeute", "Therapist"),
+  colPrimary: L("PHQ-4 (Δ)", "PHQ-4 (Δ)", "PHQ-4 (Δ)"),
+  colSignals: L("Signale", "Signaux", "Signals"),
+  colDropout: L("Dropout-Risiko", "Risque d'abandon", "Dropout risk"),
+  colLastMeasured: L("Letzte Messung", "Dernière mesure", "Last measured"),
+  colOverdueShort: L("Überfällig", "En retard", "Overdue"),
+  daysAgoShort: L("vor {n} T.", "il y a {n} j.", "{n} d ago"),
+  cockpitLegend: L(
+    "Ampel: Rot = klinischer Hinweis · Gelb = nicht auf Kurs oder frühe Verschlechterung · Grün = auf Kurs · Grau = keine ausreichende Datenlage",
+    "Feu : rouge = alerte clinique · jaune = hors trajectoire ou détérioration précoce · vert = sur la bonne voie · gris = données insuffisantes",
+    "Light: red = clinical alert · amber = not on track or early deterioration · green = on track · grey = insufficient data"),
+  // Outcomes dashboard (Batch 13, src/components/OutcomesView.tsx).
+  openOutcomes: L("Behandlungsergebnisse", "Résultats des traitements", "Treatment outcomes"),
+  outcomesTitle: L("Behandlungsergebnisse", "Résultats des traitements", "Treatment outcomes"),
+  outcomesSub: L(
+    "Auswertung abgeschlossener Behandlungen (PHQ-4-Gesamtwert): klinisch signifikante Veränderung nach Jacobson & Truax, Effektstärke, Abschlussarten und Dosis-Wirkung.",
+    "Évaluation des traitements terminés (score total PHQ-4) : changement cliniquement significatif selon Jacobson & Truax, taille d'effet, types de fin et dose-effet.",
+    "Evaluation of concluded treatments (PHQ-4 total): clinically significant change per Jacobson & Truax, effect size, termination mix and dose–response."),
+  prePostTitle: L("Prä/Post-Vergleich (Jacobson-Truax)", "Comparaison pré/post (Jacobson-Truax)", "Pre/post comparison (Jacobson-Truax)"),
+  prePostSub: L(
+    "{n} Behandlungen mit ≥2 Messungen · {excluded} ausgeschlossen (zu wenige Messungen)",
+    "{n} traitements avec ≥2 mesures · {excluded} exclus (mesures insuffisantes)",
+    "{n} treatments with ≥2 measurements · {excluded} excluded (too few measurements)"),
+  prePostXAxis: L("Prä (erste Messung)", "Pré (première mesure)", "Pre (first measurement)"),
+  prePostYAxis: L("Post (letzte Messung)", "Post (dernière mesure)", "Post (last measurement)"),
+  jtRecovered: L("Remittiert", "Rémission", "Recovered"),
+  jtImproved: L("Verbessert", "Amélioré", "Improved"),
+  jtUnchanged: L("Unverändert", "Inchangé", "Unchanged"),
+  jtDeteriorated: L("Verschlechtert", "Détérioré", "Deteriorated"),
+  jtUnclassifiable: L(
+    "{n} nicht klassifizierbar (keine RCI-Parameter)",
+    "{n} non classifiables (pas de paramètres RCI)",
+    "{n} unclassifiable (no RCI parameters)"),
+  jtDistributionTitle: L("Verteilung der Veränderungskategorien", "Répartition des catégories de changement", "Change-category distribution"),
+  identityLegend: L("keine Veränderung", "aucun changement", "no change"),
+  rciBandLegend: L("RCI-Korridor", "corridor RCI", "RCI corridor"),
+  cutoffLegend: L("klinischer Cutoff ({c})", "seuil clinique ({c})", "clinical cutoff ({c})"),
+  cutoffConfirmNote: L(
+    "Cutoff = PHQ-4-Normbandgrenze unauffällig|mild, kein hergeleitetes JT-Kriterium c — klinisch zu bestätigen. RCI-SD ist angenähert (Löwe-basiert).",
+    "Seuil = limite de bande normative PHQ-4, pas un critère JT c dérivé — à confirmer cliniquement. L'écart-type RCI est approximé.",
+    "Cutoff = PHQ-4 norm-band boundary, not a derived JT criterion c — pending clinical confirmation. RCI SD is approximated."),
+  effectSizeTitle: L("Prä-Post-Effektstärke", "Taille d'effet pré-post", "Pre–post effect size"),
+  effectSizeLabel: L("d (Baseline-SD)", "d (ET baseline)", "d (baseline SD)"),
+  effectSizePre: L("Prä (Mittel)", "Pré (moyenne)", "Pre (mean)"),
+  effectSizePost: L("Post (Mittel)", "Post (moyenne)", "Post (mean)"),
+  effectSizeCaveat: L(
+    "Unkontrollierte Prä-Post-Effektstärke über n={n} Behandlungen — kein Vergleich mit unbehandeltem Verlauf.",
+    "Taille d'effet pré-post non contrôlée sur n={n} traitements — sans comparaison avec une évolution non traitée.",
+    "Uncontrolled pre–post effect size over n={n} treatments — no comparison with an untreated course."),
+  effectSizeUnavailable: L(
+    "Nicht berechenbar (zu wenige Fälle oder keine Streuung der Ausgangswerte).",
+    "Non calculable (trop peu de cas ou aucune dispersion des valeurs initiales).",
+    "Not computable (too few cases or no baseline spread)."),
+  terminationByYearTitle: L("Abschlussarten nach Jahr", "Types de fin par année", "Termination mix by year"),
+  doseResponseTitle: L("Dosis-Wirkung", "Dose-effet", "Dose–response"),
+  doseResponseSub: L(
+    "Sitzungszahl vs. Prä-Post-Veränderung; negative Werte = Verbesserung (PHQ-4).",
+    "Nombre de séances vs changement pré-post ; valeurs négatives = amélioration (PHQ-4).",
+    "Session count vs. pre–post change; negative values = improvement (PHQ-4)."),
+  doseResponseXAxis: L("Sitzungen", "Séances", "Sessions"),
+  doseResponseYAxis: L("Δ PHQ-4 (Post − Prä)", "Δ PHQ-4 (post − pré)", "Δ PHQ-4 (post − pre)"),
+  outcomesRciNote: L(
+    "RCI-Schwelle: PHQ-4 (Reliabilität nach Löwe et al., SD angenähert — gegen Klinikdaten prüfen). Simulierte Fälle sind markiert und verlassen die Auswertung mit „npm run sim:purge“.",
+    "Seuil RCI : PHQ-4 (fiabilité selon Löwe et al., écart-type approximé). Les cas simulés sont marqués et quittent l'évaluation avec « npm run sim:purge ».",
+    "RCI threshold: PHQ-4 (Löwe et al. reliability, SD approximated — verify against clinic data). Simulated cases are badged and leave the evaluation via \"npm run sim:purge\"."),
   sessionNumberLabel: L("Sitzungsnummer", "Numéro de séance", "Session number"),
   sessionNumberHint: L("automatisch vorgeschlagen — anpassbar", "suggéré automatiquement — modifiable", "suggested automatically — editable"),
   sendStepTitle: L("Fragebögen zur Sitzung {n} senden", "Envoyer les questionnaires de la séance {n}", "Send questionnaires for session {n}"),
