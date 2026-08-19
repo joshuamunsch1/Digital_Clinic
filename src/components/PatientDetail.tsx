@@ -605,15 +605,13 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
             ) : isArchived ? (
               <p className="text-sm" style={{ color: C.muted }}>—</p>
             ) : !patient.dips ? (
-              patient.status === "assessment" ? (
-                <p className="text-sm" style={{ color: C.muted }}>{t("diagnosisAfterIntake")}</p>
-              ) : (
-                // Gate: the DIPS interview is required before a diagnosis can be recorded.
-                <div>
-                  <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
-                  <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
-                </div>
-              )
+              // Gate: the DIPS interview is required before a diagnosis can be
+              // recorded. Startable from registration on — the demographics
+              // intake does not gate the interview.
+              <div>
+                <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
+                <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
+              </div>
             ) : (
               <div>
                 {proposal ? (
@@ -678,7 +676,7 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
           </div>
         </div>
         <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap" style={{ borderTop: `1px solid ${C.line}` }}>
-          {patient.dips && <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>}
+          {(patient.dips || !isArchived) && <GhostButton small onClick={() => onOpenDiagnosis(patient.id)}>{t("openDiagnosisView")}</GhostButton>}
           {!isArchived && <GhostButton small onClick={() => onEditIntake(patient.id)}>{t("editIntake")}</GhostButton>}
           {!(isArchived && patient.goals.length === 0) && (
             <GhostButton small onClick={() => onOpenGoals(patient.id)}>{t("openGoalsView")}</GhostButton>

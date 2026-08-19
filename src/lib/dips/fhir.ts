@@ -1,6 +1,7 @@
 import { tr } from "../i18n";
 import type { Lang } from "../i18n";
 import type { Demographics, DipsAnswers, ModuleAnswers } from "../types";
+import { inkIsEmpty, inkKey, inkToSvg, parseInk, toBase64 } from "../ink";
 import { gridRows, isVisible } from "./engine";
 import { MODULES } from "./schema";
 import type { Item } from "./types";
@@ -12,6 +13,7 @@ interface FhirAnswer {
   valueBoolean?: boolean;
   valueInteger?: number;
   valueString?: string;
+  valueAttachment?: { contentType: string; data: string };
 }
 interface FhirItem {
   linkId: string;
@@ -40,6 +42,14 @@ interface FhirRecord {
   completedAt: string;
 }
 
+// Handwritten notes ride along as FHIR attachments (SVG rendered from the
+// validated stroke data) so the relayed record keeps them as written.
+function inkAnswer(m: ModuleAnswers, textKey: string): FhirAnswer[] {
+  const ink = parseInk(m[inkKey(textKey)]);
+  if (!ink || inkIsEmpty(ink)) return [];
+  return [{ valueAttachment: { contentType: "image/svg+xml", data: toBase64(inkToSvg(ink)) } }];
+}
+
 function answersForItem(item: Item, m: ModuleAnswers): FhirAnswer[] {
   const v = m[item.id];
   switch (item.type) {
@@ -53,17 +63,21 @@ function answersForItem(item: Item, m: ModuleAnswers): FhirAnswer[] {
       return ans;
     }
     case "yesno_text": {
-      if (v == null) return [];
-      const ans: FhirAnswer[] = [{ valueBoolean: v === "yes" }];
+      const ans: FhirAnswer[] = v == null ? [] : [{ valueBoolean: v === "yes" }];
       const t = m[`${item.id}_text`];
       if (t) ans.push({ valueString: String(t) });
+      ans.push(...inkAnswer(m, `${item.id}_text`));
       return ans;
     }
     case "number_label":
       return v ? [{ valueInteger: Number(v) }] : [];
     case "date":
-    case "textarea":
       return v ? [{ valueString: String(v) }] : [];
+    case "textarea": {
+      const ans: FhirAnswer[] = v ? [{ valueString: String(v) }] : [];
+      ans.push(...inkAnswer(m, item.id));
+      return ans;
+    }
     case "monthyear_range": {
       const f = m[`${item.id}_from`];
       const t = m[`${item.id}_to`];

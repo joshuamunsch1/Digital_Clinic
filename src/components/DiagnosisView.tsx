@@ -126,7 +126,9 @@ export function DiagnosisView({ patient, therapists, instruments, onBack, onSave
         ) : !patient.dips ? (
           <div>
             <p className="text-sm mb-3" style={{ color: C.muted }}>{t("dipsRequired")}</p>
-            <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
+            {patient.status !== "archived" && (
+              <PrimaryButton small onClick={() => onStartDips(patient.id)}>{t("startDipsInterview")}</PrimaryButton>
+            )}
           </div>
         ) : (
           <div>
@@ -183,6 +185,10 @@ export function DiagnosisView({ patient, therapists, instruments, onBack, onSave
                 style={{ color: C.spruce, border: `1px solid ${C.line}`, textDecoration: "none" }}>
                 ⬇ {t("downloadDips")}
               </a>
+              {patient.status !== "archived" && (
+                // Redo: submitting replaces the previous record (intake_once).
+                <GhostButton small onClick={() => onStartDips(patient.id)}>{t("redoDips")}</GhostButton>
+              )}
               {patient.dips.submission && patient.dips.submission.status !== "sent" && (
                 <GhostButton small onClick={() => onResend(patient.id)}>{tr(T.retry, lang)}</GhostButton>
               )}

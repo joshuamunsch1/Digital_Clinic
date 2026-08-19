@@ -81,7 +81,10 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
         </Card>
       )}
 
-      {patient.status === "assessment" && (
+      {/* Demographics to-do is keyed on submission, not status — the DIPS or
+          even the diagnosis can move the patient past "assessment" before the
+          form is filled, and the task must stay visible until it is. */}
+      {!patient.assessment && patient.status !== "archived" && (
         <Card className="p-5 mb-4">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
@@ -123,7 +126,7 @@ export function PatientHome({ patient, therapist, instruments, onStartTask, just
         </Card>
       ))}
 
-      {patient.status === "interview" && (
+      {patient.status === "interview" && patient.assessment && requestedTasks.length === 0 && (
         <Card className="p-5 mb-4">
           <h3 className="lc-display text-xl" style={{ color: C.ink }}>{t("nothingTodo")}</h3>
           <p className="text-sm mt-1" style={{ color: C.muted }}>{t("nothingTodoDesc")}</p>

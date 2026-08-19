@@ -314,6 +314,45 @@ sudden loss; noise drawn unconditionally to keep the RNG stream stable). All
 surfaces verified to degrade honestly after `sim:purge` (alliance silent,
 outcomes = 4 real points, dropout unavailable). 156 tests.
 
+**Batch 14 (2026-07-19)**: **DIPS un-gated from the demographics intake.** The
+therapist can start the DIPS from the dossier for ANY non-archived patient
+without one, from registration on (the `status === "assessment"` 409 in
+`POST .../dips` is gone; Batch 9's "existing DIPS overrides the
+assessment-stage gate" is superseded — the gate no longer exists). Completing
+a DIPS at `"assessment"` advances the patient to `"interview"`; the diagnose
+PATCH (`dips_required`, → therapy) is unchanged. The portal's demographics
+to-do is keyed on the missing `patient.assessment` (= `assessmentDate`), NOT
+on status, so it survives DIPS/diagnosis leapfrogging; the assessment route
+only advances `assessment → interview` (never downgrades) and 400s on
+archived. "Diagnostik öffnen" shows pre-DIPS on active dossiers (DiagnosisView
+already handled the no-DIPS case; its start button now hides for archived).
+**DIPS redo**: "DIPS wiederholen" GhostButton in DiagnosisView's interview-
+record header → same `dips-interview` view with a replace-warning intro
+(`dipsInterviewRedoIntro`); submit replaces via the existing intake_once
+`deleteMany`. Seeds: p8 moved to `"interview"` (a DIPS at `"assessment"` is
+now an impossible state), `seed-clinic` falls back to the DIPS date for
+`assessmentDate` when a patient has demographics but no sessions (p6/p7 —
+otherwise their portals would newly show the intake to-do). i18n:
+`diagnosisAfterIntake` removed; `redoDips` + `dipsInterviewRedoIntro` added.
+Same-day follow-up: **handwritten ink notes on DIPS free-text fields**
+(`yesno_text` "Beschreiben" follow-ups + `textarea` items). Handwriting is
+captured as strokes (pen/finger/mouse PointerEvents incl. pressure) and kept
+AS WRITTEN — never converted to text; tablet-OS handwriting-to-text (Scribble
+/Windows Ink) still targets the text field itself, and both can coexist on
+one field. `src/lib/ink.ts` (pure: `parseInk` validates every number so SVG
+rendering can trust tampered rawAnswers; quadratic-midpoint `strokePath`;
+`inkToSvg`+`toBase64` for FHIR) + `src/components/InkPad.tsx` (InkControl/
+editor/InkPreview; strokes live in NOTE-space coordinates so a note re-renders
+undistorted at any viewport width; canvas scales; `touch-action: none`;
+`setPointerCapture` wrapped in try/catch). Storage: serialized JSON string
+under sibling key `<textKey>_ink` in the ordinary answer map — NO schema/type
+change (`ModuleAnswers` values are strings; `createResponse` stores rawAnswers
+verbatim). Display: DipsSummary coded-responses toggle (same visibility as
+typed text — notes on non-entered modules live only in rawAnswers/export);
+FHIR `valueAttachment` `image/svg+xml` (interface gained the field). i18n:
+`T.ink*` keys (interview-language dict, not UI dict). 12 tests in
+`tests/ink.test.ts` (168 total).
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

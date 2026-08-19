@@ -8,7 +8,9 @@ import { DIPS_INSTRUMENT_ID, type Demographics } from "@/lib/types";
 
 // Submit a completed intake: demographics only (the DIPS interview is
 // therapist-administered since the intake split — see POST .../dips).
-// Advances status assessment → interview.
+// Advances status assessment → interview; never downgrades a patient the
+// DIPS/diagnosis has already moved past that stage (the interview does not
+// wait for demographics).
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -20,10 +22,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { demo } = (await req.json()) as { demo: Demographics };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (patient.status === "archived")
+    return NextResponse.json({ error: "archived" }, { status: 400 });
 
   await prisma.patient.update({
     where: { id: params.id },
-    data: { demographics: JSON.stringify(demo), assessmentDate: new Date(), status: "interview" },
+    data: {
+      demographics: JSON.stringify(demo),
+      assessmentDate: new Date(),
+      ...(patient.status === "assessment" ? { status: "interview" } : {}),
+    },
   });
 
   const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Volksklinik",
+  title: "Fribourg Clinic",
   description: "Therapy progress platform (prototype)",
 };
 

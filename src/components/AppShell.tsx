@@ -250,7 +250,7 @@ function Shell() {
     <div className="min-h-screen" style={{ background: C.bg, color: C.ink }}>
       <header style={{ background: C.surface, borderBottom: `1px solid ${C.line}` }}>
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2"><LeafMark size={26} /><span className="lc-display text-lg" style={{ color: C.ink }}>Volksklinik</span></div>
+          <div className="flex items-center gap-2"><LeafMark size={26} /><span className="lc-display text-lg" style={{ color: C.ink }}>Fribourg Clinic</span></div>
           <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ background: C.spruceSoft, color: C.spruce }}>{roleLabel}</span>
           <span className="text-sm" style={{ color: C.muted }}>{user.name}</span>
           <div className="ml-auto flex items-center gap-2">
@@ -309,7 +309,7 @@ function Shell() {
           return dipsPatient ? (
             <DipsForm
               heading={t("dipsInterviewTitle", { name: dipsPatient.name })}
-              intro={t("dipsInterviewIntro")}
+              intro={dipsPatient.dips ? t("dipsInterviewRedoIntro") : t("dipsInterviewIntro")}
               submitLabel={t("dipsSubmit")}
               busy={busy}
               onSubmit={(dips) => void submitDips(dipsPatient.id, dips)}

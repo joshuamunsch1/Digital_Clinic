@@ -301,7 +301,14 @@ export async function seedClinic(prisma: PrismaClient) {
         caseCharacteristics: JSON.stringify(p.caseCharacteristics ?? {}),
         therapistId: p.therapistId,
         demographics: JSON.stringify(p.demographics),
-        assessmentDate: sessions.length ? new Date(sessions[0].date) : null,
+        // The portal's intake to-do keys on assessmentDate, not status — a
+        // patient seeded with demographics must carry one (the DIPS date is
+        // the deterministic stand-in when no session dates exist).
+        assessmentDate: sessions.length
+          ? new Date(sessions[0].date)
+          : Object.keys(p.demographics).length
+            ? new Date(p.dips.completedAt)
+            : null,
         diagnosisText: p.diagnosis,
         diagnosisDate,
         diagnosisBy: p.diagnosis ? "Erstgespräch" : null,

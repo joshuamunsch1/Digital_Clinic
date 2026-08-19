@@ -10,6 +10,16 @@ import type { DipsModule, Item } from "@/lib/dips/types";
 import type { ModuleAnswers, Patient } from "@/lib/types";
 import { T } from "@/lib/i18n";
 import { useLang, useT } from "./LangContext";
+import { inkIsEmpty, inkKey, parseInk } from "@/lib/ink";
+import { InkPreview } from "./InkPad";
+
+/// Stored handwriting for a free-text item, if any (yesno_text notes live
+/// under `<id>_text_ink`, textarea notes under `<id>_ink`).
+function inkOf(item: Item, m: ModuleAnswers) {
+  const key = item.type === "yesno_text" ? inkKey(`${item.id}_text`) : item.type === "textarea" ? inkKey(item.id) : null;
+  const ink = key ? parseInk(m[key]) : null;
+  return ink && !inkIsEmpty(ink) ? ink : null;
+}
 
 function SumRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -135,12 +145,21 @@ export function DipsSummary({ patient }: { patient: Patient }) {
             return (
               <div key={mod.id}>
                 <p className="text-xs font-bold mb-1" style={{ color: mod.color }}>{tr(mod.title, lang)}</p>
-                {mod.sections.flatMap((s) => s.items).filter((it) => it.code && isVisible(it, m)).map((it) => (
-                  <div key={it.id} className="text-xs" style={{ color: C.ink }}>
-                    <span className="font-bold" style={{ color: C.spruce }}>{it.code}</span> <span style={{ color: C.muted }}>{tr(it.q, lang)}</span> —{" "}
-                    {renderAnswerValue(it, m, lang, (n, total) => t("endorsedOf", { n, total }), t("noneEndorsed"))}
-                  </div>
-                ))}
+                {mod.sections.flatMap((s) => s.items).filter((it) => it.code && isVisible(it, m)).map((it) => {
+                  const ink = inkOf(it, m);
+                  return (
+                    <div key={it.id} className="text-xs" style={{ color: C.ink }}>
+                      <span className="font-bold" style={{ color: C.spruce }}>{it.code}</span> <span style={{ color: C.muted }}>{tr(it.q, lang)}</span> —{" "}
+                      {renderAnswerValue(it, m, lang, (n, total) => t("endorsedOf", { n, total }), t("noneEndorsed"))}
+                      {ink && (
+                        <div className="mt-1 mb-2">
+                          <span className="font-semibold block mb-1" style={{ color: C.muted }}>{tr(T.inkLabel, lang)}</span>
+                          <InkPreview ink={ink} maxWidth={420} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

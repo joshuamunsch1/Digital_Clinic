@@ -394,7 +394,10 @@ export const DEMO_PATIENTS: DemoPatient[] = [
       },
     ] },
   { id: "p7", name: "Samuel Odermatt", email: "samuel.odermatt@example.org", color: PALETTE[6], therapistId: null, status: "interview", demographics: { age: 47, sex: "Male", nationality: "Schweiz", city: "Burgdorf", occupation: "Koch", living: "Alone", siblings: "1 — Zwillingsbruder" }, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: ["phobia"], completedAt: "2026-07-01T10:00:00.000Z" } },
-  { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "assessment", demographics: {}, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: [], completedAt: "2026-07-08T10:00:00.000Z" } },
+  // p8 has a DIPS but no demographics yet: the interview no longer waits for
+  // the intake form, so her status is "interview" while the portal to-do
+  // (keyed on the missing assessmentDate) stays open.
+  { id: "p8", name: "Nina Graf", email: "nina.graf@example.org", color: PALETTE[7], therapistId: null, status: "interview", demographics: {}, levels: [], diagnosis: null, disorderCategory: null, dips: { positive: [], completedAt: "2026-07-08T10:00:00.000Z" } },
 
   // Concluded treatments (archive demo): 2 disorder categories × 2 years,
   // spread across therapists so the therapist-scoped archive is demoable.

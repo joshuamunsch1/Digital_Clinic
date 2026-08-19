@@ -20,8 +20,10 @@ const parseDemographics = (s: string): Demographics => {
 /// Therapist-administered DIPS interview at the start of therapy. Staff-only:
 /// the DIPS is a structured clinical interview, conducted with the patient and
 /// recorded by the clinician (respondentRole "clinician", conductedById).
-/// Replaces any previous DIPS (intake_once semantics). Does not change the
-/// patient status — confirming the diagnosis is what starts therapy.
+/// Replaces any previous DIPS (intake_once semantics). Accepted at any active
+/// status — the demographics intake does NOT gate the interview. Completing it
+/// during the assessment phase advances the patient to "interview"; confirming
+/// the diagnosis remains what starts therapy.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
@@ -36,11 +38,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (patient.status === "assessment")
-    return NextResponse.json(
-      { error: "the patient has not completed the intake (personal details) yet" },
-      { status: 409 },
-    );
+  if (patient.status === "archived")
+    return NextResponse.json({ error: "archived" }, { status: 400 });
 
   const inst = await loadInstrument(DIPS_INSTRUMENT_ID);
   if (!inst) return NextResponse.json({ error: "DIPS instrument is not seeded" }, { status: 500 });
@@ -66,6 +65,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     occurredAt: new Date(dips.completedAt),
     meta: meta as unknown as Record<string, unknown>,
   });
+  if (patient.status === "assessment")
+    await prisma.patient.update({ where: { id: params.id }, data: { status: "interview" } });
 
   const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   return NextResponse.json({ patient: patientFromRow(updated!) });

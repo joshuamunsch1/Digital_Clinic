@@ -27,6 +27,17 @@ export const T = {
   personalNote: L("Aufnahmebogen – wird vor dem Erstgespräch ausgefüllt.", "Fiche d'admission – à remplir avant l'entretien initial.", "Intake cover sheet — completed before the first appointment."),
   yes: L("Ja", "Oui", "Yes"), no: L("Nein", "Non", "No"),
   describe: L("Beschreiben", "Décrivez", "Please describe"), optional: L("optional", "facultatif", "optional"),
+  // handwritten ink notes on free-text fields (pen/finger drawing pad)
+  inkLabel: L("Handnotiz", "Note manuscrite", "Handwritten note"),
+  inkAdd: L("Handnotiz", "Note manuscrite", "Handwritten note"),
+  inkEdit: L("Handnotiz bearbeiten", "Modifier la note manuscrite", "Edit handwritten note"),
+  inkUndo: L("Strich rückgängig", "Annuler le trait", "Undo stroke"),
+  inkClear: L("Alles löschen", "Tout effacer", "Clear all"),
+  inkDone: L("Fertig", "Terminé", "Done"),
+  inkHint: L(
+    "Mit Stift oder Finger schreiben — das Textfeld bleibt zusätzlich für die Tastatur nutzbar.",
+    "Écrivez au stylet ou au doigt — le champ texte reste utilisable au clavier.",
+    "Write with a pen or finger — the text field still takes keyboard input."),
   from: L("Von (Mt./J.)", "De (mois/année)", "From (mo./yr.)"), to: L("bis (Mt./J.)", "à (mois/année)", "to (mo./yr.)"),
   date: L("Datum", "Date", "Date"),
   perMonth: L("Durchschnittliche Häufigkeit pro Monat", "Fréquence moyenne par mois", "Average frequency per month"),
@@ -71,7 +82,7 @@ export const UI = {
   signingIn: L("Anmeldung…", "Connexion…", "Signing in…"),
   invalidCredentials: L("E-Mail oder Passwort ist falsch.", "E-mail ou mot de passe incorrect.", "E-mail or password is incorrect."),
   registerCta: L("Neu bei uns? Als Patient*in registrieren", "Nouveau chez nous ? S'inscrire comme patient·e", "New here? Register as a patient"),
-  registerTitle: L("Willkommen bei der Volksklinik", "Bienvenue à la Volksklinik", "Welcome to Volksklinik"),
+  registerTitle: L("Willkommen bei der Fribourg Clinic", "Bienvenue à la Fribourg Clinic", "Welcome to Fribourg Clinic"),
   registerIntro: L(
     "Schön, dass Sie da sind. Erstellen Sie Ihr persönliches Konto — Ihre Angaben helfen uns, Sie gut zu begleiten. Nach der Registrierung meldet sich die Klinik bei Ihnen für das Erstgespräch.",
     "Nous sommes heureux de vous accueillir. Créez votre compte personnel — vos informations nous aident à bien vous accompagner. Après l'inscription, la clinique vous contactera pour le premier entretien.",
@@ -181,7 +192,6 @@ export const UI = {
   intakeSaved: L("Gespeichert.", "Enregistré.", "Saved."),
   diagnosisTitle: L("Diagnose", "Diagnostic", "Diagnosis"),
   recordedOn: L("Erfasst", "Enregistré le", "Recorded"),
-  diagnosisAfterIntake: L("Die Diagnose wird nach dem Erstgespräch erfasst.", "Le diagnostic est enregistré après le premier entretien.", "A diagnosis is recorded after the intake interview."),
   diagnosisPrompt: L(
     "Aufnahme erhalten. Erfassen Sie die Diagnose aus dem Erstgespräch, um die Therapie zu starten.",
     "Admission reçue. Enregistrez le diagnostic du premier entretien pour démarrer la thérapie.",
@@ -387,7 +397,12 @@ export const UI = {
     "Strukturiertes diagnostisches Interview (DIPS, Angst-Spektrum) — von der Therapeutin / dem Therapeuten gemeinsam mit der Patientin / dem Patienten durchgeführt. Nach Abschluss wird ein Diagnosevorschlag berechnet.",
     "Entretien diagnostique structuré (DIPS, spectre anxieux) — mené par le/la thérapeute avec le/la patient·e. Une proposition de diagnostic est calculée à la fin.",
     "Structured diagnostic interview (DIPS, anxiety spectrum) — conducted by the therapist together with the patient. A diagnosis proposal is computed on completion."),
+  dipsInterviewRedoIntro: L(
+    "Wiederholung des DIPS-Interviews — beim Abschliessen wird das bestehende Interview ersetzt. Eine bereits erfasste Diagnose bleibt unverändert.",
+    "Répétition de l'entretien DIPS — l'entretien existant sera remplacé à la clôture. Un diagnostic déjà enregistré reste inchangé.",
+    "Repeat of the DIPS interview — completing it replaces the existing interview. An already recorded diagnosis remains unchanged."),
   dipsSubmit: L("Interview abschließen", "Terminer l'entretien", "Complete interview"),
+  redoDips: L("DIPS wiederholen", "Répéter l'entretien DIPS", "Repeat DIPS interview"),
   dipsRequired: L(
     "Vor der Diagnose ist das DIPS-Interview erforderlich. Führen Sie es gemeinsam mit der Patientin / dem Patienten durch — der Diagnosevorschlag wird daraus berechnet.",
     "L'entretien DIPS est requis avant le diagnostic. Menez-le avec le/la patient·e — la proposition de diagnostic en est dérivée.",
@@ -498,8 +513,10 @@ export const UI = {
   filledOutTimes: L("{n}× ausgefüllt", "Rempli {n} fois", "Filled out {n}×"),
   fillOut: L("Ausfüllen", "Remplir", "Fill out"),
   progressOverTime: L("Ihr Therapieverlauf", "Votre évolution", "Your progress over time"),
-  intakeDelivered: L("Aufnahme: übermittelt ({date}).", "Admission : transmise ({date}).", "Intake submission: delivered ({date})."),
-  intakeSavedPending: L("Aufnahme: gespeichert, Übermittlung ausstehend.", "Admission : enregistrée, transmission en attente.", "Intake submission: saved, awaiting delivery."),
+  // Reports the DIPS relay status, not the demographics form — the interview
+  // routinely exists before the patient's own intake since the Batch 14 split.
+  intakeDelivered: L("Diagnostisches Interview: übermittelt ({date}).", "Entretien diagnostique : transmis ({date}).", "Diagnostic interview: delivered ({date})."),
+  intakeSavedPending: L("Diagnostisches Interview: gespeichert, Übermittlung ausstehend.", "Entretien diagnostique : enregistré, transmission en attente.", "Diagnostic interview: saved, awaiting delivery."),
 
   // archive (concluded treatments)
   archiveTitle: L("Patientenarchiv", "Archives des patient·e·s", "Patient archive"),

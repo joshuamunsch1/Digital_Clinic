@@ -82,7 +82,7 @@ export function Login({ onLogin, onRegister, busy }: {
           <div className="flex items-center gap-3">
             <LeafMark size={40} />
             <div>
-              <h1 className="lc-display text-3xl" style={{ color: C.ink }}>Volksklinik</h1>
+              <h1 className="lc-display text-3xl" style={{ color: C.ink }}>Fribourg Clinic</h1>
               <p className="text-sm" style={{ color: C.muted }}>{t("appTagline")}</p>
             </div>
           </div>

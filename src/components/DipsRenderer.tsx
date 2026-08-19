@@ -5,6 +5,8 @@ import { tr, T, LANGS, type Lang } from "@/lib/i18n";
 import type { Item } from "@/lib/dips/types";
 import type { ModuleAnswers } from "@/lib/types";
 import { YesNo, Sev03, Scale08, inputStyle } from "./ui";
+import { inkKey } from "@/lib/ink";
+import { InkControl } from "./InkPad";
 
 type SetFn = (key: string, val: string | number | boolean) => void;
 type Val = string | number | boolean | undefined;
@@ -115,11 +117,17 @@ export function DipsItem({ item, m, set, lang }: { item: Item; m: ModuleAnswers;
             {tr(item.describe || T.describe, lang)} <span style={{ fontWeight: 400 }}>({tr(T.optional, lang)})</span>
           </span>
           <textarea style={{ ...inputStyle, resize: "vertical", marginTop: 4 }} rows={2} value={(m[`${item.id}_text`] as string) || ""} onChange={(e) => set(`${item.id}_text`, e.target.value)} />
+          <InkControl value={m[inkKey(`${item.id}_text`)] as string | undefined} onChange={(s) => set(inkKey(`${item.id}_text`), s)} lang={lang} />
         </div>
       </div>
     );
   if (item.type === "textarea")
-    return <div>{q}<textarea style={{ ...inputStyle, resize: "vertical", marginTop: 8 }} rows={2} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} placeholder={tr(T.optional, lang)} /></div>;
+    return (
+      <div>{q}
+        <textarea style={{ ...inputStyle, resize: "vertical", marginTop: 8 }} rows={2} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} placeholder={tr(T.optional, lang)} />
+        <InkControl value={m[inkKey(item.id)] as string | undefined} onChange={(s) => set(inkKey(item.id), s)} lang={lang} />
+      </div>
+    );
   if (item.type === "date")
     return <div>{q}<input style={{ ...inputStyle, maxWidth: 220, marginTop: 8 }} placeholder={tr(T.monthYearPlaceholder, lang)} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} /></div>;
   if (item.type === "monthyear_range")
