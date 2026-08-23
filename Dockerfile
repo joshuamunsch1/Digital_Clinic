@@ -4,8 +4,11 @@ WORKDIR /app
 # Prisma needs OpenSSL at build and runtime.
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (postinstall runs `prisma generate`).
+# Install dependencies. The `postinstall` hook runs `prisma generate`, which
+# needs the schema — so prisma/ must be copied BEFORE npm install, not with the
+# rest of the source below. Both layers stay cached until their inputs change.
 COPY package.json package-lock.json* ./
+COPY prisma ./prisma
 RUN npm install
 
 # Build. `.env` is not copied into the image (see .dockerignore), so give
