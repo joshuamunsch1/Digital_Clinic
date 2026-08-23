@@ -8,14 +8,19 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 COPY package.json package-lock.json* ./
 RUN npm install
 
-# Build.
+# Build. `.env` is not copied into the image (see .dockerignore), so give
+# DATABASE_URL a default here — Prisma needs it defined at build time, and
+# the compose file / hosting platform overrides it at runtime.
+ENV DATABASE_URL="file:/app/prisma/dev.db"
 COPY . .
 RUN npx prisma generate && npm run build
 
 ENV NODE_ENV=production
 EXPOSE 3000
 
-# Apply the schema to the database, then start. For SQLite, mount a volume on
-# /app/prisma so the database file persists across restarts. Seed once with:
-#   docker compose exec app npm run db:seed
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npm run start"]
+# Boot: apply the schema, seed demo data if (and only if) the database is still
+# empty, then start on $PORT (hosting platforms inject it; defaults to 3000).
+# For SQLite, mount a volume on /app/prisma so the database file — and anything
+# entered in the demo — survives restarts. Without a volume the container comes
+# up freshly seeded every time, which is fine for a throwaway demo.
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx prisma/seed-if-empty.ts && npm run start -- -p ${PORT:-3000} -H 0.0.0.0"]

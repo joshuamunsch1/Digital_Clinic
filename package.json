@@ -12,6 +12,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-if-empty": "tsx prisma/seed-if-empty.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "sim:purge": "tsx prisma/purge-simulated.ts",

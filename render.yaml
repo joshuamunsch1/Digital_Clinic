@@ -1,0 +1,32 @@
+# Render blueprint for the demo deployment (see README "Deploying a demo").
+# Render reads this when you create a Blueprint from the repository, so the
+# service, its region and its environment come out pre-configured.
+services:
+  - type: web
+    name: linden-clinic-demo
+    runtime: docker
+    plan: free # free instances sleep after ~15 min idle and have no disk (see below)
+    region: frankfurt
+    branch: main
+    envVars:
+      # SQLite file inside the image. On the free plan the filesystem is
+      # ephemeral: every restart/deploy comes up freshly seeded. To keep data,
+      # move to a paid instance type and attach a disk mounted at /app/prisma
+      # (uncomment the `disk:` block below).
+      - key: DATABASE_URL
+        value: file:/app/prisma/dev.db
+      # Render terminates TLS, so the session cookie can be Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: SESSION_SECRET
+        generateValue: true # Render generates a strong value on first deploy
+      # The boot seed generates a 250-case simulated reference cohort, which is
+      # what makes the prediction/outcomes surfaces meaningful. If the first
+      # boot is too slow on a small instance, shrink it (0 skips it entirely,
+      # at the cost of those features having no reference data):
+      # - key: SIM_COHORT_SIZE
+      #   value: "80"
+    # disk:
+    #   name: linden-data
+    #   mountPath: /app/prisma
+    #   sizeGB: 1

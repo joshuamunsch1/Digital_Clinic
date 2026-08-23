@@ -255,9 +255,31 @@ schema is identical across SQLite and Postgres — no other changes needed.
 
 ```bash
 docker compose up --build
-# then, once, load demo data:
-docker compose exec app npm run db:seed
 ```
+
+The container applies the schema and seeds the demo data on first boot
+(`prisma/seed-if-empty.ts` — it only seeds when the database has no users yet,
+because `seedClinic()` wipes every table). The compose file mounts a volume on
+`/app/prisma`, so the SQLite file and anything entered in the app survive
+restarts.
+
+## Deploying a demo
+
+To show the prototype to someone who cannot run it locally, deploy the image to
+a container host — the app needs a long-running Node server with a writable
+filesystem (SQLite, document uploads, archive exports, the reminder scheduler),
+so serverless platforms are a poor fit.
+
+`render.yaml` is a ready-made [Render](https://render.com) blueprint: create a
+Blueprint from this repository and it provisions a Docker web service with
+`DATABASE_URL`, `COOKIE_SECURE=true` and a generated `SESSION_SECRET`. On the
+free instance type the filesystem is ephemeral, so the demo re-seeds itself
+whenever the container restarts; attach a disk mounted at `/app/prisma` (see the
+commented `disk:` block) on a paid instance type to make data persist.
+
+**The seed data is fictional, but the login page lists the demo accounts** — so
+anyone with the URL can sign in as the clinic director. Treat the URL as
+semi-public and don't point a demo deployment at real patient data.
 
 ## Environment variables
 
