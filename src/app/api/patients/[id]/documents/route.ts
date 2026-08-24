@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { DOC_TITLES_DE, isDocType } from "@/lib/document-types";
+import { therapistScoped } from "@/lib/access";
 import {
   DOC_MIME_EXT,
   MAX_DOC_BYTES,
@@ -23,6 +24,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (restricted) return restricted;
 
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
+  if (patient && !therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   let form: FormData;

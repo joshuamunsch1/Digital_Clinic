@@ -118,21 +118,22 @@ export function classifyOnTrack(
   const sorted = [...series].sort((a, b) => a.session - b.session);
 
   const reasons: OnTrackResult["reasons"] = [];
-  let streak = 0;
-  let bandComparisons = 0;
-  for (const p of sorted) {
-    const b = band.get(p.session);
-    // Only banded occasions count; un-banded ones neither extend nor reset
-    // the streak (a band gap must not silence an ongoing deterioration).
-    if (!b) continue;
-    bandComparisons++;
-    const worse = scale.higherIsBetter ? p.value < b.p10 : p.value > b.p90;
-    streak = worse ? streak + 1 : 0;
-    if (streak >= needed) {
-      reasons.push("below_band");
-      break;
-    }
+  // CURRENT status, not history: the flag reflects the trailing run of banded
+  // occasions ending at the most recent one. A patient who dipped outside the
+  // boundary at sessions 3–4 but has been back inside ever since is on track
+  // again (Lambert-style feedback re-evaluates every session); a streak that
+  // ended in the past must not pin the amber banner forever. Only banded
+  // occasions count; un-banded gaps neither extend nor break the trailing run.
+  const banded = sorted.filter((p) => band.has(p.session));
+  let tailStreak = 0;
+  for (let i = banded.length - 1; i >= 0; i--) {
+    const b = band.get(banded[i].session)!;
+    const worse = scale.higherIsBetter ? banded[i].value < b.p10 : banded[i].value > b.p90;
+    if (!worse) break;
+    tailStreak++;
   }
+  if (tailStreak >= needed) reasons.push("below_band");
+  const bandComparisons = banded.length;
 
   let rciComparable = false;
   if (scale.rciCutoff !== null && sorted.length >= 2) {

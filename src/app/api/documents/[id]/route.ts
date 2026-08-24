@@ -6,6 +6,8 @@ import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { isDocType } from "@/lib/document-types";
 import { deleteDocumentFile, resolveDocumentPath } from "@/lib/documents";
+import { therapistScoped } from "@/lib/access";
+import type { SessionUser } from "@/lib/types";
 
 function requireStaff(req: Request) {
   const s = getSession();
@@ -14,6 +16,12 @@ function requireStaff(req: Request) {
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return { error: restricted };
   return { session: s };
+}
+
+/// Caseload scoping via the document's owning patient (director: everyone).
+async function scopedToDocument(session: SessionUser, patientId: string) {
+  const owner = await prisma.patient.findUnique({ where: { id: patientId }, select: { therapistId: true } });
+  return owner !== null && therapistScoped(session, owner);
 }
 
 async function patientPayload(patientId: string) {
@@ -29,6 +37,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const row = await prisma.patientDocument.findUnique({ where: { id: params.id } });
   if (!row || !row.storagePath) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await scopedToDocument(auth.session, row.patientId))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const abs = resolveDocumentPath(row.storagePath);
   if (!abs) return NextResponse.json({ error: "not found" }, { status: 404 });
 
@@ -55,6 +64,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const row = await prisma.patientDocument.findUnique({ where: { id: params.id } });
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await scopedToDocument(auth.session, row.patientId))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = (await req.json()) as { title?: string; occurredAt?: string; note?: string; docType?: string };
   const data: { title?: string; occurredAt?: Date; note?: string; docType?: string } = {};
@@ -79,6 +89,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
   const row = await prisma.patientDocument.findUnique({ where: { id: params.id } });
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await scopedToDocument(auth.session, row.patientId))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   await prisma.patientDocument.delete({ where: { id: row.id } });
   if (row.storagePath) await deleteDocumentFile(row.storagePath);

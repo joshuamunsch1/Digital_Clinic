@@ -15,6 +15,10 @@ export interface GridRow {
 export interface GridGroup {
   title?: LangNode;
   rows: GridRow[];
+  /// Rows kept for interview completeness that do NOT count toward a
+  /// category-count criterion (e.g. "alone at home" is not one of the five
+  /// DSM-5 agoraphobia situation categories).
+  nonCore?: boolean;
 }
 export interface DualPart {
   key: string;

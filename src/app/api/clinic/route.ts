@@ -8,9 +8,12 @@ import { limesurveyConfigured } from "@/lib/limesurvey";
 // Role-scoped clinic payload:
 // - patient: only their own record (plus therapist names + instruments)
 // - admin: all patients WITHOUT clinical data (no responses/scores/diagnosis)
-// - therapist/director: active patients in full; ARCHIVED patients as summary
-//   rows without response payloads (the reference archive can hold hundreds of
+// - director: all active patients in full; ARCHIVED patients as summary rows
+//   without response payloads (the reference archive can hold hundreds of
 //   cases — PatientDetail fetches the full dossier on open)
+// - therapist: ONLY their own caseload (active full + own archived summaries).
+//   The UI always filtered to the own caseload; the payload now matches, so a
+//   therapist can no longer read colleagues' dossiers over the API.
 export async function GET(req: Request) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -46,13 +49,14 @@ export async function GET(req: Request) {
     });
   }
 
+  const caseload = s.role === "therapist" ? { therapistId: s.id } : {};
   const [active, archived, therapists, instruments] = await Promise.all([
     prisma.patient.findMany({
-      where: { status: { not: "archived" } },
+      where: { status: { not: "archived" }, ...caseload },
       include: PATIENT_INCLUDE,
       orderBy: { createdAt: "asc" },
     }),
-    prisma.patient.findMany({ where: { status: "archived" }, orderBy: { createdAt: "asc" } }),
+    prisma.patient.findMany({ where: { status: "archived", ...caseload }, orderBy: { createdAt: "asc" } }),
     therapistsQ,
     prisma.instrument.findMany({ include: { scales: true }, orderBy: { name: "asc" } }),
   ]);

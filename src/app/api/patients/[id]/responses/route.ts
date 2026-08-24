@@ -4,8 +4,10 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientForSession } from "@/lib/serialize";
 import { createResponse, loadInstrument } from "@/lib/server-instruments";
+import { validateRawAnswers } from "@/lib/instruments/validate";
 import { isFillable, type RawAnswers } from "@/lib/instruments/types";
 import { isOpenInvitation } from "@/lib/reminders";
+import { therapistScoped } from "@/lib/access";
 import type { InvitationContext } from "@/lib/types";
 
 const parseContext = (s: string): InvitationContext => {
@@ -41,6 +43,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // Staff manual entry is caseload-scoped (director or assigned therapist).
+  if (s.role !== "patient" && !therapistScoped(s, patient))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // A concluded treatment accepts no new measurements (matches goals/session-log).
+  if (patient.status === "archived")
+    return NextResponse.json({ error: "archived" }, { status: 400 });
 
   // Who conducted/recorded this occasion (mirrors the legacy PSTB "Therapeut"
   // column). Patients can't attribute their own self-submission to an arbitrary
@@ -56,6 +64,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { error: `instrument '${inst.def.id}' cannot be submitted through the generic form (definition ${inst.def.definitionStatus})` },
       { status: 400 },
     );
+
+  // Reject unknown item ids and out-of-range values instead of storing and
+  // scoring them (the CSV/LimeSurvey path filters via extractRawAnswers; this
+  // path used to trust the client verbatim).
+  const validation = validateRawAnswers(inst.def, body.rawAnswers ?? {});
+  if (!validation.ok)
+    return NextResponse.json({ error: "invalid_answers", problems: validation.problems }, { status: 400 });
 
   // An in-app task being answered: validate it and take wave/session defaults
   // from the context the therapist set when creating it.
@@ -73,16 +88,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
   const ctx = invitation ? parseContext(invitation.context) : {};
 
+  // A patient session cannot claim an arbitrary respondent role, session
+  // number or wave: the role comes from the answered invitation (or "self"),
+  // session/wave only from the invitation context the therapist set.
+  const isPatient = s.role === "patient";
+  const respondentRole = isPatient
+    ? invitation?.respondentRole ?? "self"
+    : body.respondentRole ?? "self";
+
   const { response, skipped } = await createResponse(inst, {
     patientId: params.id,
-    respondentRole: body.respondentRole ?? "self",
+    respondentRole,
     rawAnswers: body.rawAnswers,
     occurredAt: body.occurredAt ? new Date(body.occurredAt) : undefined,
-    sessionNumber: body.sessionNumber ?? ctx.sessionNumber ?? null,
-    wave: body.wave ?? ctx.wave ?? null,
+    sessionNumber: isPatient ? ctx.sessionNumber ?? null : body.sessionNumber ?? ctx.sessionNumber ?? null,
+    wave: isPatient ? ctx.wave ?? null : body.wave ?? ctx.wave ?? null,
     note: body.note,
     conductedById,
-    source: s.role === "patient" ? "in_app" : "manual_entry",
+    source: isPatient ? "in_app" : "manual_entry",
   });
 
   if (invitation) {

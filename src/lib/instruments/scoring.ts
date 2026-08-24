@@ -176,8 +176,10 @@ function applyFormula(f: FormulaDef, env: Env): number | null {
       const total = f.totalItems ?? f.items.length;
       const missing = total - present.length;
       if (present.length === 0 || missing < 0) return null;
+      if (f.missingTolerance !== undefined && missing > f.missingTolerance) return null;
       const sum = present.reduce((a, b) => a + b, 0);
-      return Math.trunc((sum / (total - missing)) * total);
+      const prorated = (sum / (total - missing)) * total;
+      return f.rounding === "round" ? Math.round(prorated) : Math.trunc(prorated);
     }
     case "custom": {
       if (!f.expression) return null;

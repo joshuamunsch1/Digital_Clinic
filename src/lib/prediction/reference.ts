@@ -35,6 +35,12 @@ import {
 /// (0, 1, 2… chronologically) — used for the wave-/date-cadenced BDI-FS, whose
 /// responses carry no sessionNumber (sim cohort: pre/zm/post waves).
 export type TargetAxis = "session" | "index";
+// NOTE [clinician-confirm]: the PSTB target below predicts a SINGLE-item
+// process scale (Therapiefortschritte = item I4 alone, placeholder rci) — a
+// single item has no internal-consistency reliability, and Lutz-style ETR
+// models are built on SYMPTOM measures (OQ-45/HSCL/BSI analogues). PHQ-4 and
+// BDI-FS are the defensible outcome targets; the PSTB curve is process
+// feedback, not an outcome prediction, and should be read as such.
 export const PREDICTION_TARGETS = [
   { instrumentId: "phq4", scaleKey: "PHQ_total", axis: "session" },
   { instrumentId: SESSION_INSTRUMENT_ID, scaleKey: SESSION_PRIMARY_SCALE, axis: "session" },

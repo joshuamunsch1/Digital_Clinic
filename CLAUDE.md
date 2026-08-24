@@ -353,6 +353,41 @@ FHIR `valueAttachment` `image/svg+xml` (interface gained the field). i18n:
 `T.ink*` keys (interview-language dict, not UI dict). 12 tests in
 `tests/ink.test.ts` (168 total).
 
+**Batch 15 (2026-08-24)**: **audit fixes — DIPS procedure, psychometrics,
+security.** DIPS: currency criterion per module (lifetime-only answers no
+longer propose present-tense diagnoses; caveat instead), optional **clinician
+severity rating 0–8** (`clinsev_sev` in every tail — DIPS convention; takes
+precedence over patient impair/distress in the significance criterion AND in
+`primaryProposal` ranking), **ICD-10 suppression** (panic met + agora met →
+F40.01 only, panic eval `suppressed: true` + blue "In F40.01 enthalten" chip),
+**child criteria** via `EvalContext{age}` (GAD ≥1 symptom <18; separation
+anxiety ≥4 weeks via new item `4.1`, `4.2` now conditional on it), agora
+"alonehome" moved to a `nonCore` grid group (not one of DSM-5's 5 categories),
+agora crit C (item 4) + phobia immediacy (item 3) now required AND evaluated,
+GAD symptoms with `_maj: "no"` excluded from the count (tail entry lowered to
+≥1 symptom), screening follow-ups (agora/social 1.2–1.6, phobia 1.2/3, sep
+1.3) are `req` — a positive screen can no longer submit as "nicht zutreffend",
+panic tail entry widened to `panicTail` (attacks established, not PD-met) so
+organic/substance exclusions are always asked, FHIR exports negative screens +
+zero frequencies, DIPS `raterRole` corrected to `clinician`. Psychometrics:
+BDI-FS bands corrected to published cut-offs (0-3/4-8/9-12/13-21) + prorated
+(tolerance 1, round); SDQ subscales prorated per official rule (≥3 of 5,
+mean×5 rounded — `prorated_sum` grew `missingTolerance`+`rounding`); FGG
+GG_Mean requires ≥30/37; `populationMatches` parses numeric age ranges
+(`src/lib/instruments/population.ts` — a 5-year-old no longer matches SDQ
+11-17). Analytics: `classifyOnTrack` band streak measured from the TAIL (a
+past dip no longer pins the amber banner), JT "recovered" requires
+dysfunctional baseline, one-hot reference levels dropped (employment/category
+"other"), dropout AUC labelled in-sample. Security: therapist reads are
+caseload-scoped server-side (`src/lib/access.ts` `therapistScoped` — clinic
+payload, GET patient, dips/export/import/invitations/documents), submissions
+validated (`instruments/validate.ts` — unknown ids/out-of-range 400), patient
+sessions can't set respondentRole/sessionNumber/wave, archived patients reject
+responses, `contact` e-mail uniqueness-checked, `diagnose` requires text,
+X-Forwarded-For read `TRUSTED_PROXY_COUNT` from the right, SESSION_SECRET
+throws in production, session auto-numbering is patient-wide (same-day reuse,
+else global max+1 — PSTB/PHQ-4 axes can't desync). 194 tests.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

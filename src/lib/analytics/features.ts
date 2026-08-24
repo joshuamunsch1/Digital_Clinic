@@ -7,6 +7,15 @@ import type { IntakeFeatures } from "./types";
 
 export const EMPLOYMENT_KEYS = ["employed", "in_training", "unemployed", "retired", "other"] as const;
 
+/// One-hot groups drop one REFERENCE level ("other" for both employment and
+/// disorder category): with the full set of dummies plus an intercept the
+/// design matrix is rank-deficient — the L2-regularized logistic absorbs
+/// that, but the near-unridged OLS normal equations of the two-stage ETR
+/// (stats.ts olsFit, ridge 1e-8) were left badly conditioned. The dropped
+/// level is the baseline every remaining dummy is measured against.
+const EMPLOYMENT_DUMMIES = EMPLOYMENT_KEYS.filter((k) => k !== "other");
+const CATEGORY_DUMMIES = DISORDER_CATEGORIES.filter((c) => c !== "other");
+
 export interface EncodedFeatures {
   names: string[];
   /// null = missing (imputed downstream, never silently zeroed).
@@ -27,8 +36,8 @@ export function encodeFeatures(f: IntakeFeatures): EncodedFeatures {
   push("prior_psychotherapy", f.priorPsychotherapy === null ? null : f.priorPsychotherapy ? 1 : 0);
   push("psychotropic_medication", f.psychotropicMedication === null ? null : f.psychotropicMedication ? 1 : 0);
   push("sex_male", f.sex === null ? null : f.sex === "Male" ? 1 : 0);
-  for (const k of EMPLOYMENT_KEYS) push(`employment_${k}`, f.employment === null ? null : f.employment === k ? 1 : 0);
-  for (const c of DISORDER_CATEGORIES) push(`category_${c}`, f.disorderCategory === null ? null : f.disorderCategory === c ? 1 : 0);
+  for (const k of EMPLOYMENT_DUMMIES) push(`employment_${k}`, f.employment === null ? null : f.employment === k ? 1 : 0);
+  for (const c of CATEGORY_DUMMIES) push(`category_${c}`, f.disorderCategory === null ? null : f.disorderCategory === c ? 1 : 0);
   return { names, values };
 }
 

@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deriveDiagnoses, evaluateDips, primaryProposal } from "../src/lib/dips/diagnosis";
+import { MODULES } from "../src/lib/dips/schema";
+import { allComplete, moduleComplete } from "../src/lib/dips/engine";
 import { DEMO_PATIENTS, SAMPLE_ANSWERS, buildDipsAnswers } from "../src/lib/demo";
 import type { DipsAnswers, ModuleAnswers } from "../src/lib/types";
 
@@ -64,6 +66,7 @@ test("agoraphobia alongside panic codes F40.01; alone F40.00", () => {
     // two of five situation categories at clinical level
     grid_bus_primary: "yes", grid_bus_sev: 3, grid_bus_avoid: "yes", // transport
     grid_crowd_primary: "yes", grid_crowd_sev: 2, // crowds
+    "4": "yes", // almost every time (DSM-5 criterion C)
     dur6: "yes",
     impact_impair: 5,
     impact_distress: 6,
@@ -96,9 +99,14 @@ test("demo DIPS profiles derive the diagnoses the seed records", () => {
   assert.equal(primaryProposal(buildDipsAnswers(["gad"]))?.icdCode, "F41.1");
   assert.equal(primaryProposal(buildDipsAnswers(["social"]))?.icdCode, "F40.1");
   assert.equal(primaryProposal(buildDipsAnswers(["phobia"]))?.icdCode, "F40.2");
-  // p11 Rahel — panic + agoraphobia; the agora module codes F40.01 alongside panic
+  // p11 Rahel — panic + agoraphobia: ICD-10 codes F40.01 (agoraphobia WITH
+  // panic disorder) and suppresses the standalone F41.0 proposal; the panic
+  // evaluation stays visible as met-but-subsumed.
   const met = deriveDiagnoses(buildDipsAnswers(["panic", "agora"]));
-  assert.deepEqual(met.map((e) => e.icdCode).sort(), ["F40.01", "F41.0"]);
+  assert.deepEqual(met.map((e) => e.icdCode), ["F40.01"]);
+  const panicEval = evaluateDips(buildDipsAnswers(["panic", "agora"]))[0];
+  assert.equal(panicEval.met, true);
+  assert.equal(panicEval.suppressed, true);
   // p1 Mara — panic only (negative screens on the other five don't leak in)
   const panicOnly = deriveDiagnoses(buildDipsAnswers(["panic"]));
   assert.equal(panicOnly.length, 1);
@@ -125,4 +133,99 @@ test("primaryProposal picks the highest-impact met module", () => {
   };
   const primary = primaryProposal({ panic: SAMPLE_ANSWERS.panic, social });
   assert.equal(primary?.diagnosis, "social_anxiety"); // 16 > 13
+});
+
+// ---- 2026-08-24 rule fixes ------------------------------------------------------
+
+test("lifetime-only answers never produce a current diagnosis proposal", () => {
+  // No current attacks, one phase years ago with a month of worry: the old
+  // engine proposed a present-tense "Panikstörung (F41.0)" from this.
+  const lifetimePanic: DipsAnswers = {
+    panic: {
+      "1.1": "no", "1.2": "yes", "2.2": "yes", "3": "yes",
+      symptoms_s1_primary: "yes", symptoms_s2_primary: "yes", symptoms_s3_primary: "yes", symptoms_s4_primary: "yes",
+      "7": "yes", "8.1": "no", "8.2": "no", "8.3": "no", "8.4": "no", "9": "no",
+      impact_impair: 5, impact_distress: 5,
+    },
+  };
+  assert.deepEqual(deriveDiagnoses(lifetimePanic), []);
+  const e = evaluateDips(lifetimePanic)[0];
+  assert.equal(e.entered, true);
+  assert.equal(e.criteria.find((c) => c.key === "current")?.met, false);
+  assert.ok(e.caveats.length >= 1); // lifetime caveat
+});
+
+test("clinician severity rating takes precedence over patient impact", () => {
+  const base: ModuleAnswers = {
+    "1.1": "yes", "1.3": "yes",
+    symptoms_restless_primary: "yes", symptoms_tension_primary: "yes", symptoms_sleep_primary: "yes",
+    impact_impair: 6, impact_distress: 6,
+  };
+  // Interviewer rates severity 2 (< 4): blocks despite high patient ratings.
+  assert.deepEqual(deriveDiagnoses({ gad: { ...base, clinsev_sev: 2 } }), []);
+  // Interviewer rates 5: proposal stands even with low patient ratings.
+  const met = deriveDiagnoses({ gad: { ...base, impact_impair: 1, impact_distress: 1, clinsev_sev: 5 } });
+  assert.equal(met.length, 1);
+});
+
+test("child criteria: GAD needs 1 symptom, separation anxiety 4 weeks", () => {
+  const gadOneSymptom: DipsAnswers = {
+    gad: { "1.1": "yes", "1.3": "yes", symptoms_tension_primary: "yes", impact_impair: 5, impact_distress: 5 },
+  };
+  assert.equal(deriveDiagnoses(gadOneSymptom, { age: 10 }).length, 1);
+  assert.deepEqual(deriveDiagnoses(gadOneSymptom, { age: 30 }), []);
+  assert.deepEqual(deriveDiagnoses(gadOneSymptom), []); // unknown age → adult thresholds
+
+  const sepFourWeeks: DipsAnswers = {
+    sep: {
+      "1.1": "yes",
+      symptoms_sep1_primary: "yes", symptoms_sep2_primary: "yes", symptoms_sep5_primary: "yes",
+      "4.1": "yes", // >= 4 weeks, under 6 months
+      impact_impair: 5, impact_distress: 5,
+    },
+  };
+  assert.equal(deriveDiagnoses(sepFourWeeks, { age: 12 }).length, 1);
+  assert.deepEqual(deriveDiagnoses(sepFourWeeks, { age: 30 }), []);
+});
+
+test("GAD symptoms explicitly denied for the majority of days do not count", () => {
+  const answers: DipsAnswers = {
+    gad: {
+      "1.1": "yes", "1.3": "yes",
+      symptoms_restless_primary: "yes", symptoms_restless_maj: "no",
+      symptoms_tension_primary: "yes", symptoms_sleep_primary: "yes",
+      impact_impair: 5, impact_distress: 5,
+    },
+  };
+  assert.deepEqual(deriveDiagnoses(answers), []); // only 2 of 3 count
+});
+
+test("'alone at home' is not one of the five DSM-5 agoraphobia categories", () => {
+  const answers: DipsAnswers = {
+    agora: {
+      "1.1": "yes", "1.2": "yes", "4": "yes", dur6: "yes",
+      grid_alonehome_primary: "yes", grid_alonehome_sev: 3, grid_alonehome_avoid: "yes",
+      grid_bus_primary: "yes", grid_bus_sev: 3, // transport — 1 core category
+      impact_impair: 5, impact_distress: 5,
+    },
+  };
+  const e = evaluateDips(answers).find((x) => x.moduleId === "agora")!;
+  assert.equal(e.criteria.find((c) => c.key === "situations")?.met, false);
+});
+
+test("a positive screen with unanswered follow-ups can no longer submit as 'nicht zutreffend'", () => {
+  // Social: 1.1 yes, 1.2/1.3 blank — the module must be INCOMPLETE now (the
+  // old req flags let this submit and display as not-applicable).
+  const social: ModuleAnswers = { "1.1": "yes" };
+  const mod = MODULES.find((m) => m.id === "social")!;
+  assert.equal(moduleComplete(mod, social), false);
+  const answers: DipsAnswers = {
+    panic: { "1.1": "no", "1.2": "no" },
+    agora: { "1.1": "no", "1.4": "no" },
+    social,
+    phobia: { "1.1": "no", "1.2": "no" },
+    gad: { "1.1": "no" },
+    sep: { "1.1": "no", "1.3": "no" },
+  };
+  assert.equal(allComplete(answers), false);
 });

@@ -50,8 +50,12 @@ export function classifyJacobsonTruax(
   const improved = diff > 0 === scale.higherIsBetter;
   if (!improved) return "deteriorated";
   if (clinicalCutoff === null) return "improved"; // no cutoff → recovered collapses into improved
-  const functional = scale.higherIsBetter ? post > clinicalCutoff : post < clinicalCutoff;
-  return functional ? "recovered" : "improved";
+  // Classic JT "recovered" = reliable improvement AND crossing from the
+  // dysfunctional side (pre) to the functional side (post). A case that
+  // started sub-clinical cannot "recover" — counting it would inflate the
+  // recovery rate on the outcomes dashboard; it stays "improved".
+  const functionalSide = (v: number) => (scale.higherIsBetter ? v > clinicalCutoff : v < clinicalCutoff);
+  return !functionalSide(pre) && functionalSide(post) ? "recovered" : "improved";
 }
 
 export interface OutcomesSummary {

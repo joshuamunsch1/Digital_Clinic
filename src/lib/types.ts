@@ -108,6 +108,14 @@ export interface Demographics {
   siblings?: string;
 }
 
+/// Numeric age from the free-form demographics field, or null when absent or
+/// unparseable. Shared by the DIPS child-criteria context and the instrument
+/// population matcher so both read age identically.
+export function demographicAge(d: Demographics | undefined): number | null {
+  const n = Number(d?.age);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /// One filled-out questionnaire, with its computed scale scores.
 export interface ResponseRecord {
   id: string;

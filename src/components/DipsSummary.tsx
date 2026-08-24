@@ -69,6 +69,7 @@ function ModuleSummary({ mod, m }: { mod: DipsModule; m: ModuleAnswers }) {
   const endorsed = grid ? gridRows(grid).filter((r) => m[`${grid.id}_${r.key}_primary`] === "yes") : [];
   const impair = m["impact_impair"];
   const distress = m["impact_distress"];
+  const clinSev = m["clinsev_sev"];
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-2">
@@ -78,6 +79,7 @@ function ModuleSummary({ mod, m }: { mod: DipsModule; m: ModuleAnswers }) {
       </div>
       {grid && <SumRow label={tr(grid.q, lang).replace(/\?$/, "")}>{t("endorsedOf", { n: endorsed.length, total: gridRows(grid).length })}</SumRow>}
       {(impair != null || distress != null) && <SumRow label={t("impairDistress")}>{(impair ?? "—") as React.ReactNode} / {(distress ?? "—") as React.ReactNode}</SumRow>}
+      {clinSev != null && <SumRow label={t("clinSevLabel")}>{clinSev as React.ReactNode} / 8</SumRow>}
       {endorsed.length > 0 && (
         <div className="mt-2 mb-1 flex flex-wrap gap-1.5">
           {endorsed.slice(0, 12).map((r) => {

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import type { DipsMeta } from "@/lib/serialize";
 import { DIPS_INSTRUMENT_ID } from "@/lib/types";
+import { therapistScoped } from "@/lib/access";
 
 /// Download the complete stored DIPS interview of one patient as a JSON
 /// attachment: raw per-module answers, the FHIR payload and the relay status.
@@ -18,9 +19,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const patient = await prisma.patient.findUnique({
     where: { id: params.id },
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, name: true, therapistId: true },
   });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const row = await prisma.responseInstance.findFirst({
     where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID },

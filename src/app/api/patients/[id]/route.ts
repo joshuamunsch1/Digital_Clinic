@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { exportPatientArchive, type ArchiveExportResult } from "@/lib/archive-export";
 import { PATIENT_INCLUDE, patientForSession } from "@/lib/serialize";
+import { therapistScoped } from "@/lib/access";
 import {
   DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
@@ -56,6 +57,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (restricted) return restricted;
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // Caseload scoping: a therapist reads only their own patients. (Writes were
+  // always scoped; the read path relied on client-side list filtering.)
+  if (s.role === "therapist" && !therapistScoped(s, p))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return NextResponse.json({ patient: patientForSession(p, s.role) });
 }
 
@@ -127,6 +132,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } else if (body.action === "diagnose") {
     if (s.role !== "director" && s.role !== "therapist")
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const row = await prisma.patient.findUnique({ where: { id: params.id }, select: { therapistId: true } });
+    if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!therapistScoped(s, row)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    // The diagnosis PATCH sets date/author/status side effects — an empty text
+    // must not slip through and produce a dated, authored, empty diagnosis.
+    if (!body.text?.trim())
+      return NextResponse.json({ error: "diagnosis_text_required" }, { status: 400 });
     const category = body.category && (DISORDER_CATEGORIES as readonly string[]).includes(body.category) ? body.category : null;
     const icdRaw = body.icdCode?.trim().toUpperCase() ?? "";
     if (icdRaw && !ICD_RE.test(icdRaw))
@@ -146,7 +158,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await prisma.patient.update({
       where: { id: params.id },
       data: {
-        diagnosisText: body.text,
+        diagnosisText: body.text.trim(),
         diagnosisDate: new Date(),
         diagnosisBy: s.name,
         disorderCategory: category,
@@ -164,9 +176,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const existing = await prisma.patient.findUnique({
       where: { id: params.id },
-      select: { caseCharacteristics: true },
+      select: { caseCharacteristics: true, therapistId: true },
     });
     if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!therapistScoped(s, existing)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
     let current: CaseCharacteristics = {};
     try {
       current = JSON.parse(existing.caseCharacteristics) as CaseCharacteristics;
@@ -179,9 +192,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } else if (body.action === "demographics") {
     // Staff correction/update of the intake demographics. Unlike the patient
     // assessment route this changes NOTHING besides the demographics JSON —
-    // no status transition, no assessmentDate.
+    // no status transition, no assessmentDate. Whole-document semantics on
+    // purpose: IntakeEditView always submits the full 7-field form, and an
+    // empty field means "cleared" (a merge would make clearing impossible).
     if (s.role !== "director" && s.role !== "therapist")
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const row = await prisma.patient.findUnique({ where: { id: params.id }, select: { therapistId: true } });
+    if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!therapistScoped(s, row)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
     await prisma.patient.update({
       where: { id: params.id },
       data: { demographics: JSON.stringify(sanitizeDemographics(body.demographics)) },
@@ -189,7 +207,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } else if (body.action === "contact") {
     if (s.role !== "director" && s.role !== "therapist")
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    await prisma.patient.update({ where: { id: params.id }, data: { email: body.email || null } });
+    const row = await prisma.patient.findUnique({ where: { id: params.id }, select: { therapistId: true } });
+    if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!therapistScoped(s, row)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    // Same patient+staff uniqueness check as registration and the monitoring
+    // send-forms: a collision with a staff address would lock the patient out
+    // of login entirely (staff match wins and the patient branch never runs).
+    const email = body.email?.trim().toLowerCase() || null;
+    if (email) {
+      const [existingPatient, existingStaff] = await Promise.all([
+        prisma.patient.findUnique({ where: { email } }),
+        prisma.user.findUnique({ where: { email } }),
+      ]);
+      if ((existingPatient && existingPatient.id !== params.id) || existingStaff)
+        return NextResponse.json({ error: "email_taken" }, { status: 409 });
+    }
+    await prisma.patient.update({ where: { id: params.id }, data: { email } });
   } else {
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
   }

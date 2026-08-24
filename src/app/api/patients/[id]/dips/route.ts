@@ -6,6 +6,7 @@ import { PATIENT_INCLUDE, patientFromRow, type DipsMeta } from "@/lib/serialize"
 import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { toFHIR } from "@/lib/dips/fhir";
 import { endpointLabel, relay } from "@/lib/server-dips";
+import { therapistScoped } from "@/lib/access";
 import { DIPS_INSTRUMENT_ID, type Demographics, type DipsAnswers } from "@/lib/types";
 import type { Lang } from "@/lib/i18n";
 
@@ -38,6 +39,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   if (patient.status === "archived")
     return NextResponse.json({ error: "archived" }, { status: 400 });
 

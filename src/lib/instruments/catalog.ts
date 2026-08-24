@@ -40,7 +40,7 @@ import type {
 interface RawScale {
   key: string;
   label: string;
-  formula: { type: string; items?: unknown; expression?: string; missingTolerance?: number; totalItems?: number; note?: string };
+  formula: { type: string; items?: unknown; expression?: string; missingTolerance?: number; totalItems?: number; rounding?: "trunc" | "round"; note?: string };
   normBands?: NormBand[];
 }
 interface RawInstrument {
@@ -111,7 +111,7 @@ function normalizeFormula(raw: RawScale["formula"], itemsFixup?: string[]): Form
       return { type: "mean", items, missingTolerance: raw.missingTolerance, note: raw.note };
     case "prorated_sum":
       if (!items) return { type: "custom", note: raw.note ?? "item list not transcribed" };
-      return { type: "prorated_sum", items, totalItems: raw.totalItems, note: raw.note };
+      return { type: "prorated_sum", items, totalItems: raw.totalItems, missingTolerance: raw.missingTolerance, rounding: raw.rounding, note: raw.note };
     default:
       return { type: "custom", expression: raw.expression, note: raw.note };
   }
@@ -429,10 +429,13 @@ function sdqScales(raw: RawScale[]): ScaleDef[] {
 
 export const DIPS_INTAKE: InstrumentDef = {
   id: "dips_anxiety_intake",
-  name: "DIPS Open Access — anxiety intake (patient self-report adaptation)",
+  name: "DIPS Open Access — Interview Angststörungen (klinisch administriert)",
   abbreviation: "DIPS",
   population: "all",
-  raterRole: "self",
+  // Therapist-administered structured interview since the Batch 8 workflow
+  // change (respondentRole "clinician" + conductedById on the stored
+  // response) — the old "patient self-report adaptation" label was stale.
+  raterRole: "clinician",
   instrumentType: "structured_interview",
   cadenceType: "intake_once",
   cadenceConfig: {},
@@ -440,7 +443,7 @@ export const DIPS_INTAKE: InstrumentDef = {
   items: [], // rendered by the src/lib/dips engine; answers stored per module
   scales: [], // no repeated-measures scales — a one-time diagnostic screening
   sourceNotes:
-    "Adapted from DIPS Open Access (Margraf et al., 2021). Rendered by the dedicated structured-interview engine (src/lib/dips), not the generic likert renderer; the completed interview is stored as a ResponseInstance with the FHIR QuestionnaireResponse in meta.",
+    "Adapted from DIPS Open Access (Margraf et al., 2021) — the ANXIETY modules only (panic/agoraphobia/social/specific phobia/GAD/separation); the full DIPS-OA additionally covers depression, OCD, PTSD, somatic, eating and substance sections not implemented here. Therapist-administered (clinician respondent). Rendered by the dedicated structured-interview engine (src/lib/dips), not the generic likert renderer; the completed interview is stored as a ResponseInstance with the FHIR QuestionnaireResponse in meta.",
 };
 
 // PHQ-4 (Patient Health Questionnaire-4): ultra-brief anxiety+depression
@@ -519,7 +522,7 @@ export const PHQ4: InstrumentDef = {
     },
   ],
   sourceNotes:
-    "PHQ_total verified against legacy Standarddiagnostik syntax (SUM(PHQ1 TO PHQ4), see docs/pipeline-coverage.md). Norm bands 0-2/3-5/6-8/9-12 and the GAD-2/PHQ-2 subscales (screening cutoff >= 3 each) per Kroenke, Spitzer, Williams & Löwe (2009); German items Löwe et al. (2010), public-domain Pfizer PHQ screeners. Legacy cadence was wave-based inside the batteries; every-session administration is a new clinic decision (2026-07-03) for trajectory-based outcome monitoring — see docs/outcome-prediction.md. Answer anchors 0 'überhaupt nicht', 1 'an einzelnen Tagen', 2 'an mehr als der Hälfte der Tage', 3 'beinahe jeden Tag' (2-week window, stem prefixed to each item).",
+    "PHQ_total verified against legacy Standarddiagnostik syntax (SUM(PHQ1 TO PHQ4), see docs/pipeline-coverage.md). Norm bands 0-2/3-5/6-8/9-12 and the GAD-2/PHQ-2 subscales (screening cutoff >= 3 each) per Kroenke, Spitzer, Williams & Löwe (2009); German items Löwe et al. (2010), public-domain Pfizer PHQ screeners. Legacy cadence was wave-based inside the batteries; every-session administration is a new clinic decision (2026-07-03) for trajectory-based outcome monitoring — see docs/outcome-prediction.md. CAVEAT [clinician-confirm]: the validated stem asks about the LAST 2 WEEKS; with weekly sessions adjacent administrations overlap ~50% of their recall window, which inflates autocorrelation and damps detectable between-session change in all session-axis analytics (sudden gains, early change, expected-course bands). Answer anchors 0 'überhaupt nicht', 1 'an einzelnen Tagen', 2 'an mehr als der Hälfte der Tage', 3 'beinahe jeden Tag' (2-week window, stem prefixed to each item).",
 };
 
 /// All instrument definitions to seed: normalized catalog + the code-defined

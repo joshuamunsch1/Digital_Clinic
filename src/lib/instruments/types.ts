@@ -30,7 +30,19 @@ export interface ItemDef {
 export type FormulaDef =
   | { type: "sum"; items: string[]; missingTolerance?: number; note?: string }
   | { type: "mean"; items: string[]; missingTolerance?: number; note?: string }
-  | { type: "prorated_sum"; items: string[]; totalItems?: number; note?: string }
+  | {
+      type: "prorated_sum";
+      items: string[];
+      totalItems?: number;
+      /// Max missing items before the scale is not computed at all (default:
+      /// unlimited — the legacy DIKJ convention). Set for instruments whose
+      /// manuals define a completeness threshold (BDI-FS, SDQ).
+      missingTolerance?: number;
+      /// "trunc" (legacy DIKJ .sps rule, default) or "round" (official SDQ
+      /// scoring: mean × total, rounded).
+      rounding?: "trunc" | "round";
+      note?: string;
+    }
   | { type: "custom"; expression?: string; note?: string };
 
 export interface NormBand {

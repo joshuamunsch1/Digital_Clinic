@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { createResponse, extractRawAnswers, loadInstrument, parseCsv } from "@/lib/server-instruments";
+import { therapistScoped } from "@/lib/access";
 
 /// Manual fallback for clinics without LimeSurvey API access: upload a
 /// LimeSurvey CSV response export (headers = question codes) for one patient.
@@ -24,6 +25,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     occurredAt?: string;
   };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
+  if (patient && !therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
   const inst = await loadInstrument(body.instrumentId);
   if (!inst) return NextResponse.json({ error: "unknown instrument" }, { status: 400 });

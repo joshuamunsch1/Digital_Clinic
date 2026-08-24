@@ -78,6 +78,25 @@ function mkTail(opts: TailOptions): Section {
     q: L("Gab es neben dieser aktuellen Phase schon frühere Phasen, in denen es Ihnen ähnlich erging?", "En dehors de cette période actuelle, y a-t-il eu des périodes antérieures similaires ?", "Apart from this current phase, have there been earlier phases in which you felt similarly?"),
     describe: L("Daten früherer Phasen", "Dates des périodes antérieures", "Dates of earlier phases"),
   });
+  // DIPS/ADIS convention: the interviewer assigns a clinical severity rating
+  // (0–8) per diagnosis; a diagnosis is only given at >= 4 and the principal
+  // diagnosis is the highest-rated one. Optional so previously stored
+  // interviews stay valid; when present, it takes precedence over the
+  // patient-rated impairment/distress in src/lib/dips/diagnosis.ts.
+  items.push({
+    id: "clinsev", type: "dual_scale", showIf: enter,
+    q: L(
+      "Klinische Schweregrad-Einschätzung (durch Therapeut*in)",
+      "Évaluation clinique de la sévérité (par le/la thérapeute)",
+      "Clinical severity rating (by the therapist)",
+    ),
+    help: L(
+      "0 = nicht vorhanden · 4 = deutlich, behandlungsbedürftig · 8 = sehr schwer (DIPS-Konvention: Diagnose ab ≥ 4)",
+      "0 = absent · 4 = net, nécessitant un traitement · 8 = très sévère (convention DIPS : diagnostic à partir de ≥ 4)",
+      "0 = absent · 4 = definite, warranting treatment · 8 = very severe (DIPS convention: diagnosis from ≥ 4)",
+    ),
+    parts: [{ key: "sev", label: L("Schweregrad", "Sévérité", "Severity") }],
+  });
   return { id: "tail", title: L("Weitere Angaben", "Informations complémentaires", "Further details"), items };
 }
 
@@ -106,11 +125,16 @@ const AGORA_SITUATIONS: GridGroup[] = [
     { key: "park", label: L("Parkplätze", "Parkings", "Car parks") }, { key: "market", label: L("Marktplätze", "Places de marché", "Marketplaces") }, { key: "bridge", label: L("Brücken", "Ponts", "Bridges") }] },
   { title: L("Geschlossene Räume", "Lieux clos", "Enclosed places"), rows: [
     { key: "cinema", label: L("Kino, Theater", "Cinéma, théâtre", "Cinema, theatre") }, { key: "shops", label: L("Geschäfte / Supermärkte", "Magasins / supermarchés", "Shops / supermarkets") },
-    { key: "lift", label: L("Fahrstühle / Lifte", "Ascenseurs", "Lifts / elevators") }, { key: "tunnel", label: L("Enge Räume, Tunnel", "Espaces étroits, tunnels", "Narrow spaces, tunnels") }, { key: "alonehome", label: L("Allein zu Hause sein", "Être seul(e) à la maison", "Being alone at home") }] },
+    { key: "lift", label: L("Fahrstühle / Lifte", "Ascenseurs", "Lifts / elevators") }, { key: "tunnel", label: L("Enge Räume, Tunnel", "Espaces étroits, tunnels", "Narrow spaces, tunnels") }] },
   { title: L("Menschenmengen", "Foules / files d'attente", "Crowds / queues"), rows: [
     { key: "queue", label: L("Schlange stehen", "Faire la queue", "Standing in line") }, { key: "crowd", label: L("Menschenansammlungen", "Rassemblements", "Crowds") }] },
   { title: L("Draußen alleine sein", "Être seul(e) dehors", "Being outside alone"), rows: [
     { key: "outside", label: L("Aus dem Haus gehen", "Sortir de chez soi", "Leaving the house") }] },
+  // Asked in the DIPS grid but NOT one of DSM-5's five agoraphobia situation
+  // categories — kept for the interview record, excluded from the >=2-of-5
+  // category count (nonCore, see clinicalGroupCount in diagnosis.ts).
+  { title: L("Weitere Situationen", "Autres situations", "Other situations"), nonCore: true, rows: [
+    { key: "alonehome", label: L("Allein zu Hause sein", "Être seul(e) à la maison", "Being alone at home") }] },
 ];
 
 const SOCIAL_SITUATIONS: GridGroup[] = [
@@ -177,13 +201,26 @@ export const PD_KEYS = ["7", "8.1", "8.2", "8.3", "8.4", "9"];
 const pdAnswered = (m: ModuleAnswers) => PD_KEYS.every((k) => m[k] !== undefined);
 const pdAllNo = (m: ModuleAnswers) => pdAnswered(m) && PD_KEYS.every((k) => m[k] === "no");
 export const afterPdShown = (m: ModuleAnswers) => pdShown(m) && pdAnswered(m) && !pdAllNo(m);
+/// Panic attacks are established (peak + >=4 symptoms) — the substance/organic
+/// exclusions and impairment questions apply from here on, NOT only once the
+/// panic-DISORDER consequence criteria are met (a patient with attacks but no
+/// month of worry still needs the thyroid/caffeine/stimulant rule-out).
+export const panicTail = (m: ModuleAnswers) => hasPanic(m) && peakYes(m) && enoughSym(m);
 
 const agoraEnter = (m: ModuleAnswers) => (m["1.1"] === "yes" && (m["1.2"] === "yes" || m["1.3"] === "yes")) || (m["1.4"] === "yes" && (m["1.5"] === "yes" || m["1.6"] === "yes"));
 const socEnter = (m: ModuleAnswers) => (m["1.1"] === "yes" && (m["1.2"] === "yes" || m["1.3"] === "yes")) || (m["1.4"] === "yes" && (m["1.5"] === "yes" || m["1.6"] === "yes"));
 const phobiaEnter = (m: ModuleAnswers) => m["1.1"] === "yes" || m["1.2"] === "yes";
-export const gadSymCount = (m: ModuleAnswers) => GAD_SYMPTOMS.filter((s) => m[`symptoms_${s.key}_primary`] === "yes").length;
+/// A GAD symptom counts when endorsed AND not explicitly denied for "the
+/// majority of days" (DSM-5: symptoms present more days than not). An
+/// unanswered majority column still counts (lenient, keeps old records valid);
+/// an explicit "no" excludes the symptom.
+export const gadSymCount = (m: ModuleAnswers) =>
+  GAD_SYMPTOMS.filter((s) => m[`symptoms_${s.key}_primary`] === "yes" && m[`symptoms_${s.key}_maj`] !== "no").length;
 const gadEnter = (m: ModuleAnswers) => m["1.1"] === "yes";
-export const gadFull = (m: ModuleAnswers) => gadEnter(m) && gadSymCount(m) >= 3;
+/// Tail entry at >=1 symptom (not the adult diagnostic threshold of 3): DSM-5
+/// requires only 1 accompanying symptom for children, and the form has no age
+/// context — the impairment/exclusion questions must be reachable either way.
+export const gadFull = (m: ModuleAnswers) => gadEnter(m) && gadSymCount(m) >= 1;
 export const sepSymCount = (m: ModuleAnswers) => SEP_SYMPTOMS.filter((s) => m[`symptoms_${s.key}_primary`] === "yes").length;
 const sepEnter = (m: ModuleAnswers) => m["1.1"] === "yes" || m["1.3"] === "yes";
 export const sepFull = (m: ModuleAnswers) => sepEnter(m) && sepSymCount(m) >= 3;
@@ -218,7 +255,7 @@ const MOD_PANIC: DipsModule = {
       { id: "9", code: "9", req: true, type: "yesno_text", showIf: pdShown, q: L("Haben Sie über einen Monat Ihr Verhalten verändert, um Anfälle zu vermeiden?", "Avez-vous modifié votre comportement pendant un mois pour éviter les attaques ?", "Did you change your behaviour for over a month to avoid attacks?") },
       { id: "10", code: "10", req: true, type: "yesno_text", showIf: afterPdShown, q: L("Haben Sie bestimmte Situationen vermieden?", "Avez-vous évité certaines situations ?", "Have you avoided certain situations?") },
     ] },
-    mkTail({ enter: afterPdShown,
+    mkTail({ enter: panicTail,
       cognition: L("Was scheint die Panikanfälle auszulösen (innere Empfindungen, Situationen)?", "Qu'est-ce qui semble déclencher les attaques ?", "What seems to trigger the panic attacks (inner sensations, situations)?"),
       coping: L("Was tun Sie, wenn ein Panikanfall auftritt?", "Que faites-vous lors d'une attaque ?", "What do you do when a panic attack occurs?"),
       organic: { de: "Schilddrüsenprobleme, Schwangerschaft, niedriger Blutzucker, Mitralklappenprolaps", fr: "problèmes de thyroïde, grossesse, hypoglycémie, prolapsus mitral", en: "thyroid problems, pregnancy, low blood sugar, mitral valve prolapse" } }),
@@ -231,14 +268,14 @@ const MOD_AGORA: DipsModule = {
   sections: [
     { id: "screen", title: L("Agoraphobie", "Agoraphobie", "Agoraphobia"), items: [
       { id: "1.1", code: "1.1", req: true, type: "yesno_text", q: L("Gibt es Situationen, in denen Sie Angst haben (z. B. Autofahren, Schlange stehen, Kaufhäuser, Menschenmengen, enge geschlossene Räume)?", "Y a-t-il des situations où vous avez peur (p. ex. conduire, files d'attente, grands magasins, foules, espaces clos étroits) ?", "Are there situations in which you feel afraid (e.g. driving, queues, department stores, crowds, narrow enclosed spaces)?") },
-      { id: "1.2", code: "1.2", type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Vermeiden/fürchten Sie diese, weil ein Verlassen im Fall panikähnlicher oder peinlicher Symptome schwierig wäre?", "Les évitez-vous parce qu'il serait difficile de partir en cas de symptômes de panique ou gênants ?", "Do you avoid/fear these because leaving would be difficult if panic-like or embarrassing symptoms occurred?") },
-      { id: "1.3", code: "1.3", type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("… oder weil Sie im Fall solcher Symptome nicht rechtzeitig Hilfe bekommen könnten?", "… ou parce que vous ne pourriez pas obtenir d'aide à temps ?", "… or because you could not get help in time if such symptoms occurred?") },
-      { id: "1.4", code: "1.4", type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals eine Zeit mit Angst vor solchen Situationen?", "Y a-t-il déjà eu une période de peur de telles situations ?", "Was there ever a time of fearing such situations?") },
-      { id: "1.5", code: "1.5", type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("Vermieden/fürchteten Sie diese wegen eines schwierigen Verlassens?", "Les évitiez-vous à cause d'un départ difficile ?", "Did you avoid/fear these because leaving would be difficult?") },
-      { id: "1.6", code: "1.6", type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("… oder weil Sie keine rechtzeitige Hilfe bekommen könnten?", "… ou par crainte de ne pas obtenir d'aide à temps ?", "… or because you could not get help in time?") },
+      { id: "1.2", code: "1.2", req: true, type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Vermeiden/fürchten Sie diese, weil ein Verlassen im Fall panikähnlicher oder peinlicher Symptome schwierig wäre?", "Les évitez-vous parce qu'il serait difficile de partir en cas de symptômes de panique ou gênants ?", "Do you avoid/fear these because leaving would be difficult if panic-like or embarrassing symptoms occurred?") },
+      { id: "1.3", code: "1.3", req: true, type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("… oder weil Sie im Fall solcher Symptome nicht rechtzeitig Hilfe bekommen könnten?", "… ou parce que vous ne pourriez pas obtenir d'aide à temps ?", "… or because you could not get help in time if such symptoms occurred?") },
+      { id: "1.4", code: "1.4", req: true, type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals eine Zeit mit Angst vor solchen Situationen?", "Y a-t-il déjà eu une période de peur de telles situations ?", "Was there ever a time of fearing such situations?") },
+      { id: "1.5", code: "1.5", req: true, type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("Vermieden/fürchteten Sie diese wegen eines schwierigen Verlassens?", "Les évitiez-vous à cause d'un départ difficile ?", "Did you avoid/fear these because leaving would be difficult?") },
+      { id: "1.6", code: "1.6", req: true, type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("… oder weil Sie keine rechtzeitige Hilfe bekommen könnten?", "… ou par crainte de ne pas obtenir d'aide à temps ?", "… or because you could not get help in time?") },
       { id: "companion", code: "2", type: "yesno", showIf: agoraEnter, q: L("Macht es einen Unterschied, ob Sie in Begleitung sind? Fühlen Sie sich mit bestimmten Personen sicherer?", "Cela change-t-il si vous êtes accompagné(e) ? Vous sentez-vous plus en sécurité avec certaines personnes ?", "Does it make a difference whether you are accompanied? Do you feel safer with certain people?") },
       { id: "grid", code: "3", type: "grid", showIf: agoraEnter, primaryLabel: T.fear, note: GRID_NOTE, q: L("Haben Sie Angst vor folgenden Situationen oder vermeiden Sie sie?", "Avez-vous peur des situations suivantes ou les évitez-vous ?", "Do you fear or avoid the following situations?"), groups: AGORA_SITUATIONS, cols: COLS_FEAR_AVOID },
-      { id: "4", code: "4", type: "yesno", showIf: agoraEnter, q: L("Haben Sie fast jedes Mal Angst, wenn Sie in diesen Situationen sind?", "Avez-vous peur presque à chaque fois ?", "Do you feel afraid almost every time you are in these situations?") },
+      { id: "4", code: "4", req: true, type: "yesno", showIf: agoraEnter, q: L("Haben Sie fast jedes Mal Angst, wenn Sie in diesen Situationen sind?", "Avez-vous peur presque à chaque fois ?", "Do you feel afraid almost every time you are in these situations?") },
       { id: "safety", code: "5", type: "yesno_text", showIf: agoraEnter, q: L("Tragen Sie bestimmte Dinge bei sich oder tun Sie etwas, um sich in diesen Situationen wohler zu fühlen (z. B. Medikamente, Handy, Getränke)?", "Emportez-vous certaines choses ou faites-vous quelque chose pour vous sentir mieux (p. ex. médicaments, téléphone, boissons) ?", "Do you carry certain things or do something to feel more comfortable in these situations (e.g. medication, phone, drinks)?") },
     ] },
     mkTail({ enter: agoraEnter, duration6: true, appropriateness: true,
@@ -254,11 +291,11 @@ const MOD_SOCIAL: DipsModule = {
   sections: [
     { id: "screen", title: L("Soziale Angststörung", "Anxiété sociale", "Social anxiety"), items: [
       { id: "1.1", code: "1.1", req: true, type: "yesno_text", q: L("Fühlen Sie sich sehr ängstlich oder besorgt in sozialen Situationen, in denen Sie beobachtet oder beurteilt werden könnten (z. B. Gespräch führen, vor anderen essen, eine Rede halten)?", "Vous sentez-vous très anxieux(se) dans des situations sociales où vous pourriez être observé(e) ou jugé(e) (p. ex. converser, manger devant d'autres, parler en public) ?", "Do you feel very anxious or worried in social situations where you might be observed or judged (e.g. having a conversation, eating in front of others, giving a talk)?") },
-      { id: "1.2", code: "1.2", type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Sorgen Sie sich stark, sich peinlich zu verhalten, sodass andere schlecht von Ihnen denken?", "Craignez-vous fortement de vous comporter de façon embarrassante et d'être mal jugé(e) ?", "Do you worry strongly that you might behave embarrassingly so that others think badly of you?") },
-      { id: "1.3", code: "1.3", type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Sorgen Sie sich, dass andere Ihre Aufregung bemerken (z. B. Erröten, Zittern)?", "Craignez-vous que les autres remarquent votre nervosité (p. ex. rougir, trembler) ?", "Do you worry that others notice your nervousness (e.g. blushing, trembling)?") },
-      { id: "1.4", code: "1.4", type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Haben Sie sich jemals in solchen sozialen Situationen sehr ängstlich gefühlt?", "Vous êtes-vous déjà senti(e) très anxieux(se) dans de telles situations ?", "Have you ever felt very anxious in such social situations?") },
-      { id: "1.5", code: "1.5", type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("Sorgten Sie sich stark, schlecht beurteilt zu werden?", "Craigniez-vous fortement d'être mal jugé(e) ?", "Did you worry strongly about being judged badly?") },
-      { id: "1.6", code: "1.6", type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("… dass andere Ihre Aufregung bemerken?", "… que les autres remarquent votre nervosité ?", "… that others notice your nervousness?") },
+      { id: "1.2", code: "1.2", req: true, type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Sorgen Sie sich stark, sich peinlich zu verhalten, sodass andere schlecht von Ihnen denken?", "Craignez-vous fortement de vous comporter de façon embarrassante et d'être mal jugé(e) ?", "Do you worry strongly that you might behave embarrassingly so that others think badly of you?") },
+      { id: "1.3", code: "1.3", req: true, type: "yesno", showIf: (m) => m["1.1"] === "yes", q: L("Sorgen Sie sich, dass andere Ihre Aufregung bemerken (z. B. Erröten, Zittern)?", "Craignez-vous que les autres remarquent votre nervosité (p. ex. rougir, trembler) ?", "Do you worry that others notice your nervousness (e.g. blushing, trembling)?") },
+      { id: "1.4", code: "1.4", req: true, type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Haben Sie sich jemals in solchen sozialen Situationen sehr ängstlich gefühlt?", "Vous êtes-vous déjà senti(e) très anxieux(se) dans de telles situations ?", "Have you ever felt very anxious in such social situations?") },
+      { id: "1.5", code: "1.5", req: true, type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("Sorgten Sie sich stark, schlecht beurteilt zu werden?", "Craigniez-vous fortement d'être mal jugé(e) ?", "Did you worry strongly about being judged badly?") },
+      { id: "1.6", code: "1.6", req: true, type: "yesno", showIf: (m) => m["1.4"] === "yes", q: L("… dass andere Ihre Aufregung bemerken?", "… que les autres remarquent votre nervosité ?", "… that others notice your nervousness?") },
       { id: "grid", code: "3", type: "grid", showIf: socEnter, primaryLabel: T.fear, note: GRID_NOTE, q: L("Haben Sie Angst vor folgenden sozialen Situationen oder vermeiden Sie sie?", "Avez-vous peur des situations sociales suivantes ou les évitez-vous ?", "Do you fear or avoid the following social situations?"), groups: SOCIAL_SITUATIONS, cols: COLS_FEAR_AVOID },
       { id: "4.2", code: "4.2", req: true, type: "yesno", showIf: socEnter, q: L("Dauern diese Angst und das Vermeidungsverhalten mindestens 6 Monate?", "Cette peur et l'évitement durent-ils au moins 6 mois ?", "Have this fear and avoidance lasted at least 6 months?") },
       { id: "6", code: "6", req: true, type: "yesno", showIf: socEnter, q: L("Tritt die Angst sofort auf, sobald Sie sich in die Situation begeben (oder wissen, dass Sie es werden)?", "La peur apparaît-elle immédiatement dès que vous êtes (ou allez être) dans la situation ?", "Does the anxiety arise immediately when you enter the situation (or know you will)?") },
@@ -276,9 +313,9 @@ const MOD_PHOBIA: DipsModule = {
   sections: [
     { id: "screen", title: L("Spezifische Phobie", "Phobie spécifique", "Specific phobia"), items: [
       { id: "1.1", code: "1.1", req: true, type: "yesno_text", q: L("Gibt es Situationen oder Objekte (z. B. Tiere, Höhen, Stürme, Wasser, Blut, Autofahren, medizinische Behandlungen), vor denen Sie sich intensiv fürchten?", "Y a-t-il des situations ou objets (p. ex. animaux, hauteurs, orages, eau, sang, conduite, soins médicaux) que vous craignez intensément ?", "Are there situations or objects (e.g. animals, heights, storms, water, blood, driving, medical procedures) that you fear intensely?") },
-      { id: "1.2", code: "1.2", type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals solche Situationen oder Objekte?", "Y a-t-il déjà eu de telles situations ou objets ?", "Have there ever been such situations or objects?") },
+      { id: "1.2", code: "1.2", req: true, type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals solche Situationen oder Objekte?", "Y a-t-il déjà eu de telles situations ou objets ?", "Have there ever been such situations or objects?") },
       { id: "grid", code: "2", type: "grid", showIf: phobiaEnter, primaryLabel: T.fear, note: GRID_NOTE, q: L("Haben Sie starke Angst vor folgenden Dingen oder vermeiden Sie sie?", "Avez-vous très peur des éléments suivants ou les évitez-vous ?", "Do you have strong fear of, or avoid, the following?"), groups: PHOBIA_TYPES, cols: COLS_FEAR_AVOID },
-      { id: "3", code: "3", type: "yesno", showIf: phobiaEnter, q: L("Tritt die Angst fast immer sofort auf, wenn Sie mit dem Objekt/der Situation konfrontiert sind?", "La peur apparaît-elle presque toujours immédiatement face à l'objet/la situation ?", "Does the fear arise almost always immediately on confrontation with the object/situation?") },
+      { id: "3", code: "3", req: true, type: "yesno", showIf: phobiaEnter, q: L("Tritt die Angst fast immer sofort auf, wenn Sie mit dem Objekt/der Situation konfrontiert sind?", "La peur apparaît-elle presque toujours immédiatement face à l'objet/la situation ?", "Does the fear arise almost always immediately on confrontation with the object/situation?") },
     ] },
     mkTail({ enter: phobiaEnter, duration6: true, appropriateness: true,
       cognition: L("Was befürchten Sie, das geschehen könnte?", "Que craignez-vous qu'il se passe ?", "What do you fear might happen?"),
@@ -312,10 +349,15 @@ const MOD_SEP: DipsModule = {
   sections: [
     { id: "screen", title: L("Störung mit Trennungsangst", "Anxiété de séparation", "Separation anxiety"), items: [
       { id: "1.1", code: "1.1", req: true, type: "yesno_text", q: L("Haben Sie starke Angst davor, sich von Ihnen nahestehenden Personen zu trennen oder getrennt zu werden (z. B. Eltern, Partner, Kinder)?", "Avez-vous très peur d'être séparé(e) de proches (p. ex. parents, partenaire, enfants) ?", "Do you have strong fear of separating, or being separated, from people close to you (e.g. parents, partner, children)?") },
-      { id: "1.3", code: "1.3", type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals solche Zeiten?", "Y a-t-il déjà eu de telles périodes ?", "Has there ever been such a time?") },
+      { id: "1.3", code: "1.3", req: true, type: "yesno", showIf: (m) => m["1.1"] !== "yes", q: L("Gab es jemals solche Zeiten?", "Y a-t-il déjà eu de telles périodes ?", "Has there ever been such a time?") },
       { id: "symptoms", code: "2", type: "grid", showIf: sepEnter, primaryLabel: T.present, note: GRID_NOTE, q: L("Treffen folgende Symptome auf Sie zu? Fürchten oder vermeiden Sie diese Situationen?", "Les symptômes suivants vous concernent-ils ? Craignez-vous ou évitez-vous ces situations ?", "Do the following apply to you? Do you fear or avoid these situations?"), groups: [{ rows: SEP_SYMPTOMS }], cols: COLS_FEAR_AVOID },
       { id: "3", code: "3", type: "yesno", showIf: sepEnter, q: L("Haben Sie fast jedes Mal Angst, wenn Sie in diesen Situationen sind?", "Avez-vous peur presque à chaque fois ?", "Do you feel afraid almost every time you are in these situations?") },
-      { id: "4.2", code: "4.2", req: true, type: "yesno", showIf: sepEnter, q: L("Dauern diese Angst und das Vermeidungsverhalten mindestens 6 Monate an?", "Cette peur et l'évitement durent-ils au moins 6 mois ?", "Have this fear and avoidance lasted at least 6 months?") },
+      // DSM-5 duration is age-banded: >= 4 weeks in children/adolescents,
+      // typically >= 6 months in adults. The form has no age context, so both
+      // are asked (6 months implies 4 weeks; the second question only appears
+      // once the first is affirmed) and diagnosis.ts picks by patient age.
+      { id: "4.1", code: "4.1", req: true, type: "yesno", showIf: sepEnter, q: L("Dauern diese Angst und das Vermeidungsverhalten mindestens 4 Wochen an?", "Cette peur et l'évitement durent-ils au moins 4 semaines ?", "Have this fear and avoidance lasted at least 4 weeks?") },
+      { id: "4.2", code: "4.2", req: true, type: "yesno", showIf: (m) => sepEnter(m) && m["4.1"] === "yes", q: L("Dauern diese Angst und das Vermeidungsverhalten mindestens 6 Monate an?", "Cette peur et l'évitement durent-ils au moins 6 mois ?", "Have this fear and avoidance lasted at least 6 months?") },
     ] },
     mkTail({ enter: sepFull,
       cognition: L("Was befürchten Sie, das bei einer Trennung geschehen könnte?", "Que craignez-vous qu'il se passe lors d'une séparation ?", "What do you fear might happen upon separation?"),

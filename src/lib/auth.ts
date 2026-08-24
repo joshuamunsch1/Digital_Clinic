@@ -9,7 +9,16 @@ import type { SessionUser } from "./types";
 const COOKIE = "linden_session";
 const MAX_AGE_S = 60 * 60 * 8;
 
-const secret = () => process.env.SESSION_SECRET || "dev-only-change-me";
+const secret = () => {
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  // Refuse to mint or verify sessions with the known dev fallback in
+  // production — a missing env var must fail loudly, not silently make every
+  // session forgeable. (Evaluated lazily so `next build` works without it.)
+  if (process.env.NODE_ENV === "production")
+    throw new Error("SESSION_SECRET must be set in production (see .env.example)");
+  return "dev-only-change-me";
+};
 
 interface SessionPayload extends SessionUser {
   exp: number; // unix seconds

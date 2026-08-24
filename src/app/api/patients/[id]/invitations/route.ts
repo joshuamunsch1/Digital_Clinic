@@ -7,6 +7,7 @@ import { addParticipant, inviteParticipant, limesurveyConfig, surveyUrl } from "
 import { nextReminderAfter } from "@/lib/reminders";
 import { loadInstrument } from "@/lib/server-instruments";
 import { hasFullWording, isFillable } from "@/lib/instruments/types";
+import { therapistScoped } from "@/lib/access";
 
 /// A positive integer or null (schedule fields are optional and validated).
 const posInt = (v: unknown): number | null =>
@@ -56,6 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const channel = body.channel === "in_app" ? "in_app" : "limesurvey";
   const remindEveryDays = posInt(body.remindEveryDays);

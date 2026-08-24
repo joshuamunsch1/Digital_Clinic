@@ -41,13 +41,44 @@ export interface NewResponse {
 export async function createResponse(inst: LoadedInstrument, r: NewResponse, db: PrismaClient = prisma) {
   const { def, scaleIds } = inst;
   let sessionNumber = r.sessionNumber ?? null;
-  // every_session instruments auto-number their occasions when not supplied
+  // every_session instruments auto-number their occasions when not supplied.
+  // PATIENT-wide, not per-instrument: the old per-instrument counter let PSTB
+  // and PHQ-4 drift apart permanently after one skipped questionnaire, and
+  // every session-axis analytic keys on this number. Rules:
+  //   1. another numbered response on the SAME calendar day (UTC) reuses that
+  //      number — the "PSTB + PHQ-4 after the same session" case;
+  //   2. otherwise max(known session number across ALL responses and held
+  //      session-log entries) + 1 — a skipped instrument no longer desyncs
+  //      the axes. First-ever measurement stays session 1 (0 = baseline,
+  //      assigned explicitly via the monitoring flow).
   if (sessionNumber === null && def.cadenceType === "every_session") {
-    const last = await db.responseInstance.findFirst({
-      where: { patientId: r.patientId, instrumentId: def.id },
+    const at = r.occurredAt ?? new Date();
+    const dayStart = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+    const dayEnd = new Date(dayStart.getTime() + 864e5);
+    const sameDay = await db.responseInstance.findFirst({
+      where: {
+        patientId: r.patientId,
+        sessionNumber: { not: null },
+        occurredAt: { gte: dayStart, lt: dayEnd },
+      },
       orderBy: { sessionNumber: "desc" },
     });
-    sessionNumber = last?.sessionNumber != null ? last.sessionNumber + 1 : 1;
+    if (sameDay?.sessionNumber != null) {
+      sessionNumber = sameDay.sessionNumber;
+    } else {
+      const [lastResponse, lastLog] = await Promise.all([
+        db.responseInstance.findFirst({
+          where: { patientId: r.patientId, sessionNumber: { not: null } },
+          orderBy: { sessionNumber: "desc" },
+        }),
+        db.sessionLog.findFirst({
+          where: { patientId: r.patientId, type: "held", sessionNumber: { not: null } },
+          orderBy: { sessionNumber: "desc" },
+        }),
+      ]);
+      const max = Math.max(lastResponse?.sessionNumber ?? -1, lastLog?.sessionNumber ?? -1);
+      sessionNumber = max < 0 ? 1 : max + 1;
+    }
   }
   const scoring = isScoreable(def)
     ? computeScaleScores(def.items, def.scales, r.rawAnswers as RawAnswers)

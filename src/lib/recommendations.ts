@@ -12,7 +12,7 @@
 // src/lib/instruments/catalog.ts; instruments the clinic does not have yet are
 // listed as external recommendations (German clinical naming).
 import type { InstrumentDef } from "./instruments/types";
-import type { DipsRecord } from "./types";
+import { demographicAge, type Demographics, type DipsRecord } from "./types";
 import { deriveDiagnoses, type DipsDiagnosisId } from "./dips/diagnosis";
 
 export interface ExternalInstrumentRec {
@@ -244,6 +244,9 @@ const byKey = new Map(SETS.map((s) => [s.key, s]));
 export interface RecommendationInput {
   disorderCategory: string | null;
   dips: DipsRecord | null;
+  /// Passed through to the DIPS child criteria; a full Patient object
+  /// satisfies this shape directly.
+  demographics?: Demographics;
 }
 
 /// Specific DIPS-derived diagnoses first, then the coarse category as
@@ -253,7 +256,7 @@ export interface RecommendationInput {
 export function recommendationsForPatient(p: RecommendationInput): RecommendationSet[] {
   const out: RecommendationSet[] = [];
   if (p.dips) {
-    for (const evaluation of deriveDiagnoses(p.dips.answers)) {
+    for (const evaluation of deriveDiagnoses(p.dips.answers, { age: demographicAge(p.demographics) })) {
       const set = byKey.get(evaluation.diagnosis);
       if (set && !out.includes(set)) out.push(set);
     }

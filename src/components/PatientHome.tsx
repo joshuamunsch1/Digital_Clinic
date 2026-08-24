@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/format";
 import type { Patient, Therapist } from "@/lib/types";
 import { responsesFor } from "@/lib/types";
 import { hasFullWording, isFillable, type InstrumentDef } from "@/lib/instruments/types";
+import { populationMatches } from "@/lib/instruments/population";
 import { Card, PrimaryButton, SectionTitle } from "./ui";
 import { GoalLadder } from "./GoalLadder";
 import { useT } from "./LangContext";
@@ -13,16 +14,10 @@ export type PatientTask =
   | { kind: "assessment" }
   | { kind: "instrument"; instrumentId: string; invitationId?: string };
 
-/// Does this instrument's target population fit the patient? Age-based
-/// heuristic over the catalog's population slugs ("adult", "child_adolescent",
-/// "adult_adolescent", "all", …); unknown age defaults to the adult forms.
-/// Exported for the send-after-session step (SessionMonitoringPanel).
-export function populationMatches(inst: InstrumentDef, patient: Patient): boolean {
-  if (inst.population === "all") return true;
-  const age = Number(patient.demographics.age);
-  if (!Number.isFinite(age)) return inst.population.includes("adult");
-  return age < 18 ? /child|adolescent/.test(inst.population) : inst.population.includes("adult");
-}
+// Age-band population matching moved to src/lib/instruments/population.ts
+// (now range-aware: an adult no longer matches child forms and vice versa);
+// re-exported for the send-after-session step (SessionMonitoringPanel).
+export { populationMatches };
 
 /// Instruments a patient can fill out in-app: complete definition, full item
 /// wording available (licensed instruments only carry item codes, so those are

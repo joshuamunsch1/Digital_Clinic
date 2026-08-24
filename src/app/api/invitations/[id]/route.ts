@@ -5,6 +5,7 @@ import { remindParticipant } from "@/lib/limesurvey";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 import { isOpenInvitation, nextReminderAfter } from "@/lib/reminders";
+import { therapistScoped } from "@/lib/access";
 
 /// PATCH one invitation:
 ///   { action: "remind" }   — send a reminder e-mail now (LimeSurvey channel)
@@ -26,6 +27,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   };
 
   const inv = await prisma.questionnaireInvitation.findUnique({ where: { id: params.id } });
+  if (inv) {
+    const owner = await prisma.patient.findUnique({ where: { id: inv.patientId }, select: { therapistId: true } });
+    if (owner && !therapistScoped(s, owner)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   if (!inv) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   if (body.action === "remind") {

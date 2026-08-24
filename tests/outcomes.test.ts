@@ -36,6 +36,15 @@ describe("classifyJacobsonTruax", () => {
     assert.equal(classifyJacobsonTruax(10, 2, PHQ, null), "improved");
   });
 
+  it("recovered requires a DYSFUNCTIONAL baseline — sub-clinical starters cannot 'recover'", () => {
+    // pre = 2 is already on the functional side of the 2.5 cutoff; a reliable
+    // further improvement is "improved", not "recovered" (counting it would
+    // inflate the recovery rate on the outcomes dashboard).
+    assert.equal(classifyJacobsonTruax(2, -2, PHQ, CUTOFF), "improved");
+    // crossing from dysfunctional to functional stays "recovered"
+    assert.equal(classifyJacobsonTruax(10, 2, PHQ, CUTOFF), "recovered");
+  });
+
   it("no rci → null, never guessed", () => {
     assert.equal(classifyJacobsonTruax(10, 2, { ...PHQ, rciCutoff: null }, CUTOFF), null);
   });

@@ -183,7 +183,7 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     "7": "yes", "8.1": "no", "8.2": "yes", "8.3": "yes", "8.4": "no", "9": "yes", "9_text": "Vermeide volle Läden", "10": "yes", "10_text": "Supermärkte, Autobahn",
     cog: "Enge Räume, Herzklopfen nach Kaffee", cope: "Atmen, nach draußen gehen", subst1: "no", subst2: "no", organic: "no",
     onset_age: "28", hist1: "yes", hist1_text: "Stress bei der Arbeit", hist2: "yes", hist2_text: "Hohe Belastung im Beruf",
-    impact_impair: 6, impact_distress: 7, earlier: "no",
+    impact_impair: 6, impact_distress: 7, clinsev_sev: 6, earlier: "no",
   },
   // ≥ 2 of 5 situation categories at clinical level (transport, enclosed, crowds).
   agora: {
@@ -198,7 +198,7 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     cope: "Verlässt die Situation, wartet draußen",
     approp: "no", subst1: "no", subst2: "no", organic: "no",
     onset_age: "24", dur6: "yes", hist1: "no", hist2: "yes", hist2_text: "Umzug und Stellenwechsel",
-    impact_impair: 5, impact_distress: 5, earlier: "no",
+    impact_impair: 5, impact_distress: 5, clinsev_sev: 5, earlier: "no",
   },
   social: {
     "1.1": "yes", "1.1_text": "Referate in der Schule, Gespräche mit Unbekannten",
@@ -212,7 +212,7 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     cope: "Meldet sich krank, vermeidet Referate",
     approp: "no", subst1: "no", subst2: "no", organic: "no",
     onset_age: "13", hist1: "yes", hist1_text: "Bloßstellung vor der Klasse",
-    hist2: "no", impact_impair: 5, impact_distress: 6, earlier: "no",
+    hist2: "no", impact_impair: 5, impact_distress: 6, clinsev_sev: 5, earlier: "no",
   },
   phobia: {
     "1.1": "yes", "1.1_text": "Spinnen — schon beim Anblick von Bildern",
@@ -222,7 +222,7 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     cope: "Betritt Keller und Estrich nur nach Kontrolle durch andere",
     approp: "no", subst1: "no", subst2: "no", organic: "no",
     onset_age: "9", dur6: "yes", hist1: "no", hist2: "no",
-    impact_impair: 4, impact_distress: 6, earlier: "no",
+    impact_impair: 4, impact_distress: 6, clinsev_sev: 4, earlier: "no",
   },
   // Screening + uncontrollability + ≥ 3 of 6 accompanying symptoms.
   gad: {
@@ -239,7 +239,7 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     cope: "Rückversicherung bei der Familie, Listen schreiben",
     subst1: "no", subst2: "no", organic: "no",
     onset_age: "19", hist1: "no", hist2: "yes", hist2_text: "Prüfungsphase im Studium",
-    impact_impair: 5, impact_distress: 6, earlier: "yes", earlier_text: "2022, mehrere Monate",
+    impact_impair: 5, impact_distress: 6, clinsev_sev: 5, earlier: "yes", earlier_text: "2022, mehrere Monate",
   },
 };
 

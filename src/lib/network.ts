@@ -29,9 +29,23 @@ function inCidr(ip: string, cidr: string): boolean {
   return (ipInt & mask) === (baseInt & mask);
 }
 
+/// Client IP from X-Forwarded-For — proxy-aware, NOT client-trusting.
+///
+/// The FIRST entry of X-Forwarded-For is written by the CLIENT and freely
+/// spoofable ("X-Forwarded-For: 130.92.1.1" defeats a first-entry check
+/// entirely). Each trusted proxy APPENDS the address it saw, so the reliable
+/// value is the entry `TRUSTED_PROXY_COUNT` positions from the RIGHT: with the
+/// default of 1 (one TLS-terminating proxy, e.g. Render), that is the address
+/// the proxy itself observed. Set TRUSTED_PROXY_COUNT to the actual number of
+/// proxy hops in front of the app; anything the client prepends beyond that is
+/// ignored. Without the header (direct local dev) the fallback stays 127.0.0.1.
 export function clientIp(req: Request): string {
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
+  if (fwd) {
+    const entries = fwd.split(",").map((e) => e.trim()).filter(Boolean);
+    const hops = Math.max(1, Number(process.env.TRUSTED_PROXY_COUNT) || 1);
+    return entries[Math.max(0, entries.length - hops)] ?? "127.0.0.1";
+  }
   return req.headers.get("x-real-ip") ?? "127.0.0.1"; // local dev has no proxy headers
 }
 

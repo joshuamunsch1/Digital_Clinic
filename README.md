@@ -314,9 +314,22 @@ This scaffold is intentionally minimal. Before any real-world use:
   instruments (BDI, Conners, CBCL/YSR, DIKJ, …).
 - The **French and English questionnaire text are working translations**, not the
   validated DIPS/ADIS language versions — replace before clinical use.
+- **Suicidality screening coverage is thin by design of the current catalog**:
+  the DIPS anxiety modules carry no suicidality section, the PHQ-4 omits the
+  PHQ-9 suicide item, and the only monitored suicide item (BDI-FS item 7) sits
+  on a *periodic* instrument administered at clinical discretion. A patient can
+  be monitored every session without ever being asked. Decide on a standing
+  risk-screening instrument (e.g. PHQ-9 or a dedicated item) before real use;
+  note also that safety alerts have no acknowledge/expiry workflow — an old
+  flag renders exactly like a new one (only the date differs).
 
 ## Attribution
 
 The intake content is adapted from **DIPS Open Access** (Margraf, Cwik,
-von Brachel, Suppiger & Schneider, 2021) for demonstration. The adaptation is
-patient self-report and is not a validated instrument.
+von Brachel, Suppiger & Schneider, 2021) for demonstration — the ANXIETY
+modules only (the full DIPS-OA also covers depression, OCD, PTSD, somatic,
+eating and substance sections). Since the Batch 8 workflow change it is
+administered by the therapist (clinician respondent), and since 2026-08-24 it
+records the DIPS-convention clinician severity rating (0–8) per module. The
+adaptation is not a validated instrument, and its mechanical ICD-10 proposals
+are decision support for the clinician, never automatic diagnoses.

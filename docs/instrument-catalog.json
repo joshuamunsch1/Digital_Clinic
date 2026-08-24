@@ -98,17 +98,17 @@
         {
           "key": "BDI_FS_total",
           "label": "BDI-FS Gesamtwert",
-          "formula": {"type": "sum", "items": ["BDI1_Traurigkeit", "BDI2_Pessimismus", "BDI3_Versagen", "BDI4_Freudeverlust", "BDI5_Selbstablehnung", "BDI6_Selbstkritik", "BDI7_Suizid"], "missingTolerance": 1},
+          "formula": {"type": "prorated_sum", "items": ["BDI1_Traurigkeit", "BDI2_Pessimismus", "BDI3_Versagen", "BDI4_Freudeverlust", "BDI5_Selbstablehnung", "BDI6_Selbstkritik", "BDI7_Suizid"], "totalItems": 7, "missingTolerance": 1, "rounding": "round", "note": "prorated (sum/6*7, rounded) when exactly 1 item is missing; a plain sum with 1 tolerated missing item would systematically under-score against the 0-21 bands and the RCI [clinician-confirm: proration rule vs. manual]"},
           "normBands": [
             {"min": 0, "max": 3, "label": "minimal"},
-            {"min": 4, "max": 6, "label": "mild"},
-            {"min": 7, "max": 9, "label": "moderat"},
-            {"min": 10, "max": 21, "label": "schwer"}
+            {"min": 4, "max": 8, "label": "mild"},
+            {"min": 9, "max": 12, "label": "moderat"},
+            {"min": 13, "max": 21, "label": "schwer"}
           ]
         },
         {"key": "BDI_FS_Suiziditem", "label": "Suizid-Item (Warnhinweis)", "formula": {"type": "mean", "items": ["BDI7_Suizid"]}}
       ],
-      "sourceNotes": "Legacy file: Daten_SPSS/BDI_FS/BDI-FS.sav + Syntax_BDI-FS.sps. The suicide item (item 7) is tracked separately as a clinical safety flag in the legacy Excel export, in addition to contributing to the total."
+      "sourceNotes": "Legacy file: Daten_SPSS/BDI_FS/BDI-FS.sav + Syntax_BDI-FS.sps. The suicide item (item 7) is tracked separately as a clinical safety flag in the legacy Excel export, in addition to contributing to the total. Norm bands corrected 2026-08-24 to the published BDI-FS cut-offs (Beck, Steer & Brown 2000: 0-3 minimal / 4-8 mild / 9-12 moderate / 13-21 severe); the previous 4-6/7-9/10-21 banding over-labelled severity -- verify against the German manual (Kliem & Braehler) before clinical use."
     },
     {
       "id": "dikj",
@@ -124,7 +124,7 @@
       "scales": [
         {"key": "Gesamtrohwert", "label": "DIKJ Gesamtrohwert", "formula": {"type": "prorated_sum", "items": ["DIKJ1", "DIKJ2", "DIKJ3", "DIKJ4", "DIKJ5", "DIKJ6", "DIKJ7", "DIKJ8", "DIKJ9", "DIKJ10", "DIKJ11", "DIKJ12", "DIKJ13", "DIKJ14", "DIKJ15", "DIKJ16", "DIKJ17", "DIKJ18", "DIKJ19", "DIKJ20", "DIKJ21", "DIKJ22", "DIKJ23", "DIKJ24", "DIKJ25", "DIKJ26", "DIKJ27", "DIKJ28", "DIKJ29"], "totalItems": 29, "note": "raw sum scaled to sum/(29-n_missing)*29, then truncated (not rounded)"}}
       ],
-      "sourceNotes": "Legacy file: Daten_SPSS/DIKJ/DIKJ.sav + DIKJ_Syntax.sps. Published: Stiensmeier-Pelster, Schuermann & Duda, 3rd ed. 2014, Hogrefe. Item text is a licensed, copyrighted item bank -- do not reproduce; only the scoring formula is captured here."
+      "sourceNotes": "Legacy file: Daten_SPSS/DIKJ/DIKJ.sav + DIKJ_Syntax.sps. Published: Stiensmeier-Pelster, Schuermann & Duda, 3rd ed. 2014, Hogrefe. Item text is a licensed, copyrighted item bank -- do not reproduce; only the scoring formula is captured here. CAVEAT [clinician-confirm]: the legacy .sav carries 29 item columns (DIKJ1..29, range 0-58 as modelled here), but published descriptions of the DIKJ commonly report 26 items / max 52 (the parent CDI has 27) -- reconcile the column count against the clinic's printed form before trusting the proration divisor."
     },
     {
       "id": "sdq_self_11_17",
@@ -148,11 +148,11 @@
         {"id": "SDQ25", "reverseScored": true}
       ],
       "scales": [
-        {"key": "EmoProbl", "label": "Emotionale Probleme", "formula": {"type": "sum", "items": ["SDQ3", "SDQ8", "SDQ13", "SDQ16", "SDQ24"]}},
-        {"key": "VerhProbl", "label": "Verhaltensprobleme", "formula": {"type": "sum", "items": ["SDQ5", "SDQ7", "SDQ12", "SDQ18", "SDQ22"]}},
-        {"key": "Hyperak", "label": "Hyperaktivität/Unaufmerksamkeit", "formula": {"type": "sum", "items": ["SDQ2", "SDQ10", "SDQ15", "SDQ21", "SDQ25"]}},
-        {"key": "VerhProblGleich", "label": "Probleme mit Gleichaltrigen", "formula": {"type": "sum", "items": ["SDQ6", "SDQ11", "SDQ14", "SDQ19", "SDQ23"]}},
-        {"key": "Prosoz", "label": "Prosoziales Verhalten", "formula": {"type": "sum", "items": ["SDQ1", "SDQ4", "SDQ9", "SDQ17", "SDQ20"]}},
+        {"key": "EmoProbl", "label": "Emotionale Probleme", "formula": {"type": "prorated_sum", "items": ["SDQ3", "SDQ8", "SDQ13", "SDQ16", "SDQ24"], "totalItems": 5, "missingTolerance": 2, "rounding": "round", "note": "official SDQ rule: scored when >= 3 of 5 items answered, mean x 5 rounded"}},
+        {"key": "VerhProbl", "label": "Verhaltensprobleme", "formula": {"type": "prorated_sum", "items": ["SDQ5", "SDQ7", "SDQ12", "SDQ18", "SDQ22"], "totalItems": 5, "missingTolerance": 2, "rounding": "round", "note": "official SDQ rule: scored when >= 3 of 5 items answered, mean x 5 rounded"}},
+        {"key": "Hyperak", "label": "Hyperaktivität/Unaufmerksamkeit", "formula": {"type": "prorated_sum", "items": ["SDQ2", "SDQ10", "SDQ15", "SDQ21", "SDQ25"], "totalItems": 5, "missingTolerance": 2, "rounding": "round", "note": "official SDQ rule: scored when >= 3 of 5 items answered, mean x 5 rounded"}},
+        {"key": "VerhProblGleich", "label": "Probleme mit Gleichaltrigen", "formula": {"type": "prorated_sum", "items": ["SDQ6", "SDQ11", "SDQ14", "SDQ19", "SDQ23"], "totalItems": 5, "missingTolerance": 2, "rounding": "round", "note": "official SDQ rule: scored when >= 3 of 5 items answered, mean x 5 rounded"}},
+        {"key": "Prosoz", "label": "Prosoziales Verhalten", "formula": {"type": "prorated_sum", "items": ["SDQ1", "SDQ4", "SDQ9", "SDQ17", "SDQ20"], "totalItems": 5, "missingTolerance": 2, "rounding": "round", "note": "official SDQ rule: scored when >= 3 of 5 items answered, mean x 5 rounded"}},
         {"key": "GesProbl", "label": "Gesamtproblemwert", "formula": {"type": "custom", "expression": "EmoProbl + VerhProbl + Hyperak + VerhProblGleich", "note": "sum of the four problem subscales, excludes Prosoz"}}
       ],
       "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_11_17_Selbstbeurteilung.sav + Syntax_SDQ.sps. Reverse-scored items 7/11/14/21/25 (raw 0-2 recoded to 2-0) before subscale sums. Parent-report variants (ages 2-4 and 4-17) use the same subscale/formula structure with a 'Bezug'/'Bezugsperson' rater field -- see sdq_parent_* entries below."
@@ -183,7 +183,7 @@
       "itemSchemaStatus": "complete",
       "items": "identical structure to sdq_self_11_17",
       "scales": "identical formulas to sdq_self_11_17",
-      "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_2-4_Fremdbeurteilung.sav. Also embedded as the sole instrument in the Standarddiagnostik 'Kleinkinder bis 5 Jahre' battery."
+      "sourceNotes": "Legacy file: Daten_SPSS/SDQ/SDQ_2-4_Fremdbeurteilung.sav. Also embedded as the sole instrument in the Standarddiagnostik 'Kleinkinder bis 5 Jahre' battery. CAVEAT [clinician-confirm]: cloned 1:1 from the 11-17 self-report per the legacy note 'identical structure', but the official SDQ 2-4 parent form substitutes several items (and its own banding); the shared subscale skeleton is a legacy-fidelity assumption, not verified against the published 2-4 form."
     },
     {
       "id": "psc_short_self",
@@ -219,7 +219,7 @@
       "itemSchemaStatus": "complete",
       "items": [{"id": "GG1", "note": "37 items total, GG1-GG37, in the long form used by this clinic; a validated 14-item short form (FGG-14) also exists in the literature"}],
       "scales": [
-        {"key": "GG_Mean", "label": "Gesamtmittelwert", "formula": {"type": "mean", "items": ["GG1", "...GG37"]}},
+        {"key": "GG_Mean", "label": "Gesamtmittelwert", "formula": {"type": "mean", "items": ["GG1", "...GG37"], "missingTolerance": 7, "note": "[clinician-confirm] deliberate divergence from the legacy SPSS MEAN() (which averages ANY number of answered items): a 37-item total mean computed from a handful of answers is not interpretable, so >= 30 of 37 items are required"}},
         {"key": "Index_WP1", "label": "Ambivalenzindex, Paar 1", "formula": {"type": "custom", "expression": "(GG9 * GG25) / (abs(GG9 - GG25) + 1)"}},
         {"key": "Index_WP2", "label": "Ambivalenzindex, Paar 2", "formula": {"type": "custom", "expression": "(GG11 * GG29) / (abs(GG11 - GG29) + 1)"}},
         {"key": "Index_WP3", "label": "Ambivalenzindex, Paar 3", "formula": {"type": "custom", "expression": "(GG24 * GG27) / (abs(GG24 - GG27) + 1)"}},

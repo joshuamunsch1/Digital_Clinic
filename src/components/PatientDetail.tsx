@@ -8,7 +8,7 @@ import type { InstrumentDef } from "@/lib/instruments/types";
 import { isScoreable } from "@/lib/instruments/types";
 import { attendanceFeatures } from "@/lib/analytics/attendance";
 import type { Patient, ResponseRecord, SessionLogRecord, SessionUser, Therapist } from "@/lib/types";
-import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, responsesFor } from "@/lib/types";
+import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, demographicAge, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
 import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, inputStyle } from "./ui";
@@ -239,7 +239,10 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const [dxIcd, setDxIcd] = useState("");
   // Mechanical diagnosis proposal from the therapist-administered DIPS —
   // pre-fills the (still editable) diagnosis form; never auto-saved.
-  const proposal = useMemo(() => (patient.dips ? primaryProposal(patient.dips.answers) : null), [patient.dips]);
+  const proposal = useMemo(
+    () => (patient.dips ? primaryProposal(patient.dips.answers, { age: demographicAge(patient.demographics) }) : null),
+    [patient.dips, patient.demographics],
+  );
   useEffect(() => {
     if (!proposal || patient.diagnosis) return;
     setDxText((prev) => (prev.trim() ? prev : proposal.suggestedText));

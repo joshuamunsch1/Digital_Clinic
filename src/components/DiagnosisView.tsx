@@ -5,7 +5,7 @@ import { T, tr, trCategory } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import type { InstrumentDef } from "@/lib/instruments/types";
 import type { Patient, Therapist } from "@/lib/types";
-import { DISORDER_CATEGORIES } from "@/lib/types";
+import { DISORDER_CATEGORIES, demographicAge } from "@/lib/types";
 import { evaluateDips, primaryProposal, type ModuleEvaluation } from "@/lib/dips/diagnosis";
 import { recommendationsForPatient } from "@/lib/recommendations";
 import { Card, Field, GhostButton, PrimaryButton, SectionTitle, StatusBadge, inputStyle } from "./ui";
@@ -22,7 +22,11 @@ function EvaluationCard({ evaluation, lang }: { evaluation: ModuleEvaluation; la
         <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: C.blueSoft, color: C.blue }}>
           {evaluation.icdCode}
         </span>
-        {met ? (
+        {met && evaluation.suppressed ? (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.blueSoft, color: C.blue }}>
+            {t("icdSuppressedTag")}
+          </span>
+        ) : met ? (
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.spruceSoft, color: C.spruce }}>
             {t("proposalTag")}
           </span>
@@ -72,11 +76,12 @@ export function DiagnosisView({ patient, therapists, instruments, onBack, onSave
 }) {
   const t = useT();
   const { lang } = useLang();
-  const evaluations = useMemo(() => (patient.dips ? evaluateDips(patient.dips.answers) : []), [patient.dips]);
-  const proposal = useMemo(() => (patient.dips ? primaryProposal(patient.dips.answers) : null), [patient.dips]);
+  const age = demographicAge(patient.demographics);
+  const evaluations = useMemo(() => (patient.dips ? evaluateDips(patient.dips.answers, { age }) : []), [patient.dips, age]);
+  const proposal = useMemo(() => (patient.dips ? primaryProposal(patient.dips.answers, { age }) : null), [patient.dips, age]);
   const recommendations = useMemo(
-    () => recommendationsForPatient({ disorderCategory: patient.disorderCategory, dips: patient.dips }),
-    [patient.disorderCategory, patient.dips],
+    () => recommendationsForPatient({ disorderCategory: patient.disorderCategory, dips: patient.dips, demographics: patient.demographics }),
+    [patient.disorderCategory, patient.dips, patient.demographics],
   );
   const [dxText, setDxText] = useState(proposal?.suggestedText ?? "");
   const [dxCategory, setDxCategory] = useState<string>(proposal?.disorderCategory ?? patient.disorderCategory ?? "other");

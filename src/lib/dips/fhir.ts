@@ -70,7 +70,9 @@ function answersForItem(item: Item, m: ModuleAnswers): FhirAnswer[] {
       return ans;
     }
     case "number_label":
-      return v ? [{ valueInteger: Number(v) }] : [];
+      return v !== undefined && v !== null && String(v).trim() !== "" && Number.isFinite(Number(v))
+        ? [{ valueInteger: Number(v) }]
+        : [];
     case "date":
       return v ? [{ valueString: String(v) }] : [];
     case "textarea": {
@@ -123,13 +125,18 @@ function fhirItemsForModuleItem(item: Item, m: ModuleAnswers): FhirItem[] {
 
 export function toFHIR(subject: FhirSubject, record: FhirRecord): QuestionnaireResponse {
   const { answers, lang, completedAt } = record;
-  const groups: FhirItem[] = MODULES.filter((mod) => mod.enter(answers[mod.id] || {})).map((mod) => {
+  // Every module with at least one recorded answer is exported — a negative
+  // screen ("no" on the entry questions) is a documented rule-out, which a
+  // receiving system must be able to distinguish from "not asked". Only
+  // modules with no answers at all are omitted.
+  const groups: FhirItem[] = MODULES.flatMap((mod) => {
     const m = answers[mod.id] || {};
     const children = mod.sections
       .flatMap((s) => s.items)
       .filter((it) => isVisible(it, m))
       .flatMap((it) => fhirItemsForModuleItem(it, m));
-    return { linkId: mod.id, text: tr(mod.title, "en"), item: children };
+    if (!children.length) return [];
+    return [{ linkId: mod.id, text: tr(mod.title, "en"), item: children }];
   });
   const demoItem: FhirItem[] = Object.entries(subject.demographics || {})
     .filter(([, v]) => v)

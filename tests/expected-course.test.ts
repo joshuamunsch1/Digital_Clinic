@@ -78,6 +78,21 @@ describe("classifyOnTrack", () => {
     assert.equal(r.status, "on_track");
   });
 
+  it("a PAST streak no longer pins the flag once the patient is back inside the band", () => {
+    // Sessions 1–2 beyond the boundary, sessions 3–4 recovered: current
+    // status is on track (the old classifier latched the historical streak
+    // and showed the amber banner forever). The course spans sessions 0–3,
+    // so the trailing banded occasions are 11→outside, 2→inside.
+    const r = classifyOnTrack(flat([8, 11, 11, 2]), course, PHQ);
+    assert.equal(r.status, "on_track");
+  });
+
+  it("an ONGOING streak ending at the latest occasion still flags", () => {
+    const r = classifyOnTrack(flat([6, 5, 11, 11]), course, PHQ);
+    assert.equal(r.status, "not_on_track");
+    assert.ok(r.reasons.includes("below_band"));
+  });
+
   it("not on track on baseline-anchored RCI deterioration", () => {
     // 4 → 8 is +4 ≥ cutoff 3, even while staying inside the band at each point.
     const r = classifyOnTrack(flat([4, 5, 6, 8]), course, PHQ);
