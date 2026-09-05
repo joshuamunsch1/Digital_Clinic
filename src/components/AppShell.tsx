@@ -386,6 +386,7 @@ function Shell() {
       </main>
       <footer className="px-4 pb-8 pt-2 text-center">
         <p className="text-xs" style={{ color: C.muted }}>{t("loginFooter")}</p>
+        <p className="text-xs mt-1" style={{ color: C.muted, opacity: 0.75 }}>{t("authorCredit")}</p>
       </footer>
     </div>
   );

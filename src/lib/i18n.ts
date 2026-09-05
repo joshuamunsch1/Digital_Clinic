@@ -105,6 +105,10 @@ export const UI = {
     "Prototyp mit fiktiven Demodaten · nicht für echte Patientendaten",
     "Prototype avec données de démonstration fictives · pas pour de vraies données de patients",
     "Prototype with fictional demo data · not for real patient records"),
+  authorCredit: L(
+    "Konzept und Umsetzung: Joshua Munsch",
+    "Conception et réalisation : Joshua Munsch",
+    "Concept and development: Joshua Munsch"),
 
   // shell
   rolePatient: L("Patient*in", "Patient·e", "Patient"),

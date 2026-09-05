@@ -193,6 +193,7 @@ export function Login({ onLogin, onRegister, busy }: {
         )}
 
         <p className="text-xs text-center mt-6" style={{ color: C.muted }}>{t("loginFooter")}</p>
+        <p className="text-xs text-center mt-1" style={{ color: C.muted, opacity: 0.75 }}>{t("authorCredit")}</p>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Fribourg Clinic",
   description: "Therapy progress platform (prototype)",
+  authors: [{ name: "Joshua Munsch" }],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
