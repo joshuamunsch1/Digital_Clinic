@@ -84,18 +84,41 @@ export async function addParticipant(
   });
 }
 
+/// invite_participants / remind_participants report the outcome PER MAIL,
+/// keyed by participant id: { "<tid>": { status: "OK" | "fail", error }, ... }.
+/// The top-level `status` is always overwritten with "N left to send" — even
+/// when the send failed (LimeSurvey 6: remotecontrol_handle.php sets it after
+/// emailTokens() in helpers/admin/token_helper.php). rpc()'s top-level check
+/// therefore cannot see an SMTP failure; without this, a rejected mail would
+/// be recorded as sent.
+export function assertMailed(method: string, result: unknown, tokenId: string): void {
+  const entry =
+    result && typeof result === "object" ? (result as Record<string, unknown>)[tokenId] : undefined;
+  if (!entry || typeof entry !== "object")
+    throw new LimesurveyError(`LimeSurvey ${method}: no send result for participant ${tokenId}: ${JSON.stringify(result)}`);
+  const { status, error } = entry as { status?: unknown; error?: unknown };
+  if (status !== "OK")
+    throw new LimesurveyError(`LimeSurvey ${method}: mail not sent — ${typeof error === "string" && error ? error : String(status)}`);
+}
+
 /// Send the invitation e-mail through LimeSurvey's own mailer.
 export async function inviteParticipant(surveyId: string, tokenId: string): Promise<void> {
   const cfg = limesurveyConfig();
   if (!cfg) throw new LimesurveyError("LimeSurvey is not configured");
-  await withSession(cfg, (key) => rpc(cfg, "invite_participants", [key, surveyId, [tokenId], true]));
+  const result = await withSession(cfg, (key) =>
+    rpc<unknown>(cfg, "invite_participants", [key, surveyId, [tokenId], true]),
+  );
+  assertMailed("invite_participants", result, tokenId);
 }
 
 /// Send a reminder e-mail (only reaches participants who have not completed).
 export async function remindParticipant(surveyId: string, tokenId: string): Promise<void> {
   const cfg = limesurveyConfig();
   if (!cfg) throw new LimesurveyError("LimeSurvey is not configured");
-  await withSession(cfg, (key) => rpc(cfg, "remind_participants", [key, surveyId, 0, 10, [tokenId]]));
+  const result = await withSession(cfg, (key) =>
+    rpc<unknown>(cfg, "remind_participants", [key, surveyId, 0, 10, [tokenId]]),
+  );
+  assertMailed("remind_participants", result, tokenId);
 }
 
 /// Direct tokenised survey URL (what the invitation e-mail links to).
@@ -115,8 +138,17 @@ export async function exportResponseByToken(
   return withSession(cfg, async (key) => {
     let encoded: string;
     try {
+      // sHeadingType "code"  -> column keys are the LimeSurvey question codes
+      //                        (matched against item ids / limesurveyMapping).
+      // sResponseType "short" -> values are the ANSWER CODES, not the answer
+      //                        label texts. Must stay "short": the scoring
+      //                        engine expects numeric values, and "long" would
+      //                        deliver e.g. "trifft eher zu", which turns every
+      //                        scale into "not computable". Answer codes in
+      //                        LimeSurvey must therefore be the numeric item
+      //                        values. See docs/limesurvey-integration.md §4.
       encoded = await rpc<string>(cfg, "export_responses_by_token", [
-        key, surveyId, "json", token, null, "complete", "code", "long",
+        key, surveyId, "json", token, null, "complete", "code", "short",
       ]);
     } catch (e) {
       // "No Response found for Token" is the normal not-finished-yet case

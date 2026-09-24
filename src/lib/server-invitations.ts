@@ -3,6 +3,7 @@
 // the notify endpoint that LimeSurvey's end-URL/webhook hits on completion).
 import { prisma } from "./db";
 import { exportResponseByToken } from "./limesurvey";
+import { OPEN_INVITATION_STATUSES } from "./reminders";
 import { createResponse, extractRawAnswers, loadInstrument } from "./server-instruments";
 import type { InvitationContext } from "./types";
 
@@ -54,7 +55,11 @@ export async function syncInvitations(patientId?: string) {
   const open = await prisma.questionnaireInvitation.findMany({
     where: {
       channel: "limesurvey", // in_app tasks complete in-app, never via LimeSurvey
-      status: { in: ["invited", "reminded"] },
+      // The whole OPEN set, including "created": when LimeSurvey accepted the
+      // participant but the invitation mail failed, the token is still valid and
+      // the patient may have been given the link by other means.
+      // Tokenless rows are skipped by importCompletedInvitation.
+      status: { in: [...OPEN_INVITATION_STATUSES] },
       ...(patientId ? { patientId } : {}),
     },
   });

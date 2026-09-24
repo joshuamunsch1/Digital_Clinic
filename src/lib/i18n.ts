@@ -265,6 +265,48 @@ export const UI = {
   recipientEmail: L("Empfänger-E-Mail", "E-mail du destinataire", "Recipient e-mail"),
   surveyIdLinked: L("LimeSurvey-Umfrage-ID (verknüpft: {id})", "ID du sondage LimeSurvey (lié : {id})", "LimeSurvey survey id (linked: {id})"),
   surveyIdUnlinked: L("LimeSurvey-Umfrage-ID (noch nicht verknüpft)", "ID du sondage LimeSurvey (pas encore lié)", "LimeSurvey survey id (not linked yet)"),
+  // Instrument-level code mapping: LimeSurvey question code -> catalog item id.
+  mappingToggle: L("Fragencode-Zuordnung", "Correspondance des codes", "Question-code mapping"),
+  mappingHint: L(
+    "Nur nötig, wenn die Fragencodes in LimeSurvey nicht genau den Item-IDs entsprechen — z. B. bei einer Array-Frage, die als «CODE[Item]» exportiert wird. Ohne passende Zuordnung werden unbekannte Spalten beim Import stillschweigend verworfen.",
+    "Nécessaire uniquement si les codes de questions dans LimeSurvey ne correspondent pas exactement aux identifiants d'items — p. ex. une question matricielle exportée comme « CODE[item] ». Sans correspondance, les colonnes inconnues sont ignorées silencieusement à l'import.",
+    "Only needed when the LimeSurvey question codes do not exactly equal the item ids — e.g. an array question, which exports as \"CODE[item]\". Without a matching entry, unknown columns are silently dropped on import."),
+  mappingArrayCode: L("Code der Array-Frage", "Code de la question matricielle", "Array question code"),
+  mappingGenerate: L("Zuordnung erzeugen", "Générer la correspondance", "Generate mapping"),
+  mappingJson: L("Zuordnung (JSON: Fragencode → Item-ID)", "Correspondance (JSON : code → identifiant d'item)", "Mapping (JSON: question code → item id)"),
+  mappingItemIds: L("Item-IDs dieses Instruments: {ids}", "Identifiants d'items de cet instrument : {ids}", "Item ids of this instrument: {ids}"),
+  mappingSave: L("Zuordnung speichern", "Enregistrer la correspondance", "Save mapping"),
+  mappingSaved: L("Zuordnung gespeichert ({n} Einträge).", "Correspondance enregistrée ({n} entrées).", "Mapping saved ({n} entries)."),
+  mappingCleared: L("Zuordnung entfernt.", "Correspondance supprimée.", "Mapping removed."),
+  mappingInvalid: L("Kein gültiges JSON-Objekt (erwartet: {\"Fragencode\": \"ItemID\"}).", "JSON invalide (attendu : {\"code\": \"itemID\"}).", "Not a valid JSON object (expected {\"questionCode\": \"itemId\"})."),
+  mappingUnknownItems: L("Unbekannte Item-IDs: {ids}", "Identifiants d'items inconnus : {ids}", "Unknown item ids: {ids}"),
+  surveyLink: L("Umfrage-Link", "Lien du sondage", "Survey link"),
+  surveyLinkHint: L(
+    "Persönlicher Token-Link — nur weitergeben, wenn die E-Mail nicht angekommen ist.",
+    "Lien personnel avec jeton — à transmettre uniquement si l'e-mail n'est pas arrivé.",
+    "Personal tokenised link — hand it over only if the e-mail did not arrive."),
+  // Public thank-you page after a LimeSurvey questionnaire (/survey-complete).
+  surveyDoneTitle: L("Vielen Dank!", "Merci beaucoup !", "Thank you!"),
+  surveyDoneBody: L(
+    "Ihre Antworten wurden übermittelt. Sie können dieses Fenster jetzt schließen.",
+    "Vos réponses ont été transmises. Vous pouvez maintenant fermer cette fenêtre.",
+    "Your answers have been submitted. You can close this window now."),
+  surveyDoneUse: L(
+    "Ihre Angaben stehen Ihrer Therapeutin bzw. Ihrem Therapeuten für die weitere Behandlung zur Verfügung.",
+    "Vos réponses sont à la disposition de votre thérapeute pour la suite du traitement.",
+    "Your answers are available to your therapist for your ongoing treatment."),
+  // [clinician-confirm] Wording and numbers are Swiss national services, chosen
+  // because questionnaire answers are NOT read in real time — a patient who
+  // reports acute distress must not assume someone is watching. The clinic
+  // should confirm the text and may want to add its own emergency contact.
+  surveyDoneCrisis: L(
+    "Ihre Antworten werden nicht laufend überwacht. Wenn es Ihnen gerade sehr schlecht geht oder Sie an Suizid denken, warten Sie bitte nicht bis zur nächsten Sitzung:",
+    "Vos réponses ne sont pas surveillées en continu. Si vous allez très mal en ce moment ou si vous pensez au suicide, n'attendez pas la prochaine séance :",
+    "Your answers are not monitored continuously. If you are feeling very bad right now or are thinking about suicide, please do not wait for your next session:"),
+  // \u00a0 (non-breaking space) keeps "Telefon 143" / "24 h/24" together on phones.
+  crisis143: L("Die Dargebotene Hand — Telefon\u00a0143 (rund um die Uhr)", "La Main Tendue — téléphone\u00a0143 (24\u00a0h/24)", "Die Dargebotene Hand / La Main Tendue — phone\u00a0143 (24/7)"),
+  crisis147: L("Kinder und Jugendliche: Pro Juventute — Telefon\u00a0147", "Enfants et jeunes\u00a0: Pro Juventute — téléphone\u00a0147", "Children and young people: Pro Juventute — phone\u00a0147"),
+  crisis144: L("Notfall: 144", "Urgences\u00a0: 144", "Emergency: 144"),
   sendInvitation: L("Einladung senden", "Envoyer l'invitation", "Send invitation"),
   inviteHint: L(
     "Sendet den persönlichen Umfrage-Link über den LimeSurvey-Mailer. Erinnerungen unten in der Liste.",

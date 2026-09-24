@@ -150,22 +150,45 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
 
+  // Two steps, persisted separately ON PURPOSE. add_participants creates the
+  // token in LimeSurvey; invite_participants sends the mail through LimeSurvey's
+  // mailer and is the step that fails when SMTP is misconfigured. Storing the
+  // token only after a successful send would strand that participant: the token
+  // exists in LimeSurvey but not here, so sync/notify could never match the
+  // response and the therapist would have to re-send. Persist the token first —
+  // a failed mail then leaves a usable link the therapist can hand over, and a
+  // response that arrives anyway is still imported.
   try {
     const [firstname, ...rest] = patient.name.split(" ");
     const participant = await addParticipant(surveyId, { email, firstname, lastname: rest.join(" ") || firstname });
-    await inviteParticipant(surveyId, participant.tid);
-    const sentAt = new Date();
     await prisma.questionnaireInvitation.update({
       where: { id: invitation.id },
       data: {
         token: participant.token,
         tokenId: participant.tid,
         url: surveyUrl(cfg.url, surveyId, participant.token),
-        status: "invited",
-        sentAt,
-        nextReminderAt: remindEveryDays ? nextReminderAfter(remindEveryDays, sentAt) : null,
       },
     });
+    try {
+      await inviteParticipant(surveyId, participant.tid);
+      const sentAt = new Date();
+      await prisma.questionnaireInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: "invited",
+          sentAt,
+          nextReminderAt: remindEveryDays ? nextReminderAfter(remindEveryDays, sentAt) : null,
+          lastError: null,
+        },
+      });
+    } catch (e) {
+      // Token kept, status "created" -> still an OPEN invitation, so the sweep
+      // and "Sync now" keep watching it and the link stays valid.
+      await prisma.questionnaireInvitation.update({
+        where: { id: invitation.id },
+        data: { lastError: `Einladung nicht versendet: ${(e as Error).message}` },
+      });
+    }
   } catch (e) {
     await prisma.questionnaireInvitation.update({
       where: { id: invitation.id },

@@ -96,6 +96,122 @@ function ScheduleEditor({ inv, onSave }: {
 /// form) or LimeSurvey CSV import.
 type CollectMode = "limesurvey" | "in_app" | "manual" | "csv";
 
+/// Instrument-level LimeSurvey question-code mapping ({ lsQuestionCode: itemId }).
+/// Needed whenever the survey's codes are not literally the catalog item ids —
+/// most often because the items sit in ONE array question, which LimeSurvey
+/// exports as "QCODE[SQCODE]" (and because its code validator may reject the
+/// underscores in ids like BDI1_Traurigkeit). Unmapped columns are dropped
+/// silently by extractRawAnswers, so a wrong mapping looks like "no answers".
+/// Saved on the Instrument row via PATCH /api/instruments/:id; the importer
+/// reads it server-side, so this component deliberately does not refresh the
+/// clinic payload — render it with key={inst.id} so it reseeds per instrument.
+function MappingEditor({ inst }: { inst: InstrumentDef }) {
+  const t = useT();
+  const itemIds = useMemo(() => inst.items.map((i) => i.id), [inst]);
+  const [open, setOpen] = useState(false);
+  const [arrayCode, setArrayCode] = useState("");
+  const [json, setJson] = useState(() => {
+    const m = inst.limesurveyMapping ?? {};
+    return Object.keys(m).length ? JSON.stringify(m, null, 1) : "";
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const generate = () => {
+    const code = arrayCode.trim();
+    if (!code) return;
+    setJson(JSON.stringify(Object.fromEntries(itemIds.map((id) => [`${code}[${id}]`, id])), null, 1));
+    setErr(null);
+    setMsg(null);
+  };
+
+  const save = async () => {
+    const text = json.trim();
+    let mapping: Record<string, string> = {};
+    if (text) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        setErr(t("mappingInvalid"));
+        return;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setErr(t("mappingInvalid"));
+        return;
+      }
+      const entries = Object.entries(parsed as Record<string, unknown>);
+      if (entries.some(([, v]) => typeof v !== "string")) {
+        setErr(t("mappingInvalid"));
+        return;
+      }
+      mapping = Object.fromEntries(entries as [string, string][]);
+      const unknown = [...new Set(Object.values(mapping))].filter((v) => !itemIds.includes(v));
+      if (unknown.length) {
+        setErr(t("mappingUnknownItems", { ids: unknown.join(", ") }));
+        return;
+      }
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.linkInstrumentSurvey(inst.id, { limesurveyMapping: mapping });
+      const n = Object.keys(mapping).length;
+      setJson(n ? JSON.stringify(mapping, null, 1) : "");
+      setMsg(n ? t("mappingSaved", { n }) : t("mappingCleared"));
+    } catch (e) {
+      setErr(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const active = Object.keys(inst.limesurveyMapping ?? {}).length;
+  if (!open) {
+    return (
+      <div className="mt-2">
+        <GhostButton small onClick={() => setOpen(true)}>
+          {t("mappingToggle")}{active ? ` (${active})` : ""}
+        </GhostButton>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg p-3 mt-2" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold" style={{ color: C.ink }}>{t("mappingToggle")}</p>
+        <GhostButton small onClick={() => setOpen(false)}>✕</GhostButton>
+      </div>
+      <p className="text-xs mt-1" style={{ color: C.muted }}>{t("mappingHint")}</p>
+      <div className="flex items-end gap-2 flex-wrap mt-2">
+        <Field label={t("mappingArrayCode")}>
+          <input style={{ ...inputStyle, width: 150 }} placeholder="z. B. BDIFS" value={arrayCode}
+            onChange={(e) => setArrayCode(e.target.value)} />
+        </Field>
+        <GhostButton small disabled={!arrayCode.trim()} onClick={generate}>{t("mappingGenerate")}</GhostButton>
+      </div>
+      <div className="mt-2">
+        <Field label={t("mappingJson")}>
+          <textarea style={{ ...inputStyle, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} rows={5}
+            placeholder={'{ "BDIFS[BDI1_Traurigkeit]": "BDI1_Traurigkeit" }'}
+            value={json} onChange={(e) => { setJson(e.target.value); setErr(null); setMsg(null); }} />
+        </Field>
+      </div>
+      <p className="text-xs mt-1" style={{ color: C.muted, fontFamily: "monospace", wordBreak: "break-all" }}>
+        {t("mappingItemIds", { ids: itemIds.join(", ") })}
+      </p>
+      <div className="flex items-center gap-3 flex-wrap mt-2">
+        <PrimaryButton small disabled={busy} onClick={() => void save()}>
+          {busy ? t("working") : t("mappingSave")}
+        </PrimaryButton>
+        {msg && <p className="text-xs" style={{ color: C.spruce }}>✓ {msg}</p>}
+        {err && <p className="text-xs" style={{ color: C.danger }}>{err}</p>}
+      </div>
+    </div>
+  );
+}
+
 function NewRequestForm({ patient, instruments, configured, onDone, onStartManualEntry }: {
   patient: Patient;
   instruments: InstrumentDef[];
@@ -254,6 +370,7 @@ function NewRequestForm({ patient, instruments, configured, onDone, onStartManua
           )}
         </div>
       )}
+      {effectiveMode === "limesurvey" && <MappingEditor key={inst.id} inst={inst} />}
       {effectiveMode === "csv" && (
         <div className="mt-2">
           <textarea style={{ ...inputStyle, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} rows={3}
@@ -636,6 +753,19 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
         <div className="mt-1">
           <ScheduleEditor inv={inv} onSave={(days, max) => { if (!busy) void run(() => api.scheduleInvitation(inv.id, days, max), t("scheduleSaved")); }} />
         </div>
+      )}
+      {/* The tokenised link. Mainly a recovery path: when LimeSurvey took the
+          participant but the mail did not go out, this is still a valid way for
+          the patient to reach the survey — and the only way to complete the
+          loop while SMTP is being set up. */}
+      {withActions && !readOnly && inv.channel === "limesurvey" && inv.url && (
+        <p className="text-xs mt-1 flex items-baseline gap-2 flex-wrap">
+          <a href={inv.url} target="_blank" rel="noopener noreferrer"
+            style={{ color: C.blue, textDecoration: "underline", wordBreak: "break-all" }}>
+            {t("surveyLink")} ↗
+          </a>
+          <span style={{ color: C.muted }}>{t("surveyLinkHint")}</span>
+        </p>
       )}
       {inv.lastError && <p className="text-xs mt-1" style={{ color: C.danger }}>{inv.lastError}</p>}
     </div>

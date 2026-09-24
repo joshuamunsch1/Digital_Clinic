@@ -54,6 +54,13 @@ LimeSurvey does not push webhooks out of the box. Three options, best first:
    URL automatically" enabled — the participant's browser pings us on completion and
    the same pull-by-token runs. Caveat: doesn't fire if the participant closes the
    tab at the "thank you" page before the redirect; treat it as best-effort.
+   After the pull, the browser is redirected (303) to the app's public thank-you
+   page `/survey-complete` — identical for every outcome, so the unauthenticated
+   URL never reveals whether a token exists; the outcome is written to the server
+   log as `[limesurvey/notify] sid=… -> imported`. The page also states that
+   answers are not monitored in real time and lists Swiss crisis lines
+   (143 / 147 / 144) — wording `[clinician-confirm]`. The POST (webhook) variant
+   keeps answering JSON.
 3. **Polling** (always works wherever the API works). A "Sync now" action (and/or a
    cron) walks the open invitations and pulls any that LimeSurvey reports complete.
    Implemented as `POST /api/limesurvey/sync`; this is the reliable safety net under
@@ -81,7 +88,22 @@ questionnaires and legacy data — the therapist can:
 - **Question codes in LimeSurvey must equal the instrument's item ids** in
   `docs/instrument-catalog.json` (e.g. `SDQ1`…`SDQ25`, `BDI1_Traurigkeit`). If a
   survey already exists with different codes, set a mapping on the instrument
-  (`limesurveyMapping`, JSON `{ "lsCode": "itemId" }`) instead of renaming.
+  (`limesurveyMapping`, JSON `{ "lsCode": "itemId" }`) instead of renaming —
+  editable from the send form's "Fragencode-Zuordnung" panel, which can generate
+  the whole map for an array question in one click. Two cases make the mapping
+  the rule rather than the exception: an **array question** exports its columns
+  as `QCODE[SQCODE]`, and LimeSurvey's code validator may reject the underscores
+  in ids like `BDI1_Traurigkeit`. Columns that match no item id are dropped
+  silently by `extractRawAnswers`, so a missing mapping looks like "the patient
+  answered nothing", not like an error.
+- **Answer codes must be the numeric item values** (`0`/`1`/`2`/`3`, …), because
+  `exportResponseByToken` asks LimeSurvey for answer *codes*, not answer texts
+  (`sResponseType: "short"`), and the scoring engine reads them as numbers. The
+  label shown to the patient stays whatever German wording the instrument uses —
+  only the code behind it has to be the score. Instruments whose scale includes
+  negative values (PSTB, −3…+3) cannot be expressed this way if the LimeSurvey
+  instance rejects non-alphanumeric answer codes; they are in-app/manual-entry
+  measures anyway.
 - Surveys must be **closed-access (token-based), with "anonymized responses" OFF**,
   otherwise responses can't be attributed to a patient.
 - Each instrument stores its LimeSurvey survey id (`limesurveySurveyId`); the app's
@@ -91,7 +113,44 @@ Environment variables (see `.env.example`): `LIMESURVEY_URL`,
 `LIMESURVEY_USERNAME`, `LIMESURVEY_PASSWORD`. If unset, the invitation UI degrades
 gracefully (explains what's missing; CSV/manual import still works).
 
-## 5. Open points to decide with the clinic
+`npm run ls:check` is a read-only connection diagnostic: it verifies the three
+env vars, authenticates, and lists every survey with its id. `npm run ls:check --
+<sid>` additionally reports that survey's active/anonymized/end-URL settings,
+whether it has a participants table, and its question codes — the values this
+section says must line up.
+
+## 5. Testing the loop locally
+
+`docker-compose.limesurvey-test.yml` brings up LimeSurvey + MariaDB + **Mailpit**
+(a catch-all SMTP sink with a web inbox at `localhost:8025`). LimeSurvey sends
+invitations to Mailpit, so the full loop — invite, open the tokenised link,
+submit, pull back, score, chart — runs end to end with no mail leaving the
+machine. `npm run ls:check` verifies the connection before any of it.
+
+Three behaviours that matter while SMTP is still being set up:
+
+- The participant token is stored **before** the invitation mail is attempted.
+  A failed send leaves the invitation OPEN in status `created` with its
+  `lastError` shown, not dead — the token stays valid, the sweep and "Sync now"
+  keep watching it, and a response that arrives anyway is still imported. Only a
+  failure to create the participant at all yields the terminal `error` status.
+- The tokenised link is shown on the invitation row, so a therapist can hand it
+  over when a patient says the mail never arrived (and so a local test is not
+  blocked on a working mailer).
+- A rejected mail is detected. `invite_participants` / `remind_participants`
+  report the outcome per participant (`{ "<tid>": { status: "OK" | "fail",
+  error } }`) and always overwrite the top-level `status` with "N left to send"
+  (verified in LimeSurvey 6.17 source), so `assertMailed()` in
+  `src/lib/limesurvey.ts` checks the per-participant entry. Mailpit accepts
+  everything; this only bites against a real mail server.
+
+SMTP is configured **once**, globally in LimeSurvey — it defines the sending
+mailbox, not the recipients. Per patient only the recipient address is needed,
+and that comes from the patient record. For clinic use the sending mailbox must
+be an institutional account (not a personal Gmail/GMX), ideally with SPF/DKIM
+set up for the sender domain so invitations do not land in spam.
+
+## 6. Open points to decide with the clinic
 
 - **Hosting**: self-hosted Community Edition (full control, webhook plugin possible,
   but the clinic operates the server) vs. LimeSurvey Cloud (managed, but API

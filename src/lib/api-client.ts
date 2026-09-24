@@ -136,8 +136,14 @@ export const api = {
     post("/api/patients", payload).then((r) => handle<{ patient: Patient }>(r)),
 
   getInstruments: () => fetch("/api/instruments").then((r) => handle<{ instruments: InstrumentDef[] }>(r)),
-  linkInstrumentSurvey: (id: string, limesurveySurveyId: string | null) =>
-    patch(`/api/instruments/${id}`, { limesurveySurveyId }).then((r) => handle<{ instrument: InstrumentDef }>(r)),
+  /// Instrument-level LimeSurvey config: the survey id and, when the survey's
+  /// question codes differ from the instrument's item ids (array questions
+  /// export as "QCODE[SQCODE]", underscores may be rejected by LimeSurvey's
+  /// code validator), the { lsQuestionCode: itemId } mapping the importer uses.
+  linkInstrumentSurvey: (
+    id: string,
+    payload: { limesurveySurveyId?: string | null; limesurveyMapping?: Record<string, string> },
+  ) => patch(`/api/instruments/${id}`, payload).then((r) => handle<{ instrument: InstrumentDef }>(r)),
 
   submitAssessment: (id: string, demo: Demographics) =>
     post(`/api/patients/${id}/assessment`, { demo }).then((r) => handle<{ patient: Patient }>(r)),

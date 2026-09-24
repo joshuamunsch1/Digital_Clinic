@@ -16,6 +16,7 @@
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "sim:purge": "tsx prisma/purge-simulated.ts",
+    "ls:check": "tsx scripts/limesurvey-check.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
