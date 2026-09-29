@@ -17,6 +17,7 @@ import { MonitoringView } from "./MonitoringView";
 import { OutcomesView } from "./OutcomesView";
 import { PatientDetail } from "./PatientDetail";
 import { ArchiveView } from "./ArchiveView";
+import { DataEntryView } from "./DataEntryView";
 import { LangProvider, LangSwitcher, useT } from "./LangContext";
 import type { RegisterPatientPayload } from "@/lib/api-client";
 
@@ -229,6 +230,7 @@ function Shell() {
     therapist: t("roleTherapist"),
     director: t("roleDirector"),
     admin: t("roleAdmin"),
+    intern: t("roleIntern"),
   }[user.role];
   const therapists = data?.therapists ?? [];
   const instruments = data?.instruments ?? [];
@@ -295,7 +297,12 @@ function Shell() {
           />
         )}
 
-        {isStaff && data && view.name === "home" && (
+        {/* Interns (Batch 16): code-keyed paper entry only — no dashboard, no
+            patient lists (their clinic payload carries no patients at all). */}
+        {user.role === "intern" && data && view.name === "home" && (
+          <DataEntryView instruments={instruments} />
+        )}
+        {isStaff && user.role !== "intern" && data && view.name === "home" && (
           <Dashboard data={data} user={user} onOpenPatient={(id) => setView({ name: "patient-detail", patientId: id })} onAssign={assignTherapist} onRegisterPatient={registerPatient}
             onOpenMonitoring={user.role === "therapist" || user.role === "director" ? () => setView({ name: "monitoring" }) : undefined}
             onOpenArchive={() => setView({ name: "archive" })}

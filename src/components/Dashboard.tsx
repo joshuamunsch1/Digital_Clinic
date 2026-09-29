@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { Card, Field, MiniTrend, PrimaryButton, SectionTitle, Stat, StatusBadge, TrendArrow, inputStyle } from "./ui";
 import { GlobalChart } from "./charts";
+import { StaffInternsCard } from "./StaffInternsCard";
 import { archivedPatientsFor } from "./ArchiveView";
 import { CaseloadCockpit } from "./Cockpit";
 import { EarlyChangeBadge } from "./PredictionPanel";
@@ -497,6 +498,9 @@ export function Dashboard({ data, user, onOpenPatient, onAssign, onRegisterPatie
           </div>
         </Card>
       )}
+
+      {/* Intern (Praktikant:innen) logins for paper-form entry — director only. */}
+      {isDirector && <StaffInternsCard />}
 
       {/* Low-priority entry point to the archive of concluded treatments —
           deliberately at the very bottom of the page. Not shown to admin. */}

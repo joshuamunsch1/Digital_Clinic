@@ -11,9 +11,13 @@ import type { Patient, ResponseRecord, SessionLogRecord, SessionUser, Therapist 
 import { DIPS_INSTRUMENT_ID, DISORDER_CATEGORIES, TERMINATION_REASONS, activeAlerts, currentGoalRating, demographicAge, responsesFor } from "@/lib/types";
 import type { PredictionPayload } from "@/lib/prediction/service";
 import { primaryProposal } from "@/lib/dips/diagnosis";
-import { Card, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, inputStyle } from "./ui";
-import { ScoreTable, SummaryStrip, TrajectoryChart, occasionOf, type ChartPrediction } from "./charts";
+import { STANDARD_DOC_SEQUENCE, standardDocsPresent } from "@/lib/document-types";
+import { Card, CollapsibleCard, Field, GhostButton, MiniTrend, PrimaryButton, StatusBadge, inputStyle } from "./ui";
+import { ScoreTable, SummaryStrip, TrajectoryChart, hasNativeAxis, occasionOf, type ChartPrediction, type ChartXMode } from "./charts";
 import { ItemHeatmap, ProcessProfile } from "./heatmap";
+import { AnswersView, ResponseDetail } from "./ResponseDetail";
+import { previousResponse } from "@/lib/instruments/response-diff";
+import { rawDataCsv, rawDataFileName } from "@/lib/raw-export";
 import { GoalLevelChip } from "./GoalLadder";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { InstrumentForm } from "./InstrumentForm";
@@ -32,8 +36,14 @@ function DefinitionBadge({ instrument }: { instrument: InstrumentDef }) {
   );
 }
 
-/// One individual filled-out questionnaire, expandable to its raw answers.
-function ResponseRow({ instrument, response, therapists }: { instrument: InstrumentDef; response: ResponseRecord; therapists: Therapist[] }) {
+/// One individual filled-out questionnaire, expandable to its item-level
+/// answers (ResponseDetail, compared with the same rater's previous response).
+function ResponseRow({ instrument, response, responses, therapists }: {
+  instrument: InstrumentDef;
+  response: ResponseRecord;
+  responses: ResponseRecord[];
+  therapists: Therapist[];
+}) {
   const t = useT();
   const { lang } = useLang();
   const [open, setOpen] = useState(false);
@@ -46,37 +56,13 @@ function ResponseRow({ instrument, response, therapists }: { instrument: Instrum
         <span className="text-xs" style={{ color: C.muted }}>
           {fmtDate(response.occurredAt)} · {trRaterRole(response.respondentRole, lang)} · {t("via")} {trSource(response.source, lang)}
           {conductedBy ? ` · ${t("conductedBy")}: ${conductedBy.name}` : ""}
+          {response.enteredBy ? ` · ${t("enteredByLine", { name: response.enteredBy.name })}` : ""}
         </span>
         <span className="ml-auto text-xs" style={{ color: C.spruce }}>{open ? t("hideAnswers") : t("viewAnswers")}</span>
       </button>
       {open && (
         <div className="px-3 pb-3">
-          <table className="text-xs w-full" style={{ borderCollapse: "collapse" }}>
-            <tbody>
-              {instrument.items.length
-                ? instrument.items.map((it) => (
-                    <tr key={it.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td className="py-1 pr-3" style={{ color: C.muted }}>{it.text ?? it.label}{it.reverseScored ? ` ${t("reverseScored")}` : ""}</td>
-                      <td className="py-1 text-right" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>{response.rawAnswers[it.id] ?? "—"}</td>
-                    </tr>
-                  ))
-                : Object.entries(response.rawAnswers).map(([k, v]) => (
-                    <tr key={k} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td className="py-1 pr-3" style={{ color: C.muted }}>{k}</td>
-                      <td className="py-1 text-right" style={{ color: C.ink }}>{typeof v === "object" ? JSON.stringify(v) : String(v)}</td>
-                    </tr>
-                  ))}
-              {Object.entries(response.scores).length > 0 && (
-                <tr style={{ borderTop: `2px solid ${C.line}` }}>
-                  <td className="py-1 pr-3 font-bold" style={{ color: C.spruce }}>{t("computedScores")}</td>
-                  <td className="py-1 text-right" style={{ color: C.spruce, fontVariantNumeric: "tabular-nums" }}>
-                    {instrument.scales.filter((s) => response.scores[s.key] !== undefined).map((s) => `${s.label}: ${response.scores[s.key]}`).join(" · ")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          {response.note && <p className="text-xs mt-2" style={{ color: C.ink }}>{t("noteQuote")}: “{response.note}”</p>}
+          <ResponseDetail instrument={instrument} response={response} previous={previousResponse(responses, response)} therapists={therapists} />
         </div>
       )}
     </div>
@@ -124,7 +110,14 @@ function AttendanceStrip({ responses, sessionLogs }: {
   );
 }
 
-function InstrumentCard({ instrument, responses, therapists, chartPrediction, selector, sessionLogs }: {
+function InstrumentCard({ instrument, responses, therapists, chartPrediction, selector, sessionLogs, bare, patientCode, initialView }: {
+  /// Rendered inside the dossier's collapsible "Fragebogen-Verläufe" section
+  /// (no own card; the section header carries the title).
+  bare?: boolean;
+  /// Research code — the raw-data CSV is pseudonymous (code, never the name).
+  patientCode: string | null;
+  /// Forced initial sub-view (SummaryStrip pill jump → latest answers).
+  initialView?: "answers";
   instrument: InstrumentDef;
   responses: ResponseRecord[];
   therapists: Therapist[];
@@ -147,19 +140,60 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
   // key={instrument.id} on this card resets the mode per instrument.
   const hasItemAnswers = instrument.items.length > 0 && responses.some((r) => Object.keys(r.rawAnswers).length > 0);
   const hasProcessProfile = scoreable && instrument.cadenceType === "every_session" && instrument.scales.length >= 3;
-  const [subView, setSubView] = useState<"table" | "items" | "process">("table");
+  // "Antworten" (Batch 16) leads: what the patient answered this time, item by
+  // item, against last time — the view therapists open at the start of a session.
+  const [subView, setSubView] = useState<"answers" | "table" | "items" | "process">(
+    initialView ?? (hasItemAnswers ? "answers" : "table"),
+  );
+  const [selectedResponseId, setSelectedResponseId] = useState<string | null>(null);
+  // x-axis of the trajectory chart: calendar date (default) or the native
+  // session/wave axis. A per-viewer preference, remembered across dossiers.
+  const [xMode, setXModeState] = useState<ChartXMode>(() => {
+    try {
+      return window.localStorage.getItem(X_MODE_KEY) === "native" ? "native" : "date";
+    } catch {
+      return "date";
+    }
+  });
+  const setXMode = (m: ChartXMode) => {
+    setXModeState(m);
+    try {
+      window.localStorage.setItem(X_MODE_KEY, m);
+    } catch {
+      // preference simply not remembered
+    }
+  };
+  const nativeAxis = hasNativeAxis(instrument);
+  const answerResponses = responses.filter((r) => Object.keys(r.rawAnswers).length > 0);
+  // Chart point / heatmap column → that response's answers.
+  const openResponse = (ids: string[]) => {
+    const id = ids.find((x) => answerResponses.some((r) => r.id === x));
+    if (!id) return;
+    setSelectedResponseId(id);
+    setSubView("answers");
+  };
+  const downloadRaw = () => {
+    const blob = new Blob([rawDataCsv(instrument, responses, patientCode)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = rawDataFileName(instrument, patientCode);
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const subViews: { key: typeof subView; label: string; show: boolean }[] = [
+    { key: "answers", label: t("answersTab"), show: hasItemAnswers },
     { key: "table", label: t("tableTab"), show: scoreable },
     { key: "items", label: t("itemsTab"), show: hasItemAnswers },
     { key: "process", label: t("processTab"), show: hasProcessProfile },
   ];
   const shownViews = subViews.filter((v) => v.show);
   const activeView = shownViews.some((v) => v.key === subView) ? subView : (shownViews[0]?.key ?? "table");
-  return (
-    <Card className="p-5 mb-4">
+  const content = (
+    <>
       {selector && (
         <div className="flex items-center gap-3 flex-wrap mb-3">
-          <span className="text-xs font-bold" style={{ color: C.muted }}>{t("courseCardTitle")}</span>
+          {!bare && <span className="text-xs font-bold" style={{ color: C.muted }}>{t("courseCardTitle")}</span>}
           {selector}
         </div>
       )}
@@ -168,16 +202,38 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
         <DefinitionBadge instrument={instrument} />
         <span className="ml-auto text-xs" style={{ color: C.muted }}>{responses.length} {t("responsesN")}</span>
       </div>
-      <p className="text-xs mb-3" style={{ color: C.muted }}>
-        {trRaterRole(instrument.raterRole, lang)} · {trCadence(instrument.cadenceType, lang)} · {trPopulation(instrument.population, lang)}
-      </p>
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <p className="text-xs" style={{ color: C.muted }}>
+          {trRaterRole(instrument.raterRole, lang)} · {trCadence(instrument.cadenceType, lang)} · {trPopulation(instrument.population, lang)}
+        </p>
+        {nativeAxis && scoreable && occasions >= 2 && (
+          <span className="ml-auto flex items-center gap-1.5" role="group" aria-label={t("xAxisLabel")} title={t("axisDateHint")}>
+            {(["date", "native"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setXMode(m)} aria-pressed={xMode === m}
+                className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                style={{
+                  background: xMode === m ? C.blue : C.surfaceAlt,
+                  color: xMode === m ? "#fff" : C.muted,
+                  border: `1px solid ${xMode === m ? C.blue : C.line}`,
+                  cursor: "pointer",
+                }}>
+                {m === "date" ? t("axisDate") : instrument.cadenceType === "wave" ? t("axisWave") : t("axisSession")}
+              </button>
+            ))}
+          </span>
+        )}
+      </div>
       {scoreable && occasions >= 2 && (
-        <div className="mb-3"><TrajectoryChart instrument={instrument} responses={responses} prediction={chartPrediction} /></div>
+        <div className="mb-3">
+          <TrajectoryChart instrument={instrument} responses={responses} prediction={chartPrediction}
+            xMode={nativeAxis ? xMode : "date"} sessionLogs={sessionLogs}
+            onSelectOccasion={hasItemAnswers ? openResponse : undefined} />
+        </div>
       )}
       {instrument.cadenceType === "every_session" && sessionLogs && (
         <AttendanceStrip responses={responses} sessionLogs={sessionLogs} />
       )}
-      {shownViews.length > 1 && (
+      {(shownViews.length > 1 || responses.length > 0) && (
         <div className="flex items-center gap-2 flex-wrap mb-2">
           {shownViews.map((v) => (
             <button key={v.key} type="button" onClick={() => setSubView(v.key)} aria-pressed={activeView === v.key}
@@ -191,10 +247,22 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
               {v.label}
             </button>
           ))}
+          <button type="button" onClick={downloadRaw} className="ml-auto text-xs font-semibold" title={t("rawCsvHint")}
+            style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+            ⤓ {t("rawCsv")}
+          </button>
+        </div>
+      )}
+      {activeView === "answers" && (
+        <div className="mb-3">
+          <AnswersView instrument={instrument} responses={answerResponses} therapists={therapists}
+            selectedId={selectedResponseId} onSelect={setSelectedResponseId} />
         </div>
       )}
       {activeView === "table" && scoreable && <div className="mb-3"><ScoreTable instrument={instrument} responses={responses} /></div>}
-      {activeView === "items" && <div className="mb-3"><ItemHeatmap instrument={instrument} responses={responses} /></div>}
+      {activeView === "items" && (
+        <div className="mb-3"><ItemHeatmap instrument={instrument} responses={responses} onSelectResponse={(id) => openResponse([id])} /></div>
+      )}
       {activeView === "process" && <div className="mb-3"><ProcessProfile instrument={instrument} responses={responses} /></div>}
       {!scoreable && (
         <p className="text-xs mb-3" style={{ color: C.amber }}>{t("notScored", { status: instrument.definitionStatus })}</p>
@@ -204,12 +272,39 @@ function InstrumentCard({ instrument, responses, therapists, chartPrediction, se
       </button>
       {showAll && (
         <div className="flex flex-col gap-2 mt-2">
-          {list.map((r) => <ResponseRow key={r.id} instrument={instrument} response={r} therapists={therapists} />)}
+          {list.map((r) => <ResponseRow key={r.id} instrument={instrument} response={r} responses={responses} therapists={therapists} />)}
         </div>
       )}
-    </Card>
+    </>
   );
+  return bare ? <div>{content}</div> : <Card className="p-5 mb-4">{content}</Card>;
 }
+
+// Collapsible dossier sections (Batch 16). The open/closed set is a per-viewer
+// preference shared across patients (remembered in localStorage — a
+// convenience only; storage failures fall back to the defaults). Only the
+// questionnaire course is open by default: every other section folds to a
+// one-line summary.
+type SectionId = "diagnosis" | "monitoring" | "prognosis" | "course" | "notes" | "documents" | "conclude";
+const SECTION_IDS: SectionId[] = ["diagnosis", "monitoring", "prognosis", "course", "notes", "documents", "conclude"];
+const DEFAULT_OPEN: SectionId[] = ["course"];
+const OPEN_SECTIONS_KEY = "linden_dossier_open_v1";
+
+function loadOpenSections(): Set<SectionId> {
+  try {
+    const raw = window.localStorage.getItem(OPEN_SECTIONS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed))
+      return new Set(parsed.filter((x): x is SectionId => SECTION_IDS.includes(x as SectionId)));
+  } catch {
+    // storage unavailable (private window, blocked site data) → defaults
+  }
+  return new Set(DEFAULT_OPEN);
+}
+
+const X_MODE_KEY = "linden_chart_xmode";
+
+const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 // The former InvitationsPanel + SessionLogPanel were merged into the shared
 // SessionMonitoringPanel (Batch 12) — one surface for the session ledger and
@@ -258,6 +353,9 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const [bandSource, setBandSource] = useState<BandSource>("clinic");
   // Selected instrument of the single switchable questionnaire card.
   const [selInstId, setSelInstId] = useState<string | null>(null);
+  // Bumped by a SummaryStrip pill click: remounts the card on "Antworten".
+  const [focusNonce, setFocusNonce] = useState(0);
+  const [codeCopied, setCodeCopied] = useState(false);
   // Manual paper-form entry launched from the monitoring panel — takes over
   // the dossier with the clinician InstrumentForm (same pattern as
   // MonitoringView); key={patient.id} on this component resets it per patient.
@@ -266,6 +364,31 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const [archOutcome, setArchOutcome] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [archMsg, setArchMsg] = useState<string | null>(null);
+  // Section fold state. PatientDetail only ever renders client-side (after the
+  // clinic payload loaded), so the lazy initializer may read localStorage.
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(loadOpenSections);
+  const [pendingJump, setPendingJump] = useState<SectionId | null>(null);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(Array.from(openSections)));
+    } catch {
+      // preference simply not remembered
+    }
+  }, [openSections]);
+  // Quick-nav jumps scroll AFTER the commit that expanded the target section.
+  useEffect(() => {
+    if (!pendingJump) return;
+    document.getElementById(`dossier-${pendingJump}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setPendingJump(null);
+  }, [pendingJump]);
+  const isOpen = (id: SectionId) => openSections.has(id);
+  const setSection = (id: SectionId, open: boolean) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   const d = patient.demographics;
   const demoRows: [string, React.ReactNode][] = [
     [tr(T.age, lang), d.age], [tr(T.sex, lang), trDemoValue(d.sex, lang)], [tr(T.nationality, lang), d.nationality],
@@ -350,6 +473,9 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
     }));
     return {
       scaleKey: s.scaleKey,
+      axis: s.axis,
+      anchorAt: s.anchorAt,
+      shiftAxis: s.shiftAxis,
       band,
       failureBoundary:
         bandSource === "nn" && s.nn.available
@@ -405,17 +531,86 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
   const notes = patient.responses.filter((r) => r.note);
 
   // Quick-nav jump targets, in page order; entries appear only when their
-  // section renders.
+  // section renders. A jump expands the target section first.
   const switchIdx = switchList.findIndex((p) => p.id === patient.id);
-  const navItems = [
-    { id: "dossier-diagnosis", label: t("navDiagnosis") },
-    { id: "dossier-monitoring", label: t("navMonitoring") },
-    ...(showPrediction ? [{ id: "dossier-prognosis", label: t("navPrognosis") }] : []),
-    ...(instrumentsWithData.length ? [{ id: "dossier-course", label: t("navCourse") }] : []),
-    { id: "dossier-documents", label: t("navDocuments") },
-    ...(canArchive && !isArchived ? [{ id: "dossier-conclude", label: t("navConclude") }] : []),
+  const navItems: { id: SectionId; label: string }[] = [
+    { id: "diagnosis", label: t("navDiagnosis") },
+    { id: "monitoring", label: t("navMonitoring") },
+    ...(showPrediction ? [{ id: "prognosis" as const, label: t("navPrognosis") }] : []),
+    ...(instrumentsWithData.length ? [{ id: "course" as const, label: t("navCourse") }] : []),
+    ...(notes.length ? [{ id: "notes" as const, label: t("navNotes") }] : []),
+    { id: "documents", label: t("navDocuments") },
+    ...(canArchive && !isArchived ? [{ id: "conclude" as const, label: t("navConclude") }] : []),
   ];
-  const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const jumpTo = (id: SectionId) => {
+    setSection(id, true);
+    setPendingJump(id);
+  };
+  const focusInstrument = (instrumentId: string) => {
+    setSelInstId(instrumentId);
+    setFocusNonce((n) => n + 1);
+    jumpTo("course");
+  };
+  const allOpen = navItems.every((n) => isOpen(n.id));
+  const setAllSections = (open: boolean) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      for (const n of navItems) {
+        if (open) next.add(n.id);
+        else next.delete(n.id);
+      }
+      return next;
+    });
+
+  // One-line summaries shown while a section is folded.
+  const diagnosisSummary: React.ReactNode = patient.diagnosis ? (
+    [
+      patient.icdCode,
+      truncate(patient.diagnosis.text, 48),
+      patient.goals.length ? t("sumGoalsN", { n: patient.goals.length }) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  ) : isArchived ? (
+    "—"
+  ) : (
+    <span className="font-semibold" style={{ color: C.amber }}>
+      {patient.dips ? t("sumDiagnosisPending") : t("sumDipsPending")}
+    </span>
+  );
+  const dropoutPct =
+    prediction?.dropoutRisk.available && prediction.dropoutRisk.probability !== undefined
+      ? Math.round(prediction.dropoutRisk.probability * 100)
+      : null;
+  const prognosisSummary: React.ReactNode = predictionLoading ? (
+    t("loading")
+  ) : !prediction ? (
+    t("predictionUnavailable")
+  ) : (
+    <>
+      {notOnTrackSeries.length > 0 ? (
+        <span className="font-semibold" style={{ color: C.amber }}>⚑ {t("notOnTrack")}</span>
+      ) : prediction.series.some((x) => x.onTrack.status === "on_track") ? (
+        <span className="font-semibold" style={{ color: C.spruce }}>{t("onTrack")}</span>
+      ) : (
+        t("insufficientReference")
+      )}
+      {dropoutPct !== null && ` · ${t("sumDropout", { pct: dropoutPct })}`}
+    </>
+  );
+  const measuredAts = instrumentsWithData.flatMap((x) => x.responses.map((r) => r.occurredAt)).sort();
+  const lastMeasuredAt = measuredAts[measuredAts.length - 1];
+  const courseSummary = lastMeasuredAt
+    ? t("sumCourse", { n: instrumentsWithData.length, date: fmtDate(lastMeasuredAt) })
+    : "";
+  const lastNote = notes[notes.length - 1];
+  const notesSummary = lastNote ? t("sumNotes", { n: notes.length, date: fmtDate(lastNote.occurredAt) }) : "";
+  const docsPresent = standardDocsPresent(patient.documents);
+  const docsBadge = (
+    <span className="text-xs" style={{ color: docsPresent === STANDARD_DOC_SEQUENCE.length ? C.spruce : C.amber }}>
+      {t("standardDocsCount", { n: docsPresent, total: STANDARD_DOC_SEQUENCE.length })}
+    </span>
+  );
 
   if (manualEntry) {
     return (
@@ -475,14 +670,24 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
       {/* Sticky quick-nav — the dossier is long; one click beats scrolling.
           The window scrolls the page (no inner container) and the app header
           is not sticky, so top-0 pins this bar to the viewport. */}
-      <nav className="sticky top-0 z-10 py-2 mb-2 flex gap-2 flex-wrap" style={{ background: C.bg }}>
+      <nav className="sticky top-0 z-10 py-2 mb-2 flex gap-2 flex-wrap items-center" style={{ background: C.bg }}>
         {navItems.map((n) => (
           <button key={n.id} type="button" onClick={() => jumpTo(n.id)}
             className="rounded-full px-3 py-1 text-xs font-semibold"
-            style={{ background: C.surface, color: C.spruce, border: `1px solid ${C.line}`, cursor: "pointer" }}>
+            style={{
+              background: isOpen(n.id) ? C.spruceSoft : C.surface,
+              color: C.spruce,
+              border: `1px solid ${isOpen(n.id) ? C.spruce : C.line}`,
+              cursor: "pointer",
+            }}>
             {n.label}
           </button>
         ))}
+        <button type="button" onClick={() => setAllSections(!allOpen)}
+          className="ml-auto text-xs font-semibold"
+          style={{ color: C.muted, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+          {allOpen ? `▴ ${t("collapseAll")}` : `▾ ${t("expandAll")}`}
+        </button>
       </nav>
 
       {alerts.map((a) => (
@@ -550,8 +755,24 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
                 <span className="text-xs" style={{ color: C.muted }}>
                   {patient.responses.length > 0 ? `${patient.responses.length} ${t("questionnairesOnFile")}` : t("noQuestionnairesYet")}
                   {patient.email ? ` · ${patient.email}` : ""}
-                  {patient.code ? ` · ${t("patientCodeLabel")}: ${patient.code}` : ""}
+                  {patient.code ? ` · ${t("patientCodeLabel")}: ` : ""}
+                  {patient.code && <b style={{ color: C.ink, letterSpacing: 1 }}>{patient.code}</b>}
                 </span>
+                {/* Paper forms are matched by this code (intern entry) — one
+                    click to copy it onto a label / the form header. */}
+                {patient.code && (
+                  <button type="button" title={t("copyCodeHint")} className="text-xs font-semibold"
+                    onClick={() => {
+                      try {
+                        void navigator.clipboard.writeText(patient.code!).then(() => setCodeCopied(true));
+                      } catch {
+                        // clipboard unavailable — the code stays visible to copy by hand
+                      }
+                    }}
+                    style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                    {codeCopied ? `✓ ${t("codeCopied")}` : `⧉ ${t("copyCode")}`}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -568,7 +789,7 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
               <span>– {t("legendNoTrend")}</span>
               <span>{t("legendBar")}</span>
             </p>
-            <SummaryStrip patient={patient} instruments={instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID)} />
+            <SummaryStrip patient={patient} instruments={instruments.filter((i) => i.id !== DIPS_INSTRUMENT_ID)} onSelect={focusInstrument} />
           </div>
         )}
         <div className="mt-4 pt-4 flex items-center gap-3 flex-wrap" style={{ borderTop: `1px solid ${C.line}` }}>
@@ -587,9 +808,8 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
       {/* Intake & diagnosis — the once-per-treatment data in one card: diagnosis
           (left), demographics + intake predictors (right, read-only summaries;
           edited in the full-window IntakeEditView). */}
-      <div id="dossier-diagnosis" style={{ scrollMarginTop: 56 }}>
-      <Card className="p-5 mb-4">
-        <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("intakeCardTitle")}</h3>
+      <CollapsibleCard id="dossier-diagnosis" title={t("intakeCardTitle")} summary={diagnosisSummary}
+        open={isOpen("diagnosis")} onToggle={() => setSection("diagnosis", !isOpen("diagnosis"))}>
         <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
           <div>
             <p className="text-xs font-bold mb-2" style={{ color: C.muted }}>{t("diagnosisTitle")}</p>
@@ -685,30 +905,30 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
             <GhostButton small onClick={() => onOpenGoals(patient.id)}>{t("openGoalsView")}</GhostButton>
           )}
         </div>
-      </Card>
-      </div>
+      </CollapsibleCard>
 
       {/* Sessions & questionnaires — the unified ledger + monitoring panel
           (read-only on archived dossiers; it self-hides when empty there). */}
-      <div id="dossier-monitoring" style={{ scrollMarginTop: 56 }}>
-        <SessionMonitoringPanel
-          patient={patient}
-          instruments={instruments}
-          therapists={therapists}
-          user={user}
-          configured={configured}
-          variant="dossier"
-          onPatientUpdated={onPatientUpdated}
-          onStartManualEntry={(instrument, ctx) => setManualEntry({ instrument, sessionNumber: ctx.sessionNumber })}
-        />
-      </div>
+      <SessionMonitoringPanel
+        patient={patient}
+        instruments={instruments}
+        therapists={therapists}
+        user={user}
+        configured={configured}
+        variant="dossier"
+        expanded={isOpen("monitoring")}
+        onExpandedChange={(v) => setSection("monitoring", v)}
+        onPatientUpdated={onPatientUpdated}
+        onStartManualEntry={(instrument, ctx) => setManualEntry({ instrument, sessionNumber: ctx.sessionNumber })}
+      />
 
       {/* Therapist-facing outcome prediction — active therapy dossiers only.
           Sits directly above the trajectory charts its source toggle drives. */}
       {showPrediction && (
-        <div id="dossier-prognosis" style={{ scrollMarginTop: 56 }}>
-          <PredictionPanel prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
-        </div>
+        <CollapsibleCard id="dossier-prognosis" title={t("predictionTitle")} summary={prognosisSummary}
+          open={isOpen("prognosis")} onToggle={() => setSection("prognosis", !isOpen("prognosis"))}>
+          <PredictionPanel bare prediction={prediction} loading={predictionLoading} source={bandSource} onSourceChange={setBandSource} />
+        </CollapsibleCard>
       )}
 
       {instrumentsWithData.length === 0 && (
@@ -720,9 +940,13 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
           swap without remount would keep the previous instrument's scale keys
           and break both the lines and the prediction-overlay gating. */}
       {selected && (
-        <div id="dossier-course" style={{ scrollMarginTop: 56 }}>
+        <CollapsibleCard id="dossier-course" title={t("courseCardTitle")} summary={courseSummary}
+          open={isOpen("course")} onToggle={() => setSection("course", !isOpen("course"))}>
           <InstrumentCard
-            key={selected.instrument.id}
+            bare
+            key={`${selected.instrument.id}:${focusNonce}`}
+            patientCode={patient.code}
+            initialView={focusNonce > 0 ? "answers" : undefined}
             instrument={selected.instrument}
             responses={selected.responses}
             therapists={therapists}
@@ -739,12 +963,12 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
               </select>
             }
           />
-        </div>
+        </CollapsibleCard>
       )}
 
       {notes.length > 0 && (
-        <Card className="p-5 mb-4">
-          <h3 className="text-sm font-bold mb-3" style={{ color: C.spruce }}>{t("notesTitle")}</h3>
+        <CollapsibleCard id="dossier-notes" title={t("notesTitle")} summary={notesSummary}
+          open={isOpen("notes")} onToggle={() => setSection("notes", !isOpen("notes"))}>
           <div className="flex flex-col gap-2">
             {[...notes].reverse().map((r) => (
               <div key={r.id} className="rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
@@ -753,20 +977,20 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
               </div>
             ))}
           </div>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Document timeline — filed paperwork, deliberately at the bottom of
           the dossier, directly above the conclude-&-archive card. */}
-      <div id="dossier-documents" style={{ scrollMarginTop: 56 }}>
-        <DocumentsPanel patient={patient} user={user} onRefresh={onPatientUpdated} />
-      </div>
+      <CollapsibleCard id="dossier-documents" title={t("documentsTitle")} right={docsBadge}
+        open={isOpen("documents")} onToggle={() => setSection("documents", !isOpen("documents"))}>
+        <DocumentsPanel bare patient={patient} user={user} onRefresh={onPatientUpdated} />
+      </CollapsibleCard>
 
       {/* Conclude treatment & archive — deliberately the last, low-key card. */}
       {canArchive && !isArchived && (
-        <div id="dossier-conclude" style={{ scrollMarginTop: 56 }}>
-        <Card className="p-5 mt-4">
-          <h3 className="text-sm font-bold mb-1" style={{ color: C.ink }}>{t("concludeTitle")}</h3>
+        <CollapsibleCard id="dossier-conclude" title={t("concludeTitle")} summary={t("sumConclude")}
+          open={isOpen("conclude")} onToggle={() => setSection("conclude", !isOpen("conclude"))}>
           <p className="text-xs mb-3" style={{ color: C.muted }}>{t("concludeSub")}</p>
           <div className="flex items-end gap-3 flex-wrap">
             <Field label={t("terminationLabel")}>
@@ -790,8 +1014,7 @@ export function PatientDetail({ patient, user, therapists, instruments, switchLi
             )}
           </div>
           {archMsg && <p className="text-xs mt-2" style={{ color: C.danger }}>{archMsg}</p>}
-        </Card>
-        </div>
+        </CollapsibleCard>
       )}
     </div>
   );

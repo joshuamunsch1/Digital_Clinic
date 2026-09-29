@@ -11,6 +11,7 @@ import type {
   InvitationContext,
   InvitationRecord,
   Patient,
+  PlanItemRecord,
   ResponseRecord,
   SessionLogRecord,
   SubmissionInfo,
@@ -63,6 +64,8 @@ interface ResponseRow {
   note: string;
   meta: string;
   scaleScores: ScaleScoreRow[];
+  /// Loaded via PATIENT_INCLUDE; absent in lean callers.
+  enteredBy?: { name: string; role: string } | null;
 }
 interface InvitationRow {
   id: string;
@@ -107,6 +110,18 @@ interface SessionLogRow {
   conductedById: string | null;
   note: string;
 }
+interface PlanItemRow {
+  id: string;
+  instrumentId: string;
+  respondentRole: string;
+  rhythm: string;
+  intervalDays: number | null;
+  channel: string;
+  remindEveryDays: number | null;
+  maxReminders: number | null;
+  active: boolean;
+  createdAt: Date;
+}
 interface GoalRow {
   id: string;
   title: string;
@@ -141,6 +156,7 @@ interface PatientRow {
   documents?: DocumentRow[];
   sessionLogs?: SessionLogRow[];
   goals?: GoalRow[];
+  planItems?: PlanItemRow[];
 }
 
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -207,6 +223,22 @@ export function responseFromRow(r: ResponseRow): ResponseRecord {
     source: r.source,
     note: r.note,
     scores,
+    enteredBy: r.enteredBy ? { name: r.enteredBy.name, role: r.enteredBy.role } : null,
+  };
+}
+
+export function planItemFromRow(i: PlanItemRow): PlanItemRecord {
+  return {
+    id: i.id,
+    instrumentId: i.instrumentId,
+    respondentRole: i.respondentRole,
+    rhythm: i.rhythm === "interval" ? "interval" : "every_session",
+    intervalDays: i.intervalDays,
+    channel: i.channel === "limesurvey" || i.channel === "paper" ? i.channel : "in_app",
+    remindEveryDays: i.remindEveryDays,
+    maxReminders: i.maxReminders,
+    active: i.active,
+    createdAt: i.createdAt.toISOString(),
   };
 }
 
@@ -318,6 +350,9 @@ export function patientFromRow(p: PatientRow): Patient {
     goals: [...(p.goals ?? [])]
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map(goalFromRow),
+    plan: [...(p.planItems ?? [])]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map(planItemFromRow),
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: dipsRow ? dipsFromResponse(dipsRow) : null,
     diagnosis:
@@ -333,7 +368,7 @@ export function patientFromRow(p: PatientRow): Patient {
 /// invitation/session-log payloads — with a couple hundred archived reference
 /// cases those would dominate the transfer. The full dossier is fetched via
 /// GET /api/patients/[id] when an archived patient is opened.
-export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs" | "documents" | "goals">): Patient {
+export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitations" | "sessionLogs" | "documents" | "goals" | "planItems">): Patient {
   return {
     id: p.id,
     name: p.name,
@@ -357,6 +392,7 @@ export function patientSummaryFromRow(p: Omit<PatientRow, "responses" | "invitat
     documents: [],
     sessionLogs: [],
     goals: [],
+    plan: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis:
@@ -397,29 +433,40 @@ export function patientLiteFromRow(p: PatientRow): Patient {
     documents: [],
     sessionLogs: [],
     goals: [],
+    plan: [],
     assessment: p.assessmentDate ? { date: p.assessmentDate.toISOString(), type: "dips-anxiety" } : null,
     dips: null,
     diagnosis: null,
   };
 }
 
-/// Role-scoped patient payload: admin gets the lite view (no clinical data),
-/// patients get their own record minus staff working artifacts (the document
-/// timeline and session-log notes are staff surfaces), staff get everything.
+/// Role-scoped patient payload: clinical staff (director/therapist) get
+/// everything, patients their own record minus staff working artifacts (the
+/// document timeline, session-log notes and the measurement plan are staff
+/// surfaces), and every other role — admin, intern, anything added later —
+/// FAILS CLOSED to the lite view without clinical data (Batch 16: the old
+/// fallthrough handed unknown roles the full dossier).
 export function patientForSession(p: PatientRow, role: string): Patient {
-  if (role === "admin") return patientLiteFromRow(p);
-  const full = patientFromRow(p);
-  // Goals are deliberately NOT stripped for the patient role: they are the
-  // patient's own therapy contract (read-only in the portal), unlike the
-  // staff-facing document timeline and session-log notes.
-  return role === "patient" ? { ...full, documents: [], sessionLogs: [] } : full;
+  if (role === "director" || role === "therapist") return patientFromRow(p);
+  if (role === "patient") {
+    // Goals are deliberately NOT stripped for the patient role: they are the
+    // patient's own therapy contract (read-only in the portal).
+    return { ...patientFromRow(p), documents: [], sessionLogs: [], plan: [] };
+  }
+  return patientLiteFromRow(p);
 }
 
 /// Standard Prisma include for loading a patient with everything the UI needs.
 export const PATIENT_INCLUDE = {
-  responses: { include: { scaleScores: { include: { scale: true } } } },
+  responses: {
+    include: {
+      scaleScores: { include: { scale: true } },
+      enteredBy: { select: { name: true, role: true } },
+    },
+  },
   invitations: true,
   documents: { include: { uploadedBy: { select: { id: true, name: true } } } },
   sessionLogs: true,
   goals: true,
+  planItems: true,
 } as const;

@@ -101,16 +101,20 @@ export function MonitoringView({ data, user, onBack, onOpenPatient, onPatientUpd
     setMsg(null);
     try {
       const r = await api.runReminderSweep();
-      setMsg(
-        r.skipped
-          ? t("sweepSkipped", { reason: r.skipped })
-          : t("sweepResult", {
-              imported: r.sync?.imported ?? 0,
-              checked: r.sync?.checked ?? 0,
-              sent: r.reminders?.sent ?? 0,
-              due: r.reminders?.due ?? 0,
-            }),
-      );
+      // The sweep also sends the measurement plans' due interval
+      // questionnaires (Batch 16) — reported first, LimeSurvey after.
+      const planLine = r.plan
+        ? t("sweepPlanResult", { n: r.plan.created }) + (r.plan.errors.length ? ` (${r.plan.errors.join("; ")})` : "")
+        : "";
+      const lsLine = r.skipped
+        ? t("sweepSkipped", { reason: r.skipped })
+        : t("sweepResult", {
+            imported: r.sync?.imported ?? 0,
+            checked: r.sync?.checked ?? 0,
+            sent: r.reminders?.sent ?? 0,
+            due: r.reminders?.due ?? 0,
+          });
+      setMsg([planLine, lsLine].filter(Boolean).join(" · "));
       onRefreshAll();
     } catch (e) {
       setMsg(`✗ ${(e as Error).message}`);
@@ -180,11 +184,11 @@ export function MonitoringView({ data, user, onBack, onOpenPatient, onPatientUpd
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {configured && (
-          <>
-            <GhostButton small onClick={() => { if (!busy) void doSync(); }}>{busy ? t("working") : t("syncNow")}</GhostButton>
-            <GhostButton small onClick={() => { if (!busy) void doSweep(); }}>{busy ? t("working") : t("runSweepNow")}</GhostButton>
-          </>
+          <GhostButton small onClick={() => { if (!busy) void doSync(); }}>{busy ? t("working") : t("syncNow")}</GhostButton>
         )}
+        {/* Also available without LimeSurvey: the sweep sends the measurement
+            plans' due interval questionnaires (in-app needs no LimeSurvey). */}
+        <GhostButton small onClick={() => { if (!busy) void doSweep(); }}>{busy ? t("working") : t("runSweepNow")}</GhostButton>
         {isDirector && (
           <select style={{ ...inputStyle, width: "auto", minWidth: 180, marginLeft: "auto" }} value={therapistFilter} onChange={(e) => setTherapistFilter(e.target.value)}>
             <option value="all">{t("therapistFilterAll")}</option>

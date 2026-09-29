@@ -2,7 +2,9 @@
 import type { Lang } from "./i18n";
 import type { InstrumentDef, RawAnswers } from "./instruments/types";
 
-export type Role = "patient" | "therapist" | "director" | "admin";
+/// "intern" (Praktikant:in, Batch 16): paper-questionnaire data entry keyed by
+/// patient code — no names, no clinical data (see src/app/api/entry/).
+export type Role = "patient" | "therapist" | "director" | "admin" | "intern";
 export type PatientStatus = "assessment" | "interview" | "therapy" | "archived";
 export type SubmissionStatus = "sent" | "local" | "sending";
 
@@ -131,6 +133,24 @@ export interface ResponseRecord {
   source: string;
   note: string;
   scores: Record<string, number>;
+  /// Staff member who typed this response in (manual paper entry — therapist
+  /// or intern), when it differs from a self-submission. Audit trail (Batch 16).
+  enteredBy?: { name: string; role: string } | null;
+}
+
+/// One item of a patient's standing measurement plan ("Messplan", Batch 16 —
+/// see prisma MeasurementPlanItem and src/lib/measurement-plan.ts).
+export interface PlanItemRecord {
+  id: string;
+  instrumentId: string;
+  respondentRole: string;
+  rhythm: "every_session" | "interval";
+  intervalDays: number | null;
+  channel: "in_app" | "limesurvey" | "paper";
+  remindEveryDays: number | null;
+  maxReminders: number | null;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface InvitationContext {
@@ -240,6 +260,8 @@ export interface Patient {
   sessionLogs: SessionLogRecord[];
   /// GAS therapy goals — staff-entered, patient-visible read-only.
   goals: GoalRecord[];
+  /// Standing measurement plan (Batch 16) — staff-only (stripped for patients).
+  plan: PlanItemRecord[];
   assessment: { date: string; type: string } | null;
   /// Convenience view of the DIPS intake response (if any) for the existing
   /// DIPS summary/FHIR UI. Derived from responses, not separately stored.

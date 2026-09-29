@@ -37,10 +37,12 @@ function TypeChip({ docType }: { docType: string }) {
 /// Per-patient document timeline: the clinic's standard therapy-course documents
 /// as an expected checklist (missing = pending) plus custom uploads, in
 /// chronological order. Staff-only (documents never reach patient/admin payloads).
-export function DocumentsPanel({ patient, user, onRefresh }: {
+export function DocumentsPanel({ patient, user, onRefresh, bare }: {
   patient: Patient;
   user: SessionUser;
   onRefresh: (p: Patient) => void;
+  /// Rendered inside a dossier CollapsibleCard (title + count live in its header).
+  bare?: boolean;
 }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
@@ -135,14 +137,16 @@ export function DocumentsPanel({ patient, user, onRefresh }: {
     void run(() => api.deleteDocument(doc.id), t("docDeleted"));
   };
 
-  return (
-    <Card className="p-5 mb-4">
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("documentsTitle")}</h3>
-        <span className="ml-auto text-xs" style={{ color: present === STANDARD_DOC_SEQUENCE.length ? C.spruce : C.amber }}>
-          {t("standardDocsCount", { n: present, total: STANDARD_DOC_SEQUENCE.length })}
-        </span>
-      </div>
+  const content = (
+    <>
+      {!bare && (
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("documentsTitle")}</h3>
+          <span className="ml-auto text-xs" style={{ color: present === STANDARD_DOC_SEQUENCE.length ? C.spruce : C.amber }}>
+            {t("standardDocsCount", { n: present, total: STANDARD_DOC_SEQUENCE.length })}
+          </span>
+        </div>
+      )}
       <p className="text-xs mb-3" style={{ color: C.muted }}>{t("documentsSub")}</p>
 
       <div className="flex flex-col gap-2">
@@ -265,6 +269,7 @@ export function DocumentsPanel({ patient, user, onRefresh }: {
       </div>
 
       {msg && <p className="text-xs mt-3" style={{ color: msg.startsWith("✗") ? C.danger : C.spruce }}>{msg}</p>}
-    </Card>
+    </>
   );
+  return bare ? <div>{content}</div> : <Card className="p-5 mb-4">{content}</Card>;
 }

@@ -347,3 +347,28 @@ amber "Simulierte Referenzdaten" badge whenever any reference case is
 simulated; predictions are therapist-facing only (patient and admin sessions
 get 403 before anything is computed); amber not-on-track signals are visually
 and semantically distinct from red safety alarms.
+
+**Time axes (Batch 16, 2026-09-29 — tester feedback on unequal measurement
+intervals).** Patients come weekly, fortnightly or monthly, so "the 2nd
+measurement" means very different things. Two consequences, implemented in
+`src/lib/analytics/time-axis.ts`:
+
+- *Every-session measures (PHQ-4, PSTB/SBKJ-P) stay dose-indexed.* The band,
+  NOT flag, early change and ETR remain per **session number** — the unit the
+  expected-course/ETR literature models. The dossier draws them on a calendar
+  axis by default (band points placed at each session's actual date; gaps
+  interpolated from held-session ledger dates; the 8-session look-ahead
+  projected at the patient's own recent rhythm and labelled "geplant"), with a
+  "Datum | Sitzung" toggle. Session frequency itself is not (yet) a model
+  feature — a candidate NN/ETR covariate once real archived data exists.
+- *Date-cadenced BDI-FS moved from measurement index to weeks since therapy
+  start* (`TargetAxis "weeks"`; anchor = `treatmentStartAt`, else first
+  measurement; pre-start measurements count as week 0). The old index axis
+  compared a weekly patient's 2nd BDI-FS (week 1) with the reference cohort's
+  2nd wave (mid-therapy). Because reference BDI-FS series are sparse and
+  irregular, the band pools per integer week the nearest point of each case
+  within ±2 weeks (`ExpectedCourseOptions.window`, n ≥ 5 — both
+  [clinician-confirm] smoothing choices); a real minN gap stays a gap. Sudden
+  shifts still use consecutive measurements (measurement index), ETR stays
+  session-only. After `sim:purge` the BDI-FS band is simply absent until real
+  archived BDI-FS data accrue.

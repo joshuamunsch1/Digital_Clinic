@@ -15,4 +15,9 @@ export const setFmtLang = (lang: Lang) => {
 export const fmtDate = (iso: string | Date) =>
   new Date(iso).toLocaleDateString(currentLocale, { day: "numeric", month: "short", year: "numeric" });
 
+/// Compact date for chart ticks (day + month; the year only when the axis
+/// spans years is left to the tooltip, which uses fmtDate).
+export const fmtDateShort = (v: string | number | Date) =>
+  new Date(v).toLocaleDateString(currentLocale, { day: "numeric", month: "short" });
+
 export const deepCopy = <T>(o: T): T => JSON.parse(JSON.stringify(o));

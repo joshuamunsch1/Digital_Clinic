@@ -14,6 +14,7 @@ import {
   DIRECTOR,
   EDEQ8_SERIES,
   FGG_SERIES,
+  INTERN,
   SDQ_SERIES,
   THERAPISTS,
   buildDipsAnswers,
@@ -31,6 +32,8 @@ import { hashPassword } from "./password";
 import { formatPatientCode } from "./patient-code";
 import { SIM_COHORT_SIZE, seedSimulation } from "./simulation/seed-simulation";
 import { DIPS_INSTRUMENT_ID, SESSION_INSTRUMENT_ID } from "./types";
+import { defaultPlanItems } from "./measurement-plan";
+import { PATIENT_INCLUDE, patientFromRow } from "./serialize";
 
 interface SeededInstrument {
   def: InstrumentDef;
@@ -241,7 +244,21 @@ async function seedInvitations(prisma: PrismaClient, instruments: Map<string, Se
   });
 }
 
+/// Measurement plans (Batch 16) for the demo therapy patients: the default
+/// plan (every-session PSTB/PHQ-4 in-app — LimeSurvey treated as unconfigured
+/// so the demo is deterministic) plus each patient's extraPlan items.
+async function seedPlans(prisma: PrismaClient, instruments: Map<string, SeededInstrument>) {
+  const defs = Array.from(instruments.values()).map((i) => i.def);
+  for (const p of DEMO_PATIENTS.filter((x) => x.status === "therapy")) {
+    const row = await prisma.patient.findUnique({ where: { id: p.id }, include: PATIENT_INCLUDE });
+    if (!row) continue;
+    const items = [...defaultPlanItems(patientFromRow(row), defs, false), ...(p.extraPlan ?? [])];
+    for (const it of items) await prisma.measurementPlanItem.create({ data: { patientId: p.id, ...it } });
+  }
+}
+
 export async function seedClinic(prisma: PrismaClient) {
+  await prisma.measurementPlanItem.deleteMany();
   await prisma.scaleScore.deleteMany();
   await prisma.responseInstance.deleteMany();
   await prisma.questionnaireInvitation.deleteMany();
@@ -257,6 +274,7 @@ export async function seedClinic(prisma: PrismaClient) {
     ...THERAPISTS.map((t) => ({ ...t, password: DEMO_PASSWORDS.therapist })),
     { ...DIRECTOR, password: DEMO_PASSWORDS.director },
     { ...ADMIN, password: DEMO_PASSWORDS.admin },
+    { ...INTERN, password: DEMO_PASSWORDS.intern },
   ];
   for (const u of staff) {
     await prisma.user.create({
@@ -286,7 +304,11 @@ export async function seedClinic(prisma: PrismaClient) {
   let codeSeq = 0;
   for (const p of DEMO_PATIENTS) {
     const sessions = pstbSessionsFor(p.levels, p.seriesEnd);
-    const diagnosisDate = p.diagnosis ? new Date(p.diagnosedOn ?? "2026-03-10T09:00:00.000Z") : null;
+    // Active demo therapies start at their baseline session (the diagnosis is
+    // recorded there) so the weeks-since-start axis lines up with the series.
+    const diagnosisDate = p.diagnosis
+      ? new Date(p.diagnosedOn ?? (sessions.length ? sessions[0].date : "2026-03-10T09:00:00.000Z"))
+      : null;
     await prisma.patient.create({
       data: {
         id: p.id,
@@ -385,7 +407,7 @@ export async function seedClinic(prisma: PrismaClient) {
       });
     }
 
-    const simpleSeries: { flag: boolean | undefined; instrument: SeededInstrument; series: { daysAgo: number; answers: RawAnswers; wave?: string }[] }[] = [
+    const simpleSeries: { flag: boolean | undefined; instrument: SeededInstrument; series: { daysAgo?: number; at?: string; answers: RawAnswers; wave?: string }[] }[] = [
       { flag: p.hasBdiSeries, instrument: bdi, series: BDI_FS_SERIES },
       { flag: p.hasBdiAlertSeries, instrument: bdi, series: BDI_FS_ALERT_SERIES },
       { flag: p.hasEdeq8Series, instrument: edeq8, series: EDEQ8_SERIES },
@@ -400,7 +422,7 @@ export async function seedClinic(prisma: PrismaClient) {
           instrument,
           respondentRole: "self",
           wave: s.wave,
-          occurredAt: new Date(now - s.daysAgo * 864e5),
+          occurredAt: s.at ? new Date(s.at) : new Date(now - (s.daysAgo ?? 0) * 864e5),
           rawAnswers: s.answers,
         });
       }
@@ -470,6 +492,7 @@ export async function seedClinic(prisma: PrismaClient) {
 
   await seedDocuments(prisma);
   await seedInvitations(prisma, instruments);
+  await seedPlans(prisma, instruments);
 
   return {
     users: await prisma.user.count(),

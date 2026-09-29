@@ -19,6 +19,8 @@ export async function POST(req: Request) {
   let user: SessionUser | null = null;
   const staff = await prisma.user.findUnique({ where: { email: normalized } });
   if (staff && verifyPassword(password, staff.passwordHash)) {
+    // Deactivated accounts (director-managed intern logins) cannot sign in.
+    if (!staff.active) return NextResponse.json({ error: "account_inactive" }, { status: 403 });
     user = { role: staff.role as Role, id: staff.id, name: staff.name };
   } else if (!staff) {
     const patient = await prisma.patient.findUnique({ where: { email: normalized } });

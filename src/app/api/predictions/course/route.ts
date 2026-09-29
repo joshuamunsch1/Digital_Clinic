@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
+import { isClinicalRole } from "@/lib/access";
 import { buildExpectedCourse } from "@/lib/analytics/expected-course";
 import { seriesKeyOf } from "@/lib/analytics/types";
 import { PREDICTION_TARGETS, getReferenceData } from "@/lib/prediction/reference";
@@ -16,7 +17,7 @@ import type { ClinicCourse } from "@/lib/prediction/service";
 export async function GET(req: Request) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (s.role === "patient" || s.role === "admin")
+  if (!isClinicalRole(s.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
   for (const t of PREDICTION_TARGETS) {
     const key = seriesKeyOf(t.instrumentId, t.scaleKey);
     const series = ref.cases.map((c) => c.series[key] ?? []).filter((xs) => xs.length > 0);
-    const points = buildExpectedCourse(series);
+    const points = buildExpectedCourse(series, t.course ?? {});
     if (!points.length) continue;
     const hib = ref.scaleParamsByKey.get(key)?.higherIsBetter ?? true;
     courses.push({

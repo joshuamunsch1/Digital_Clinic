@@ -388,6 +388,63 @@ X-Forwarded-For read `TRUSTED_PROXY_COUNT` from the right, SESSION_SECRET
 throws in production, session auto-numbering is patient-wide (same-day reuse,
 else global max+1 — PSTB/PHQ-4 axes can't desync). 194 tests.
 
+**Batch 16 (2026-09-29)**: **tester feedback — time axes, automatic sending,
+item answers, collapsible dossier, intern entry.** ① **Time axes**
+(`src/lib/analytics/time-axis.ts`, pure): dossier charts default to a real
+calendar axis (`TrajectoryChart xMode "date" | "native"`, "Datum | Sitzung"
+toggle remembered in localStorage `linden_chart_xmode`; session-axis overlays
+placed at each session's date via `sessionDateMap`/`dateForSession` — held-log
+dates fill gaps, look-ahead projected at the patient's rhythm, tooltip
+"geplant"; rows carry `t/__s/__idx/__rids`; diamonds/ruptures match on
+`__s`/`__idx`, NOT labels — fixes the BDI-FS diamonds that never rendered).
+BDI-FS prediction target moved from `axis "index"` to **`axis "weeks"`**
+(weeks since `treatmentStartAt`, else first measurement; `binByWeek` latest
+wins) with windowed pooling (`ExpectedCourseOptions.window` ±2, minN 5
+[clinician-confirm], shared `pooledValues` also feeds the NN boundary);
+shifts stay on `indexedSeriesOf` (`SeriesPrediction.shiftAxis "index"`,
+PredictionPanel labels M{n}); `SeriesPrediction` gained `axis`/`anchorAt`.
+`GlobalChart`: every-session instruments "Sitzungen | Wochen seit
+Therapiebeginn" toggle (session band only in session view), periodic
+instruments always weeks (M1…Mn removed). Demo: active therapies start at
+their baseline session; Mara's/Camille's BDI-FS use absolute dates on session
+days (`at` field). ② **Measurement plan ("Messplan")**: new
+`MeasurementPlanItem` model (rhythm `every_session|interval`, `intervalDays`,
+channel `in_app|limesurvey|paper`, reminders, active; unique per
+patient+instrument+rater); pure `src/lib/measurement-plan.ts`
+(channelProblem/defaultChannel/defaultPlanItems/intervalStatus — EVERY
+request counts as activity so errored/cancelled ones never loop);
+`src/lib/server-dispatch.ts` = the ONE invitation-creation path (invitations
+route, plan, sweep); `src/lib/server-plan.ts` (ensureDefaultPlan on diagnose →
+therapy; `dispatchPlanForSession` on held session-log — closes the same
+instrument's OPEN request from an earlier session as no_response;
+`dispatchDuePlans` in the sweep, which now runs WITHOUT LimeSurvey too).
+`PlanEditor` block in SessionMonitoringPanel; log form checkbox "gemäss
+Messplan versenden"; a confirmation line replaces the send step
+(`SendAfterSessionStep` only without a plan). Plan is stripped for patients.
+Demo: default plans + Mara BDI-FS every session on paper, Elif BDI-FS every
+4 weeks on paper. ③ **Item answers**: `response-diff.ts` (itemRows: raw,
+favorability, Δ vs same rater's previous, alert items) + `ResponseDetail`/
+`AnswersView` — InstrumentCard's default sub-view "Antworten"; chart-point
+click (ComposedChart onClick → `__rids`), heatmap column click and SummaryStrip
+pill click (focusNonce remount) open it; "Rohdaten (CSV)" via pure
+`raw-export.ts` (code, never name; notes excluded). ④ **Collapsible dossier**:
+`CollapsibleCard` in ui.tsx; every section folds to a one-line summary,
+default open = course only, state in localStorage `linden_dossier_open_v1`,
+quick-nav expands then scrolls (pendingJump effect), "Alle öffnen/schließen";
+PredictionPanel/DocumentsPanel/InstrumentCard grew `bare`,
+SessionMonitoringPanel controlled `expanded`. ⑤ **Intern role**: `Role`
++"intern", `User.active`, `ResponseInstance.enteredById` (set on ALL staff
+manual entries; shown "erfasst von"). **Access hardening first**:
+`isClinicalRole` allow-list in clinic/patients GET+PATCH/predictions/
+prediction/session-log(s)/goals/responses/assessment; `patientForSession`
+fails closed to lite. Code-keyed entry API `src/app/api/entry/` (lookup →
+code/therapist/recent dates/per-instrument session suggestion, NO name/age/
+scores; POST validates + 409 `duplicate_entry` unless confirmDuplicate; own
+entries deletable 24 h; `entryActor` re-checks `active`); intern clinic payload
+has NO patients. `DataEntryView` = intern home; director `StaffInternsCard`
+(`/api/staff`, intern role only). Dossier header "Code kopieren". Demo intern
+Lea Graf `lea.graf@linden-clinic.ch` / `intern2026`. 227 tests.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

@@ -35,6 +35,8 @@ export interface NewResponse {
   meta?: Record<string, unknown>;
   /// Staff member who conducted/recorded this occasion (see schema.prisma).
   conductedById?: string | null;
+  /// Staff member who typed the response in (manual entry audit trail).
+  enteredById?: string | null;
 }
 
 /// Score (when the definition allows it) and persist one response.
@@ -91,6 +93,7 @@ export async function createResponse(inst: LoadedInstrument, r: NewResponse, db:
       sessionNumber,
       wave: r.wave ?? null,
       conductedById: r.conductedById ?? null,
+      enteredById: r.enteredById ?? null,
       occurredAt: r.occurredAt ?? new Date(),
       rawAnswers: JSON.stringify(r.rawAnswers),
       note: r.note ?? "",

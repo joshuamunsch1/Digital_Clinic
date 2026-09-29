@@ -12,7 +12,7 @@
 // the failure boundary — updates as data accrues. This is the nearest-neighbor
 // analogue of the Trier Treatment Navigator's dynamic failure boundary.
 import { percentile } from "./stats";
-import { buildExpectedCourse, type ExpectedCourseOptions } from "./expected-course";
+import { buildExpectedCourse, pooledValues, type ExpectedCourseOptions } from "./expected-course";
 import type { ExpectedCoursePoint, IntakeFeatures, ReferenceCase, ScaleParams, SessionPoint } from "./types";
 
 interface NumericRange {
@@ -171,14 +171,8 @@ export function nnExpectedCourse(
   const seriesList = neighbors.map((nb) => nb.c.series[seriesKey] ?? []);
   const points = buildExpectedCourse(seriesList, opts);
 
-  const values = new Map<number, number[]>();
-  for (const series of seriesList) {
-    for (const p of series) {
-      const list = values.get(p.session) ?? [];
-      list.push(p.value);
-      values.set(p.session, list);
-    }
-  }
+  // Same occasion pooling as the band (exact, or windowed on the weeks axis).
+  const values = pooledValues(seriesList, opts);
   const failureBoundary = Array.from(values.entries())
     .filter(([, xs]) => xs.length >= minBoundaryN)
     .map(([session, xs]) => ({

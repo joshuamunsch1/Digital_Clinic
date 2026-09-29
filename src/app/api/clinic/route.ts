@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, instrumentFromRow, patientForSession, patientFromRow, patientLiteFromRow, patientSummaryFromRow } from "@/lib/serialize";
 import { limesurveyConfigured } from "@/lib/limesurvey";
+import { isClinicalRole } from "@/lib/access";
+import { isFillable } from "@/lib/instruments/types";
 
 // Role-scoped clinic payload:
 // - patient: only their own record (plus therapist names + instruments)
@@ -11,6 +13,10 @@ import { limesurveyConfigured } from "@/lib/limesurvey";
 // - director: all active patients in full; ARCHIVED patients as summary rows
 //   without response payloads (the reference archive can hold hundreds of
 //   cases — PatientDetail fetches the full dossier on open)
+// - intern (Batch 16): NO patients at all — only the instruments that can be
+//   entered from paper; entry works by patient code via /api/entry
+// - any other role: 403 (allow-list — an unknown role never falls through to
+//   the clinical payload)
 // - therapist: ONLY their own caseload (active full + own archived summaries).
 //   The UI always filtered to the own caseload; the payload now matches, so a
 //   therapist can no longer read colleagues' dossiers over the API.
@@ -48,6 +54,18 @@ export async function GET(req: Request) {
       limesurveyConfigured: limesurveyConfigured(),
     });
   }
+
+  if (s.role === "intern") {
+    const instruments = await prisma.instrument.findMany({ include: { scales: true }, orderBy: { name: "asc" } });
+    return NextResponse.json({
+      patients: [],
+      therapists: [],
+      instruments: instruments.map(instrumentFromRow).filter((i) => i.instrumentType === "likert_battery" && isFillable(i)),
+      limesurveyConfigured: false,
+    });
+  }
+
+  if (!isClinicalRole(s.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const caseload = s.role === "therapist" ? { therapistId: s.id } : {};
   const [active, archived, therapists, instruments] = await Promise.all([

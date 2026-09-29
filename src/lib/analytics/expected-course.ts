@@ -13,6 +13,48 @@ export interface ExpectedCourseOptions {
   minN?: number;
   /// Hard ceiling on the session axis (safety against outlier-long series).
   maxSession?: number;
+  /// Pooling half-width for sparse, irregularly timed axes (the BDI-FS weeks
+  /// axis, Batch 16). 0 (default) = exact occasions only. With w > 0, every
+  /// integer x gets, per reference case, the ONE point nearest to x within
+  /// ±w (ties → the earlier point) — each case counts at most once per x, so
+  /// n stays a count of cases, and a real gap (no case within ±w) stays a gap.
+  window?: number;
+}
+
+/// Reference values per occasion (exact, or nearest-within-window pooled).
+/// Shared by the band and the NN failure boundary so both use one definition.
+export function pooledValues(reference: SessionPoint[][], opts: ExpectedCourseOptions = {}): Map<number, number[]> {
+  const maxSession = opts.maxSession ?? 60;
+  const window = opts.window ?? 0;
+  const values = new Map<number, number[]>();
+  if (window <= 0) {
+    for (const series of reference) {
+      for (const p of series) {
+        if (p.session > maxSession) continue;
+        const list = values.get(p.session) ?? [];
+        list.push(p.value);
+        values.set(p.session, list);
+      }
+    }
+    return values;
+  }
+  let maxX = 0;
+  for (const series of reference) for (const p of series) if (p.session > maxX) maxX = p.session;
+  maxX = Math.min(maxX, maxSession);
+  for (let x = 0; x <= maxX; x++) {
+    const list: number[] = [];
+    for (const series of reference) {
+      let best: SessionPoint | null = null;
+      for (const p of series) {
+        const d = Math.abs(p.session - x);
+        if (d > window) continue;
+        if (!best || d < Math.abs(best.session - x) || (d === Math.abs(best.session - x) && p.session < best.session)) best = p;
+      }
+      if (best) list.push(best.value);
+    }
+    if (list.length) values.set(x, list);
+  }
+  return values;
 }
 
 export function buildExpectedCourse(
@@ -20,17 +62,7 @@ export function buildExpectedCourse(
   opts: ExpectedCourseOptions = {},
 ): ExpectedCoursePoint[] {
   const minN = opts.minN ?? 3;
-  const maxSession = opts.maxSession ?? 60;
-  const values = new Map<number, number[]>();
-  for (const series of reference) {
-    for (const p of series) {
-      if (p.session > maxSession) continue;
-      const list = values.get(p.session) ?? [];
-      list.push(p.value);
-      values.set(p.session, list);
-    }
-  }
-  return Array.from(values.entries())
+  return Array.from(pooledValues(reference, opts).entries())
     .filter(([, xs]) => xs.length >= minN)
     .map(([session, xs]) => ({
       session,

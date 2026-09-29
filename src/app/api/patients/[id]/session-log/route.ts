@@ -4,14 +4,16 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow, sessionLogFromRow } from "@/lib/serialize";
 import { SESSION_LOG_TYPES } from "@/lib/types";
+import { dispatchPlanForSession } from "@/lib/server-plan";
+import { isClinicalRole } from "@/lib/access";
 
-// Add a session-ledger entry: a held session (numbered; the client typically
-// follows up with linked questionnaire invitations), a cancellation or a
-// no-show (docs/outcome-prediction.md §4.5). Director or the patient's
-// assigned therapist only.
+// Add a session-ledger entry: a held session (numbered; the measurement
+// plan's every-session questionnaires go out automatically, linked to it), a
+// cancellation or a no-show (docs/outcome-prediction.md §4.5). Director or
+// the patient's assigned therapist only.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
-  if (!s || s.role === "patient" || s.role === "admin")
+  if (!s || !isClinicalRole(s.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
@@ -29,6 +31,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     sessionNumber?: number | null;
     conductedById?: string | null;
     note?: string;
+    /// Held sessions: send the measurement plan's every-session items right
+    /// away (default true — the log form's "gemäss Messplan versenden").
+    dispatchPlan?: boolean;
   };
   if (!body.type || !(SESSION_LOG_TYPES as readonly string[]).includes(body.type))
     return NextResponse.json({ error: "invalid_type" }, { status: 400 });
@@ -51,7 +56,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       note: body.note?.trim() ?? "",
     },
   });
+  // Measurement plan (Batch 16): a held session sends the plan's
+  // every-session questionnaires automatically — no second click.
+  const plan =
+    created.type === "held" && body.dispatchPlan !== false
+      ? await dispatchPlanForSession(params.id, created)
+      : { dispatched: [], paperDue: [] };
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
   // sessionLog is returned so the send step can link follow-up invitations.
-  return NextResponse.json({ patient: patientFromRow(p!), sessionLog: sessionLogFromRow(created) });
+  return NextResponse.json({
+    patient: patientFromRow(p!),
+    sessionLog: sessionLogFromRow(created),
+    dispatched: plan.dispatched,
+    paperDue: plan.paperDue,
+  });
 }

@@ -57,11 +57,16 @@ function CategoricalRow({ item, value, onChange }: { item: ItemDef; value: strin
   );
 }
 
-export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber, therapists, defaultConductedById, onSubmit, onCancel, busy }: {
+export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber, defaultDate, banner, therapists, defaultConductedById, onSubmit, onCancel, busy }: {
   instrument: InstrumentDef;
   /// therapists get rater/wave/date context controls; patients just answer
   clinicianMode?: boolean;
   defaultSessionNumber?: number;
+  /// Clinician mode: preset administration date (YYYY-MM-DD), e.g. the held
+  /// session a paper form belongs to. Defaults to today.
+  defaultDate?: string;
+  /// Shown above the form (intern entry: the patient CODE being entered for).
+  banner?: React.ReactNode;
   /// clinic staff, for the "conducted by" picker on every-session instruments
   /// (mirrors the legacy PSTB Hilfsskript's per-session Therapeut column).
   therapists?: Therapist[];
@@ -76,7 +81,7 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
   const [note, setNote] = useState("");
   const [role, setRole] = useState(instrument.raterRole === "self" ? "self" : instrument.raterRole);
   const [wave, setWave] = useState((instrument.cadenceConfig.waves ?? ["pre", "zm", "post", "postF"])[0]);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => defaultDate ?? new Date().toISOString().slice(0, 10));
   const [conductedById, setConductedById] = useState(defaultConductedById ?? "");
   // Visible in clinician mode for every-session instruments: manual/paper
   // entries must carry the session number so the ledger can match them.
@@ -109,6 +114,7 @@ export function InstrumentForm({ instrument, clinicianMode, defaultSessionNumber
 
   return (
     <div className="max-w-2xl mx-auto">
+      {banner}
       <SectionTitle sub={instrument.name}>{instrument.abbreviation}</SectionTitle>
       {assumedRange && (
         <Card className="p-3 mb-3" style={{ background: C.amberSoft, border: `1px solid ${C.amber}` }}>

@@ -7,7 +7,7 @@ import { createResponse, loadInstrument } from "@/lib/server-instruments";
 import { validateRawAnswers } from "@/lib/instruments/validate";
 import { isFillable, type RawAnswers } from "@/lib/instruments/types";
 import { isOpenInvitation } from "@/lib/reminders";
-import { therapistScoped } from "@/lib/access";
+import { isClinicalRole, therapistScoped } from "@/lib/access";
 import type { InvitationContext } from "@/lib/types";
 
 const parseContext = (s: string): InvitationContext => {
@@ -26,7 +26,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // staff manual entry requires the clinic network
   if (s.role === "patient" && s.id !== params.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  if (s.role === "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Staff manual entry: clinical roles only (interns enter by patient code via
+  // /api/entry, which never returns the dossier).
+  if (s.role !== "patient" && !isClinicalRole(s.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
 
@@ -105,6 +107,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     wave: isPatient ? ctx.wave ?? null : body.wave ?? ctx.wave ?? null,
     note: body.note,
     conductedById,
+    // Audit trail: who typed a manual entry in (Batch 16 "erfasst von").
+    enteredById: isPatient ? null : s.id,
     source: isPatient ? "in_app" : "manual_entry",
   });
 

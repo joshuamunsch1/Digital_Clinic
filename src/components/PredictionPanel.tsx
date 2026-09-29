@@ -54,23 +54,27 @@ export function EarlyChangeBadge({ value, compact }: { value: EarlyChange | null
   );
 }
 
-export function PredictionPanel({ prediction, loading, source, onSourceChange }: {
+export function PredictionPanel({ prediction, loading, source, onSourceChange, bare }: {
   prediction: PredictionPayload | null;
   loading: boolean;
   source: BandSource;
   onSourceChange: (s: BandSource) => void;
+  /// Rendered inside a dossier CollapsibleCard: no own card, no own title.
+  bare?: boolean;
 }) {
   const t = useT();
   const { lang } = useLang();
+  const wrap = (children: React.ReactNode) =>
+    bare ? <div>{children}</div> : <Card className="p-5 mb-4">{children}</Card>;
 
   if (loading)
-    return (
-      <Card className="p-5 mb-4">
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("predictionTitle")}</h3>
+    return wrap(
+      <>
+        {!bare && <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("predictionTitle")}</h3>}
         <p className="text-sm mt-2" style={{ color: C.muted }}>{t("loading")}</p>
-      </Card>
+      </>,
     );
-  if (!prediction) return null;
+  if (!prediction) return bare ? <p className="text-sm" style={{ color: C.muted }}>{t("predictionUnavailable")}</p> : null;
 
   const primary = prediction.series[0];
   const nn = primary?.nn;
@@ -93,10 +97,10 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
     return feature;
   };
 
-  return (
-    <Card className="p-5 mb-4">
+  return wrap(
+    <>
       <div className="flex items-center gap-2 flex-wrap mb-1">
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("predictionTitle")}</h3>
+        {!bare && <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("predictionTitle")}</h3>}
         {simulated && (
           <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
             {t("simulatedReference")}
@@ -147,7 +151,10 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
             )}
             {s.suddenShifts.map((sh) => (
               <span key={`${sh.fromSession}-${sh.toSession}`} style={{ color: sh.kind === "gain" ? C.spruce : C.danger }}>
-                ◆ {sh.kind === "gain" ? t("suddenGain") : t("suddenLoss")} S{sh.fromSession}→S{sh.toSession}
+                ◆ {sh.kind === "gain" ? t("suddenGain") : t("suddenLoss")}{" "}
+                {s.shiftAxis === "index"
+                  ? `M${sh.fromSession + 1}→M${sh.toSession + 1}`
+                  : `S${sh.fromSession}→S${sh.toSession}`}
               </span>
             ))}
           </div>
@@ -241,6 +248,6 @@ export function PredictionPanel({ prediction, loading, source, onSourceChange }:
           )}
         </div>
       </div>
-    </Card>
+    </>,
   );
 }

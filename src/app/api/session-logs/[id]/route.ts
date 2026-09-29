@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { isClinicalRole } from "@/lib/access";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 
@@ -8,7 +9,7 @@ import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
 // are ResponseInstances and are not deletable here).
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
-  if (!s || s.role === "patient" || s.role === "admin")
+  if (!s || !isClinicalRole(s.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;

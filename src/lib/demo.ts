@@ -2,6 +2,7 @@
 // Demo credentials: staff passwords are role-based (director2026 / admin2026 /
 // therapist2026), every demo patient uses patient2026 — see README.
 import { clamp } from "./format";
+import type { NewPlanItem } from "./measurement-plan";
 import { PALETTE } from "./theme";
 import type {
   CaseCharacteristics,
@@ -21,12 +22,16 @@ export const THERAPISTS = [
 ];
 export const DIRECTOR = { id: "d1", name: "Dr. Margrit Steiner", title: "Klinikleitung", role: "director" as const, email: "margrit.steiner@linden-clinic.ch" };
 export const ADMIN = { id: "a1", name: "Kurt Iseli", title: "Praxisadministration", role: "admin" as const, email: "kurt.iseli@linden-clinic.ch" };
+/// Demo intern (Praktikantin, Batch 16): paper-questionnaire entry by patient
+/// code only — never sees names or clinical data.
+export const INTERN = { id: "i1", name: "Lea Graf", title: "Praktikantin", role: "intern" as const, email: "lea.graf@linden-clinic.ch" };
 
 export const DEMO_PASSWORDS = {
   director: "director2026",
   admin: "admin2026",
   therapist: "therapist2026",
   patient: "patient2026",
+  intern: "intern2026",
 } as const;
 
 // --- PSTB session series (Berner Patientenstundenbogen, items -3..+3) ----------
@@ -92,18 +97,23 @@ export function phq4SessionsFor(levels: number[], endIso = "2026-06-08"): DemoSe
 // --- BDI-FS (7 items, 0-3) -------------------------------------------------------
 
 /// Mara: a falling BDI-FS trajectory (suicide item 0 throughout after intake).
-export const BDI_FS_SERIES: { daysAgo: number; answers: RawAnswers }[] = [
-  { daysAgo: 84, answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 2, BDI3_Versagen: 2, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 2, BDI7_Suizid: 1 } }, // total 12 (severe)
-  { daysAgo: 56, answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 1, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 8 (moderate)
-  { daysAgo: 28, answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 1, BDI3_Versagen: 0, BDI4_Freudeverlust: 1, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 5 (mild)
-  { daysAgo: 2, answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 0, BDI3_Versagen: 0, BDI4_Freudeverlust: 1, BDI5_Selbstablehnung: 0, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 3 (minimal)
+/// Absolute dates on her PSTB session days (baseline 2026-04-13 = therapy
+/// start, then weeks 3/6/8) — filled at the start of the session, the way the
+/// clinic uses it. Dated like the session series (not "days ago"), so the
+/// weeks-since-therapy-start axis (Batch 16) stays consistent whenever the
+/// demo is seeded.
+export const BDI_FS_SERIES: { daysAgo?: number; at?: string; answers: RawAnswers }[] = [
+  { at: "2026-04-13T09:00:00.000Z", answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 2, BDI3_Versagen: 2, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 2, BDI7_Suizid: 1 } }, // total 12 (severe)
+  { at: "2026-05-04T09:00:00.000Z", answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 1, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 8 (moderate)
+  { at: "2026-05-25T09:00:00.000Z", answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 1, BDI3_Versagen: 0, BDI4_Freudeverlust: 1, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 5 (mild)
+  { at: "2026-06-08T09:00:00.000Z", answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 0, BDI3_Versagen: 0, BDI4_Freudeverlust: 1, BDI5_Selbstablehnung: 0, BDI6_Selbstkritik: 1, BDI7_Suizid: 0 } }, // total 3 (minimal)
 ];
 
 /// Camille: worsening BDI-FS with the suicide item endorsed on the latest
 /// measurement — drives the clinical safety-flag demo.
-export const BDI_FS_ALERT_SERIES: { daysAgo: number; answers: RawAnswers }[] = [
-  { daysAgo: 30, answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 1, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 1 } }, // total 8
-  { daysAgo: 3, answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 2, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 2 } }, // total 11, item 7 = 2 -> alert
+export const BDI_FS_ALERT_SERIES: { daysAgo?: number; at?: string; answers: RawAnswers }[] = [
+  { at: "2026-05-18T09:00:00.000Z", answers: { BDI1_Traurigkeit: 1, BDI2_Pessimismus: 1, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 1 } }, // total 8
+  { at: "2026-06-08T09:00:00.000Z", answers: { BDI1_Traurigkeit: 2, BDI2_Pessimismus: 2, BDI3_Versagen: 1, BDI4_Freudeverlust: 2, BDI5_Selbstablehnung: 1, BDI6_Selbstkritik: 1, BDI7_Suizid: 2 } }, // total 11, item 7 = 2 -> alert
 ];
 
 // --- EDE-Q8 (8 items, 0-6), wave-based -------------------------------------------
@@ -306,6 +316,8 @@ export interface DemoPatient {
   /// has one so the diagnosis view opens on all dossiers.
   dips: { positive: DipsModuleId[]; completedAt: string };
   hasBdiSeries?: boolean;
+  /// Measurement-plan items beyond the default (every-session PSTB/PHQ-4).
+  extraPlan?: NewPlanItem[];
   hasBdiAlertSeries?: boolean;
   hasEdeq8Series?: boolean;
   hasFggSeries?: boolean;
@@ -318,6 +330,8 @@ export interface DemoPatient {
 // registration forms store; the UI translates those on display (trDemoValue).
 export const DEMO_PATIENTS: DemoPatient[] = [
   { id: "p1", name: "Mara Vogel", email: "mara.vogel@example.org", color: PALETTE[0], therapistId: "t1", status: "therapy", demographics: { age: 29, sex: "Female", nationality: "Schweiz", city: "Bern", occupation: "Primarlehrerin", living: "With partner", siblings: "1 — älterer Bruder" }, levels: [3, 3.5, 4, 4.5, 5, 5.5, 6.5, 7, 7.5], diagnosis: "Panikstörung (DSM-5) — Platzhalter", disorderCategory: "anxiety", icd: "F41.0", caseCharacteristics: { problemDuration: "m6to24", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 8 }, sessionLogs: [{ daysAgo: 24, type: "held", note: "Kriseninterventionstermin, kein Fragebogen" }, { daysAgo: 10, type: "no_show", note: "Unentschuldigt" }, { id: "sl-p1-s9", daysAgo: 3, type: "held", sessionNumber: 9 }], dips: { positive: ["panic"], completedAt: "2026-03-09T10:00:00.000Z" }, hasBdiSeries: true,
+    // BDI-FS filled on paper at the start of every session (clinic practice).
+    extraPlan: [{ instrumentId: "bdi_fs", respondentRole: "self", rhythm: "every_session", intervalDays: null, channel: "paper" }],
     goals: [
       {
         title: "Alltagswege ohne Vermeidung bewältigen",
@@ -349,6 +363,7 @@ export const DEMO_PATIENTS: DemoPatient[] = [
     ] },
   { id: "p2", name: "David Hofmann", email: "david.hofmann@example.org", color: PALETTE[1], therapistId: "t2", status: "therapy", demographics: { age: 41, sex: "Male", nationality: "Schweiz", city: "Thun", occupation: "Logistikleiter", living: "With family", siblings: "2 — mittleres Kind" }, levels: [5, 4.5, 3.5, 3, 4, 5, 6], diagnosis: "Anpassungsstörung mit Angst (Platzhalter)", disorderCategory: "anxiety", icd: "F43.2", caseCharacteristics: { problemDuration: "lt6m", priorPsychotherapy: false, psychotropicMedication: false, employment: "employed", treatmentExpectation: 6 }, dips: { positive: [], completedAt: "2026-03-09T09:00:00.000Z" } },
   { id: "p3", name: "Elif Demir", email: "elif.demir@example.org", color: PALETTE[2], therapistId: "t1", status: "therapy", demographics: { age: 24, sex: "Female", nationality: "Türkei", city: "Biel/Bienne", occupation: "Pflegestudentin", living: "Shared flat", siblings: "3 — jüngste" }, levels: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5], diagnosis: "Generalisierte Angststörung (Platzhalter)", disorderCategory: "anxiety", icd: "F41.1", caseCharacteristics: { problemDuration: "gt24m", priorPsychotherapy: true, psychotropicMedication: false, employment: "in_training", treatmentExpectation: 7 }, sessionLogs: [{ id: "sl-p3-s10", daysAgo: 38, type: "held", sessionNumber: 10 }], dips: { positive: ["gad"], completedAt: "2026-03-09T11:00:00.000Z" },
+    extraPlan: [{ instrumentId: "bdi_fs", respondentRole: "self", rhythm: "interval", intervalDays: 28, channel: "paper" }],
     goals: [
       {
         title: "Grübeln zeitlich begrenzen",

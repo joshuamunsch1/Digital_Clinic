@@ -32,6 +32,85 @@ export interface OutcomesPayload {
   excluded: number;
 }
 
+// Type-only (erased at compile time): the entry lookup payload shape.
+import type { EntryTarget } from "./server-entry";
+export type { EntryTarget };
+
+/// Receipt of one code-keyed paper entry — never patient data beyond the code.
+export interface EntryReceipt {
+  id: string;
+  code: string;
+  instrumentId: string;
+  occurredAt: string;
+  sessionNumber: number | null;
+  wave: string | null;
+  respondentRole: string;
+  createdAt: string;
+  deletable: boolean;
+}
+
+export interface CreateEntryPayload {
+  code: string;
+  instrumentId: string;
+  rawAnswers: RawAnswers;
+  occurredAt: string;
+  sessionNumber?: number | null;
+  wave?: string | null;
+  respondentRole?: string;
+  note?: string;
+  confirmDuplicate?: boolean;
+}
+
+export interface InternAccount {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+  createdAt: string;
+  entries30d: number;
+}
+
+/// POST /api/entry: a 409 duplicate_entry is an expected outcome (the UI asks
+/// for confirmation), not an exception.
+async function handleEntry(
+  res: Response,
+): Promise<{ entry: EntryReceipt; skippedScales: string[] } | { duplicate: { occurredAt: string; sessionNumber: number | null } }> {
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; existing?: { occurredAt: string; sessionNumber: number | null } };
+    if (body.error === "duplicate_entry" && body.existing) return { duplicate: body.existing };
+    throw new Error(body.error || res.statusText);
+  }
+  return handle(res);
+}
+
+/// One automatic send of the measurement plan (session-log response).
+export interface PlanDispatchOutcome {
+  instrumentId: string;
+  channel: string;
+  ok: boolean;
+  warning?: string;
+  error?: string;
+}
+
+export type PlanActionPayload =
+  | { action: "applyDefaults" }
+  | { action: "remove"; itemId: string }
+  | {
+      action: "add";
+      instrumentId: string;
+      rhythm: "every_session" | "interval";
+      intervalDays?: number | null;
+      channel: "in_app" | "limesurvey" | "paper";
+    }
+  | {
+      action: "update";
+      itemId: string;
+      rhythm?: "every_session" | "interval";
+      intervalDays?: number | null;
+      channel?: "in_app" | "limesurvey" | "paper";
+      active?: boolean;
+    };
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -87,6 +166,8 @@ export interface CreateInvitationPayload {
 
 export interface SweepResult {
   skipped?: string;
+  /// Measurement-plan interval sends made by this sweep (Batch 16).
+  plan?: { created: number; errors: string[] };
   sync?: { checked: number; imported: number; pending: number; errors: string[] };
   reminders?: { due: number; sent: number; errors: string[] };
 }
@@ -222,13 +303,42 @@ export const api = {
 
   /// Returns the created ledger entry too, so the send step can link
   /// follow-up invitations to it.
+  /// Held sessions also send the measurement plan's every-session items
+  /// (unless dispatchPlan is false) — `dispatched` reports each send,
+  /// `paperDue` the plan's paper instruments for this session.
   logSession: (
     id: string,
-    payload: { occurredAt?: string; type: string; sessionNumber?: number | null; conductedById?: string | null; note?: string },
+    payload: {
+      occurredAt?: string;
+      type: string;
+      sessionNumber?: number | null;
+      conductedById?: string | null;
+      note?: string;
+      dispatchPlan?: boolean;
+    },
   ) =>
     post(`/api/patients/${id}/session-log`, payload).then((r) =>
-      handle<{ patient: Patient; sessionLog: SessionLogRecord }>(r),
+      handle<{ patient: Patient; sessionLog: SessionLogRecord; dispatched: PlanDispatchOutcome[]; paperDue: string[] }>(r),
     ),
+
+  // Paper-questionnaire entry by patient code (interns, Batch 16).
+  entryLookup: (code: string) =>
+    fetch(`/api/entry/lookup?code=${encodeURIComponent(code)}`).then((r) => handle<{ target: EntryTarget }>(r)),
+  createEntry: (payload: CreateEntryPayload) =>
+    post("/api/entry", payload).then((r) => handleEntry(r)),
+  myEntries: () => fetch("/api/entry").then((r) => handle<{ entries: EntryReceipt[] }>(r)),
+  deleteEntry: (id: string) => fetch(`/api/entry/${id}`, { method: "DELETE" }).then((r) => handle<{ ok: true }>(r)),
+
+  // Intern account management (director only, Batch 16).
+  listInterns: () => fetch("/api/staff").then((r) => handle<{ interns: InternAccount[] }>(r)),
+  createIntern: (payload: { name: string; email: string; password: string }) =>
+    post("/api/staff", payload).then((r) => handle<{ interns: InternAccount[] }>(r)),
+  updateIntern: (payload: { id: string; active?: boolean; password?: string }) =>
+    patch("/api/staff", payload).then((r) => handle<{ interns: InternAccount[] }>(r)),
+
+  /// Measurement plan ("Messplan", Batch 16) edits.
+  planAction: (id: string, payload: PlanActionPayload) =>
+    post(`/api/patients/${id}/plan`, payload).then((r) => handle<{ patient: Patient }>(r)),
 
   deleteSessionLog: (logId: string) =>
     fetch(`/api/session-logs/${logId}`, { method: "DELETE" }).then((r) => handle<{ patient: Patient }>(r)),

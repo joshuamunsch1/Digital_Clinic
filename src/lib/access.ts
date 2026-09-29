@@ -8,7 +8,16 @@
 //   therapist → only their own caseload (patient.therapistId === session.id)
 //   admin     → handled separately (lite view, no clinical data)
 //   patient   → handled separately (own record only)
-import type { SessionUser } from "./types";
+import type { Role, SessionUser } from "./types";
+
+/// Clinical staff — the only roles that may read clinical data (scores,
+/// trajectories, diagnoses, predictions, dossiers). Routes gate on this
+/// ALLOW-list rather than denying patient/admin: any role added later (the
+/// intern, Batch 16) is refused by default instead of falling through to the
+/// full clinical payload.
+export function isClinicalRole(role: Role | string): role is "director" | "therapist" {
+  return role === "director" || role === "therapist";
+}
 
 export function therapistScoped(
   s: SessionUser,

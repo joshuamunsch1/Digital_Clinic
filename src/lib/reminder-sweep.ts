@@ -1,15 +1,20 @@
-// One sweep = (1) pull completed LimeSurvey responses, then (2) send due
-// automatic reminder e-mails through LimeSurvey (remind_participants) per each
-// invitation's schedule. Sync runs first so nobody is reminded about a
-// questionnaire they just completed. Called by the background scheduler
-// (src/lib/reminder-scheduler.ts) and by POST /api/reminders/run.
+// One sweep = (0) send the measurement plans' due interval questionnaires
+// (Batch 16 — runs with or without LimeSurvey: in-app requests need none),
+// then, when LimeSurvey is configured, (1) pull completed LimeSurvey
+// responses and (2) send due automatic reminder e-mails through LimeSurvey
+// (remind_participants) per each invitation's schedule. Sync runs before the
+// reminders so nobody is reminded about a questionnaire they just completed.
+// Called by the background scheduler (src/lib/reminder-scheduler.ts) and by
+// POST /api/reminders/run.
 import { prisma } from "./db";
 import { limesurveyConfigured, remindParticipant } from "./limesurvey";
 import { nextReminderAfter, reminderDue } from "./reminders";
 import { syncInvitations } from "./server-invitations";
+import { dispatchDuePlans } from "./server-plan";
 
 export interface SweepResult {
   skipped?: string;
+  plan?: { created: number; errors: string[] };
   sync?: { checked: number; imported: number; pending: number; errors: string[] };
   reminders?: { due: number; sent: number; errors: string[] };
 }
@@ -18,9 +23,10 @@ let running = false;
 
 export async function runReminderSweep(): Promise<SweepResult> {
   if (running) return { skipped: "a sweep is already running" };
-  if (!limesurveyConfigured()) return { skipped: "limesurvey not configured" };
   running = true;
   try {
+    const plan = await dispatchDuePlans();
+    if (!limesurveyConfigured()) return { plan, skipped: "limesurvey not configured" };
     const sync = await syncInvitations();
 
     const now = new Date();
@@ -60,7 +66,7 @@ export async function runReminderSweep(): Promise<SweepResult> {
         await prisma.questionnaireInvitation.update({ where: { id: inv.id }, data: { lastError: msg } });
       }
     }
-    return { sync, reminders };
+    return { plan, sync, reminders };
   } finally {
     running = false;
   }

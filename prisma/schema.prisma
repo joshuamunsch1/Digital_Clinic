@@ -17,21 +17,27 @@ generator client {
   provider = "prisma-client-js"
 }
 
-/// Clinic staff: therapists, the clinic director, and administrators
-/// (administration can assign patients but never sees clinical data).
+/// Clinic staff: therapists, the clinic director, administrators
+/// (administration can assign patients but never sees clinical data) and
+/// interns (Praktikant:innen — paper-questionnaire data entry keyed by patient
+/// code only; never see names or clinical data).
 model User {
   id                String            @id @default(cuid())
   name              String
   title             String
-  role              String // "therapist" | "director" | "admin"
+  role              String // "therapist" | "director" | "admin" | "intern"
   email             String            @unique
   passwordHash      String
+  /// Deactivated accounts cannot log in (director-managed intern accounts).
+  active            Boolean           @default(true)
   patients          Patient[]         @relation("TherapistPatients")
   uploadedDocuments PatientDocument[] @relation("UploadedDocuments")
   /// Sessions/occasions this staff member is recorded as having conducted —
   /// see ResponseInstance.conductedById. Distinct from TherapistPatients,
   /// which is the *current* patient assignment, not a per-occasion record.
   conducted         ResponseInstance[] @relation("ResponseConductedBy")
+  /// Responses this staff member typed in (manual paper entry) — audit trail.
+  entered           ResponseInstance[] @relation("ResponseEnteredBy")
   sessionLogs       SessionLog[]      @relation("SessionLogConductedBy")
   createdAt         DateTime          @default(now())
 }
@@ -85,7 +91,35 @@ model Patient {
   documents      PatientDocument[]
   sessionLogs    SessionLog[]
   goals          TherapyGoal[]
+  planItems      MeasurementPlanItem[]
   createdAt      DateTime           @default(now())
+}
+
+/// Standing per-patient measurement plan ("Messplan", Batch 16): which
+/// questionnaires go out automatically, on which rhythm and channel. Set once
+/// (a default plan is created when the diagnosis starts therapy) and consumed
+/// by the session-log route (rhythm "every_session": sent when a held session
+/// is logged) and the background sweep (rhythm "interval": sent when
+/// intervalDays have passed since the last request/response). Channel "paper"
+/// never dispatches — it marks the item as due for manual/intern entry.
+model MeasurementPlanItem {
+  id              String     @id @default(cuid())
+  patientId       String
+  patient         Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  instrumentId    String
+  instrument      Instrument @relation(fields: [instrumentId], references: [id])
+  respondentRole  String     @default("self")
+  rhythm          String // "every_session" | "interval"
+  intervalDays    Int? // rhythm "interval" only
+  channel         String // "in_app" | "limesurvey" | "paper"
+  remindEveryDays Int? // LimeSurvey reminder cadence for the requests it creates
+  maxReminders    Int?
+  active          Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([patientId, instrumentId, respondentRole])
+  @@index([patientId])
 }
 
 /// GAS goal (Goal Attainment Scaling, Zielerreichungsskala nach Kiresuk &
@@ -158,6 +192,7 @@ model Instrument {
   scales             Scale[]
   responses          ResponseInstance[]
   invitations        QuestionnaireInvitation[]
+  planItems          MeasurementPlanItem[]
   createdAt          DateTime           @default(now())
 }
 
@@ -197,6 +232,11 @@ model ResponseInstance {
   /// src/app/api/patients/[id]/responses/route.ts.
   conductedById  String?
   conductedBy    User?        @relation("ResponseConductedBy", fields: [conductedById], references: [id])
+  /// Staff member who TYPED this response in (manual paper entry by a
+  /// therapist or an intern; null for patient/LimeSurvey/CSV submissions) —
+  /// audit trail, shown as "erfasst von" in the dossier (Batch 16).
+  enteredById    String?
+  enteredBy      User?        @relation("ResponseEnteredBy", fields: [enteredById], references: [id])
   occurredAt     DateTime
   rawAnswers     String // JSON: { itemId: value }
   status         String       @default("complete") // "complete" | "partial"

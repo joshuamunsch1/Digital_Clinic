@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { isClinicalRole } from "@/lib/access";
 import { staffNetworkGuard } from "@/lib/network";
 import { buildPrediction } from "@/lib/prediction/service";
 
@@ -12,7 +13,7 @@ import { buildPrediction } from "@/lib/prediction/service";
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (s.role === "patient" || s.role === "admin")
+  if (!isClinicalRole(s.role))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;

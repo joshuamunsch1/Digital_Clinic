@@ -27,6 +27,7 @@ import {
   type SessionPoint,
   type SuddenShift,
 } from "../analytics/types";
+import { firstMeasurementAt, seriesAnchor, weekSeriesOf } from "../analytics/time-axis";
 import { PATIENT_INCLUDE, patientFromRow } from "../serialize";
 import type { Patient } from "../types";
 import {
@@ -37,6 +38,7 @@ import {
   getReferenceData,
   intakeFeaturesOf,
   type ReferenceData,
+  type TargetAxis,
 } from "./reference";
 
 const NN_K = 20;
@@ -54,6 +56,16 @@ const parseJson = <T>(s: string | null | undefined, fallback: T): T => {
 export interface SeriesPrediction {
   instrumentId: string;
   scaleKey: string;
+  /// Occasion axis of the band/boundary points: session number, or whole
+  /// weeks since `anchorAt` (Batch 16 — BDI-FS).
+  axis: TargetAxis;
+  /// Day 0 of the weeks axis (therapy start, else first measurement) — the
+  /// chart places week w at anchorAt + w·7d. Null on the session axis.
+  anchorAt: string | null;
+  /// Sudden shifts need CONSECUTIVE measurements: on the weeks axis they are
+  /// computed on the measurement-order series, and fromSession/toSession are
+  /// then 0-based measurement indices.
+  shiftAxis: "session" | "index";
   expectedCourse: {
     points: ExpectedCoursePoint[];
     stratified: boolean;
@@ -103,7 +115,7 @@ export interface PredictionPayload {
 export interface ClinicCourse {
   instrumentId: string;
   scaleKey: string;
-  axis: "session" | "index";
+  axis: TargetAxis;
   n: number;
   includesSimulated: boolean;
   points: ExpectedCoursePoint[];
@@ -114,9 +126,11 @@ function predictSeries(
   ref: ReferenceData,
   patientSeries: SessionPoint[],
   patientFeatures: ReturnType<typeof intakeFeaturesOf>,
-  instrumentId: string,
-  scaleKey: string,
+  target: (typeof PREDICTION_TARGETS)[number],
+  axisInfo: { anchorAt: string | null; shiftSeries: SessionPoint[] },
 ): SeriesPrediction | null {
+  const { instrumentId, scaleKey } = target;
+  const courseOpts = target.course ?? {};
   const key = seriesKeyOf(instrumentId, scaleKey);
   const scale = ref.scaleParamsByKey.get(key);
   if (!scale) return null;
@@ -130,6 +144,7 @@ function predictSeries(
       series: c.series[key] ?? [],
     })),
     baselineOf(patientSeries),
+    courseOpts,
   );
 
   // Nearest neighbors with the dynamic (observed-course-aware) similarity.
@@ -137,7 +152,7 @@ function predictSeries(
   if (withSeries.length >= NN_MIN_REFERENCE) {
     const neighbors = dynamicNeighbors(patientFeatures, patientSeries, withSeries, NN_K, key, scale);
     if (neighbors.length >= Math.min(NN_K, NN_MIN_REFERENCE)) {
-      const { points, failureBoundary } = nnExpectedCourse(neighbors, key, scale);
+      const { points, failureBoundary } = nnExpectedCourse(neighbors, key, scale, courseOpts);
       const sessionCounts = neighbors
         .map((nb) => nb.c.sessionCount)
         .filter((v): v is number => v !== null);
@@ -175,6 +190,9 @@ function predictSeries(
   return {
     instrumentId,
     scaleKey,
+    axis: target.axis,
+    anchorAt: axisInfo.anchorAt,
+    shiftAxis: target.axis === "session" ? "session" : "index",
     expectedCourse: {
       points: course.points,
       stratified: course.stratified,
@@ -183,7 +201,7 @@ function predictSeries(
     },
     nn,
     etr,
-    suddenShifts: detectSuddenShifts(patientSeries, scale),
+    suddenShifts: detectSuddenShifts(axisInfo.shiftSeries, scale),
     earlyChange: classifyEarlyChange(patientSeries, scale),
     onTrack: classifyOnTrack(patientSeries, course.points, scale),
   };
@@ -209,13 +227,23 @@ export async function buildPrediction(prisma: PrismaClient, patientId: string): 
 
   const series: SeriesPrediction[] = [];
   for (const t of PREDICTION_TARGETS) {
-    // Index-axis targets (BDI-FS) align by measurement order, mirroring how
-    // the reference series were built in reference.ts.
-    const patientSeries =
-      t.axis === "index"
-        ? indexedSeriesOf(patient.responses, t.instrumentId, t.scaleKey)
-        : sessionSeriesOf(patient.responses, t.instrumentId, t.scaleKey);
-    const s = predictSeries(ref, patientSeries, features, t.instrumentId, t.scaleKey);
+    // Weeks-axis targets (BDI-FS) are binned by weeks since therapy start,
+    // mirroring how the reference series were built in reference.ts.
+    if (t.axis === "weeks") {
+      const anchor = seriesAnchor(
+        patient.treatmentStartAt,
+        firstMeasurementAt(patient.responses, t.instrumentId, t.scaleKey),
+      );
+      if (anchor === null) continue; // no measurement yet → nothing to predict
+      const s = predictSeries(ref, weekSeriesOf(patient.responses, t.instrumentId, t.scaleKey, anchor), features, t, {
+        anchorAt: new Date(anchor).toISOString(),
+        shiftSeries: indexedSeriesOf(patient.responses, t.instrumentId, t.scaleKey),
+      });
+      if (s) series.push(s);
+      continue;
+    }
+    const patientSeries = sessionSeriesOf(patient.responses, t.instrumentId, t.scaleKey);
+    const s = predictSeries(ref, patientSeries, features, t, { anchorAt: null, shiftSeries: patientSeries });
     if (s) series.push(s);
   }
 

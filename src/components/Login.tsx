@@ -20,12 +20,14 @@ const DEMO_ACCOUNTS: { role: string; email: string; password: string }[] = [
   { role: "roleDirector", email: "margrit.steiner@linden-clinic.ch", password: "director2026" },
   { role: "roleAdmin", email: "kurt.iseli@linden-clinic.ch", password: "admin2026" },
   { role: "roleTherapist", email: "anna.keller@linden-clinic.ch", password: "therapist2026" },
+  { role: "roleIntern", email: "lea.graf@linden-clinic.ch", password: "intern2026" },
   { role: "rolePatient", email: "mara.vogel@example.org", password: "patient2026" },
 ];
 
 function errorText(msg: string, t: ReturnType<typeof useT>): string {
   switch (msg) {
     case "invalid_credentials": return t("invalidCredentials");
+    case "account_inactive": return t("accountInactive");
     case "email_taken": return t("emailTaken");
     case "invalid_email": return t("invalidEmail");
     case "weak_password": return t("passwordTooShort");

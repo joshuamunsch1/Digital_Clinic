@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
+import { isClinicalRole, therapistScoped } from "@/lib/access";
 import { PATIENT_INCLUDE, patientForSession, type DipsMeta } from "@/lib/serialize";
 import { relay, endpointLabel } from "@/lib/server-dips";
 import { DIPS_INSTRUMENT_ID, type Demographics } from "@/lib/types";
@@ -16,12 +17,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (s.role === "patient" && s.id !== params.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (s.role !== "patient" && !isClinicalRole(s.role))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
 
   const { demo } = (await req.json()) as { demo: Demographics };
   const patient = await prisma.patient.findUnique({ where: { id: params.id } });
   if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (s.role !== "patient" && !therapistScoped(s, patient))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   if (patient.status === "archived")
     return NextResponse.json({ error: "archived" }, { status: 400 });
 

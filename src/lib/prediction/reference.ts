@@ -19,6 +19,7 @@ import {
   type ScaleParams,
   type SessionPoint,
 } from "../analytics/types";
+import { binByWeek, seriesAnchor } from "../analytics/time-axis";
 import { instrumentFromRow } from "../serialize";
 import {
   SESSION_INSTRUMENT_ID,
@@ -31,21 +32,35 @@ import {
 /// PRIMARY target (the symptom measure — Lutz's HSCL-11 slot): it drives the
 /// not-on-track flag, early-change classification and the dropout features.
 /// The PSTB headline scale gets bands and sudden-shift markers as well.
-/// axis "session" aligns cases by sessionNumber; "index" by measurement order
-/// (0, 1, 2… chronologically) — used for the wave-/date-cadenced BDI-FS, whose
-/// responses carry no sessionNumber (sim cohort: pre/zm/post waves).
-export type TargetAxis = "session" | "index";
+/// axis "session" aligns cases by sessionNumber (the dose axis of the
+/// every-session measures); "weeks" by whole weeks since therapy start
+/// (src/lib/analytics/time-axis.ts) — used for the date-cadenced BDI-FS, whose
+/// responses carry no sessionNumber. Batch 16 replaced the former "index"
+/// axis (measurement order 0, 1, 2…): the 2nd BDI-FS is week 1 for a patient
+/// who fills it weekly but mid-therapy in the reference cohort (pre/zm/post
+/// waves), so index alignment compared unlike time points. `window` pools the
+/// sparse reference weeks (±w weeks, nearest point per case) — see
+/// ExpectedCourseOptions.window.
+export type TargetAxis = "session" | "weeks";
 // NOTE [clinician-confirm]: the PSTB target below predicts a SINGLE-item
 // process scale (Therapiefortschritte = item I4 alone, placeholder rci) — a
 // single item has no internal-consistency reliability, and Lutz-style ETR
 // models are built on SYMPTOM measures (OQ-45/HSCL/BSI analogues). PHQ-4 and
 // BDI-FS are the defensible outcome targets; the PSTB curve is process
 // feedback, not an outcome prediction, and should be read as such.
-export const PREDICTION_TARGETS = [
+export const PREDICTION_TARGETS: readonly {
+  instrumentId: string;
+  scaleKey: string;
+  axis: TargetAxis;
+  /// Band options for this target (weeks axis: ±2-week pooling, n ≥ 5).
+  course?: { window: number; minN: number };
+}[] = [
   { instrumentId: "phq4", scaleKey: "PHQ_total", axis: "session" },
   { instrumentId: SESSION_INSTRUMENT_ID, scaleKey: SESSION_PRIMARY_SCALE, axis: "session" },
-  { instrumentId: "bdi_fs", scaleKey: "BDI_FS_total", axis: "index" },
-] as const;
+  // [clinician-confirm] window/minN are pragmatic smoothing choices for a
+  // sparse, irregularly timed series — not derived from the literature.
+  { instrumentId: "bdi_fs", scaleKey: "BDI_FS_total", axis: "weeks", course: { window: 2, minN: 5 } },
+];
 export const PRIMARY_TARGET = PREDICTION_TARGETS[0];
 export const PRIMARY_KEY = seriesKeyOf(PRIMARY_TARGET.instrumentId, PRIMARY_TARGET.scaleKey);
 
@@ -157,7 +172,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
   }
 
   // Lean load: labeled archived patients with ONLY the target-series scores.
-  // No sessionNumber filter here — index-axis targets (BDI-FS) live on
+  // No sessionNumber filter here — weeks-axis targets (BDI-FS) live on
   // wave-/date-based responses whose sessionNumber is null. The 3-field
   // sessionLogs select feeds the attendance features; the probe stays sound
   // without covering SessionLog writes because logs are only writable on
@@ -171,6 +186,7 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
       disorderCategory: true,
       caseCharacteristics: true,
       terminationReason: true,
+      treatmentStartAt: true,
       treatmentEndAt: true,
       sessionLogs: { select: { type: true, occurredAt: true, sessionNumber: true } },
       responses: {
@@ -192,15 +208,15 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
   const cases: ReferenceCase[] = rows.map((r) => {
     const series: Record<string, SessionPoint[]> = {};
     const bySessionKey = new Map<string, Map<number, { at: number; value: number }>>();
-    const byIndexKey = new Map<string, { at: number; value: number }[]>();
+    const byWeeksKey = new Map<string, { at: number; value: number }[]>();
     for (const resp of r.responses) {
       for (const sc of resp.scaleScores) {
         const key = `${sc.scale.instrumentId}|${sc.scale.key}`;
         if (!targetKeys.has(key)) continue;
-        if (axisByKey.get(key) === "index") {
-          const list = byIndexKey.get(key) ?? [];
+        if (axisByKey.get(key) === "weeks") {
+          const list = byWeeksKey.get(key) ?? [];
           list.push({ at: resp.occurredAt.getTime(), value: sc.value });
-          byIndexKey.set(key, list);
+          byWeeksKey.set(key, list);
           continue;
         }
         if (resp.sessionNumber === null) continue;
@@ -218,8 +234,10 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
         .map(([session, { value }]) => ({ session, value }))
         .sort((a, b) => a.session - b.session);
     }
-    for (const [key, list] of byIndexKey) {
-      series[key] = list.sort((a, b) => a.at - b.at).map(({ value }, i) => ({ session: i, value }));
+    for (const [key, list] of byWeeksKey) {
+      // Same anchor rule as the live patient (time-axis.ts seriesAnchor).
+      const anchor = seriesAnchor(r.treatmentStartAt, Math.min(...list.map((p) => p.at)))!;
+      series[key] = binByWeek(list, anchor);
     }
     const primary = series[PRIMARY_KEY] ?? [];
     return {
@@ -247,9 +265,9 @@ async function build(prisma: PrismaClient, version: string): Promise<ReferenceDa
 
   const etrModels = new Map<string, EtrModel>();
   for (const t of PREDICTION_TARGETS) {
-    // ETR is a log-linear model over the SESSION axis — meaningless on
-    // measurement-index series, so index-axis targets get no ETR curve.
-    if (t.axis === "index") continue;
+    // ETR is a log-linear model over the SESSION axis (dose) — not defined on
+    // the calendar weeks axis, so weeks-axis targets get no ETR curve.
+    if (t.axis !== "session") continue;
     const key = seriesKeyOf(t.instrumentId, t.scaleKey);
     const model = trainEtr(
       cases

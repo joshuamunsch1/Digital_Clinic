@@ -5,13 +5,14 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from "recharts";
 import { C, PALETTE } from "@/lib/theme";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtDateShort } from "@/lib/format";
 import { trCategory, trRaterRole } from "@/lib/i18n";
 import type { ExpectedCoursePoint, SuddenShift } from "@/lib/analytics/types";
 import type { ClinicCourse } from "@/lib/prediction/service";
 import type { InstrumentDef, ScaleDef } from "@/lib/instruments/types";
 import { classifyChange } from "@/lib/instruments/rci";
-import type { GoalRecord, Patient, ResponseRecord } from "@/lib/types";
+import type { GoalRecord, Patient, ResponseRecord, SessionLogRecord } from "@/lib/types";
+import { WEEK_MS, dateForSession, firstMeasurementAt, intervalStats, seriesAnchor, sessionDateMap, weeksSince } from "@/lib/analytics/time-axis";
 import {
   DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
@@ -22,12 +23,20 @@ import {
 import { useLang, useT } from "./LangContext";
 import { MiniTrend } from "./ui";
 
-interface TipPayload { dataKey: string; name: string; value: number | [number, number]; color?: string; stroke?: string }
-export function ChartTip({ active, payload, label }: { active?: boolean; payload?: TipPayload[]; label?: string | number }) {
+interface TipPayload { dataKey: string; name: string; value: number | [number, number]; color?: string; stroke?: string; payload?: Record<string, unknown> }
+export function ChartTip({ active, payload, label, labelOf }: {
+  active?: boolean;
+  payload?: TipPayload[];
+  label?: string | number;
+  /// Numeric (date / week) axes: derive the heading from the hovered row.
+  labelOf?: (row: Record<string, unknown>, label: string | number | undefined) => string;
+}) {
   if (!active || !payload || !payload.length) return null;
+  const row = payload[0].payload;
+  const heading = labelOf && row ? labelOf(row, label) : label;
   return (
     <div className="rounded-lg px-3 py-2 text-xs" style={{ background: C.ink, color: "#fff", maxWidth: 240 }}>
-      <div className="font-bold mb-1">{label}</div>
+      <div className="font-bold mb-1">{heading}</div>
       {payload.map((p) => (
         <div key={p.dataKey} className="flex justify-between gap-3">
           <span style={{ color: p.color || p.stroke || "#fff" }}>{p.name}</span>
@@ -52,6 +61,13 @@ export interface ChartPrediction {
   failureBoundary?: { session: number; value: number }[];
   etrPoints?: { session: number; expected: number }[];
   shifts: SuddenShift[];
+  /// Axis of the band/boundary/ETR points (`session` field): session number
+  /// (default) or whole weeks since `anchorAt` (Batch 16, BDI-FS).
+  axis?: "session" | "weeks";
+  anchorAt?: string | null;
+  /// Axis of the shift from/to fields: session number (default) or 0-based
+  /// chronological measurement index (weeks-axis targets).
+  shiftAxis?: "session" | "index";
   /// Alliance-rupture markers (open amber diamonds at the drop's toSession).
   /// Gated on `ruptureScaleKey` being the SINGLE visible scale — a condition
   /// deliberately separate from the band/ETR gating on `scaleKey`: the two
@@ -69,9 +85,9 @@ interface Occasion { key: string; label: string; order: number }
 export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasion {
   if (instrument.cadenceType === "every_session" && r.sessionNumber !== null) {
     // "B"/"S{n}" is deliberately NOT localized: "S" reads as
-    // Sitzung/Séance/Session in all three UI languages, and the "B" label is
-    // load-bearing — rows[0].label === "B" gates the therapy-begins reference
-    // line below. Wave codes (pre/zm/post/postF) are clinic jargon, kept as-is.
+    // Sitzung/Séance/Session in all three UI languages, and "B" marks the
+    // baseline (the therapy-begins reference line is drawn after it). Wave
+    // codes (pre/zm/post/postF) are clinic jargon, kept as-is.
     return {
       key: `s${r.sessionNumber}`,
       label: r.sessionNumber === 0 ? "B" : `S${r.sessionNumber}`,
@@ -87,17 +103,52 @@ export function occasionOf(instrument: InstrumentDef, r: ResponseRecord): Occasi
   return { key: r.occurredAt, label: fmtDate(r.occurredAt), order: t };
 }
 
+/// Whether an instrument has a non-calendar native axis (sessions / waves) the
+/// chart can switch to; date-cadenced instruments are always drawn by date.
+export const hasNativeAxis = (instrument: InstrumentDef) =>
+  instrument.cadenceType === "every_session" || instrument.cadenceType === "wave";
+
+export type ChartXMode = "date" | "native";
+
+/// One chart row: a measured occasion, or an overlay-only position (a future /
+/// unmeasured session, a reference week). `t` is the calendar position (date
+/// mode x), `s` the session number, `idx` the chronological measurement index.
+interface ChartRow {
+  label: string;
+  order: number;
+  t: number | null;
+  s: number | null;
+  idx: number | null;
+  rids: string[];
+  projected: boolean;
+  values: Record<string, number | [number, number] | null>;
+}
+
+const sessionLabel = (k: number) => (k === 0 ? "B" : `S${k}`);
+
 /// The generalized "Verlauf" chart: any instrument's scale scores across a
 /// patient's response history. One toggle chip per scale; when several raters
 /// have filled the same instrument (e.g. SDQ self + mother) each rater gets a
 /// line style. Norm bands are shaded and RCI change markers (▲/▼ vs. the first
 /// measurement) are drawn when exactly one scale is shown.
-export function TrajectoryChart({ instrument, responses, height = 280, initialScales, prediction }: {
+///
+/// xMode (Batch 16): "date" puts occasions on a true calendar axis (spacing =
+/// elapsed time; session labels move to the tooltip), "native" is the
+/// categorical session/wave axis. Session-axis overlays are placed at each
+/// session's date in date mode (measured → its date, gaps interpolated, the
+/// look-ahead projected at the patient's recent rhythm); weeks-axis overlays
+/// at anchor + w·7d.
+export function TrajectoryChart({ instrument, responses, height = 280, initialScales, prediction, xMode = "date", sessionLogs, onSelectOccasion }: {
   instrument: InstrumentDef;
   responses: ResponseRecord[];
   height?: number;
   initialScales?: string[];
   prediction?: ChartPrediction;
+  xMode?: ChartXMode;
+  /// Held-session dates fill gaps when placing session-axis overlays by date.
+  sessionLogs?: SessionLogRecord[];
+  /// Chart click → the response ids of the clicked occasion.
+  onSelectOccasion?: (responseIds: string[]) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -111,6 +162,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     [scored],
   );
   const multiRole = roles.length > 1;
+  const dateMode = xMode === "date" || !hasNativeAxis(instrument);
 
   const [visible, setVisible] = useState<Set<string>>(
     () => new Set(initialScales ?? (scales.length ? [scales[0].key] : [])),
@@ -119,11 +171,7 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     setVisible((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const visibleScalesEarly = scales.filter((s) => visible.has(s.key));
-  // Prediction overlays require exactly the target scale to be visible. On the
-  // session axis points map to S0/S1/…; on other cadences (wave/periodic, e.g.
-  // BDI-FS) points are measurement indices attached to the patient's own
-  // chronological occasions.
-  const sessionAxis = instrument.cadenceType === "every_session";
+  // Prediction overlays require exactly the target scale to be visible.
   const overlay =
     prediction &&
     visibleScalesEarly.length === 1 &&
@@ -140,23 +188,57 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       : undefined;
 
   const rows = useMemo(() => {
-    const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number | [number, number] | null> }>();
+    const byOccasion = new Map<string, ChartRow>();
     for (const r of scored) {
       const occ = occasionOf(instrument, r);
+      const at = Date.parse(r.occurredAt);
       let row = byOccasion.get(occ.key);
-      if (!row) { row = { label: occ.label, order: occ.order, values: {} }; byOccasion.set(occ.key, row); }
+      if (!row) {
+        row = {
+          label: occ.label,
+          order: occ.order,
+          t: at,
+          s: instrument.cadenceType === "every_session" ? r.sessionNumber : null,
+          idx: null,
+          rids: [],
+          projected: false,
+          values: {},
+        };
+        byOccasion.set(occ.key, row);
+      }
+      row.t = Math.min(row.t ?? at, at);
+      row.rids.push(r.id);
       for (const [k, v] of Object.entries(r.scores)) row.values[`${k}|${r.respondentRole}`] = v;
     }
-    if (overlay && sessionAxis) {
+    // Chronological measurement index (the weeks-axis shift coordinates).
+    Array.from(byOccasion.values())
+      .sort((a, b) => (a.t ?? 0) - (b.t ?? 0))
+      .forEach((row, i) => { row.idx = i; });
+    const measured = Array.from(byOccasion.values());
+    const axis = overlay?.axis ?? "session";
+
+    if (overlay && axis === "session") {
       // Overlay values live on session occasions; sessions beyond the patient's
       // last measurement extend the axis (a look-ahead window of 8 sessions).
       const lastMeasured = Math.max(0, ...scored.filter((r) => r.sessionNumber !== null).map((r) => r.sessionNumber!));
       const horizon = lastMeasured + 8;
-      const sessionRow = (session: number) => {
+      const known = dateMode ? sessionDateMap(scored, sessionLogs) : null;
+      const sessionRow = (session: number): ChartRow | null => {
         const key = `s${session}`;
         let row = byOccasion.get(key);
         if (!row) {
-          row = { label: session === 0 ? "B" : `S${session}`, order: session, values: {} };
+          const pos = known ? dateForSession(known, session) : null;
+          if (known && !pos) return null; // date mode without any dated session
+          row = {
+            label: sessionLabel(session),
+            order: session,
+            t: pos ? pos.t : null,
+            s: session,
+            idx: null,
+            rids: [],
+            projected: pos?.projected ?? false,
+            values: {},
+          };
           byOccasion.set(key, row);
         }
         return row;
@@ -164,38 +246,86 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       for (const p of overlay.band?.points ?? []) {
         if (p.session > horizon) continue;
         const row = sessionRow(p.session);
-        row.values.__band = [p.p25, p.p75];
-        row.values.__p50 = p.p50;
-      }
-      for (const b of overlay.failureBoundary ?? []) {
-        if (b.session > horizon) continue;
-        sessionRow(b.session).values.__boundary = b.value;
-      }
-      for (const e of overlay.etrPoints ?? []) {
-        if (e.session > horizon) continue;
-        sessionRow(e.session).values.__etr = Math.round(e.expected * 100) / 100;
-      }
-    } else if (overlay) {
-      // Non-session cadence: overlay points are measurement indices — attach
-      // point i to the patient's i-th chronological occasion. No look-ahead:
-      // future occasions have no x position on a date/wave axis.
-      const ordered = Array.from(byOccasion.values()).sort((a, b) => a.order - b.order);
-      for (const p of overlay.band?.points ?? []) {
-        const row = ordered[p.session];
         if (!row) continue;
         row.values.__band = [p.p25, p.p75];
         row.values.__p50 = p.p50;
       }
       for (const b of overlay.failureBoundary ?? []) {
-        const row = ordered[b.session];
+        if (b.session > horizon) continue;
+        const row = sessionRow(b.session);
         if (row) row.values.__boundary = b.value;
       }
-      // ETR is session-axis only and never supplied for these instruments.
+      for (const e of overlay.etrPoints ?? []) {
+        if (e.session > horizon) continue;
+        const row = sessionRow(e.session);
+        if (row) row.values.__etr = Math.round(e.expected * 100) / 100;
+      }
+    } else if (overlay && axis === "weeks" && overlay.anchorAt) {
+      // Weeks since therapy start: week w sits at anchor + w·7d. Reference
+      // weeks get their own rows (up to 8 weeks past the last measurement);
+      // measured rows between two ADJACENT band weeks are interpolated so the
+      // band stays continuous — a real minN gap in the reference stays a gap.
+      const anchor = Date.parse(overlay.anchorAt);
+      const lastT = Math.max(...measured.map((r) => r.t ?? anchor));
+      const firstT = Math.min(...measured.map((r) => r.t ?? anchor));
+      const horizonWeek = weeksSince(anchor, lastT) + 8;
+      // Reference weeks before the patient's first measurement carry no
+      // comparison and would only stretch the axis (e.g. a first BDI-FS in
+      // week 16) — the band starts at the week of the first measurement.
+      const firstWeek = weeksSince(anchor, firstT);
+      const bandBy = new Map((overlay.band?.points ?? []).map((p) => [p.session, p]));
+      const boundaryBy = new Map((overlay.failureBoundary ?? []).map((b) => [b.session, b.value]));
+      const weeks = new Set([...bandBy.keys(), ...boundaryBy.keys()]);
+      for (const w of weeks) {
+        if (w > horizonWeek || w < firstWeek) continue;
+        const row: ChartRow = {
+          label: `W${w}`,
+          order: w,
+          t: anchor + w * WEEK_MS,
+          s: null,
+          idx: null,
+          rids: [],
+          projected: false,
+          values: {},
+        };
+        const b = bandBy.get(w);
+        if (b) { row.values.__band = [b.p25, b.p75]; row.values.__p50 = b.p50; }
+        const fb = boundaryBy.get(w);
+        if (fb !== undefined) row.values.__boundary = fb;
+        byOccasion.set(`w${w}`, row);
+      }
+      const lerp = (a: number, b: number, f: number) => Math.round((a + (b - a) * f) * 100) / 100;
+      for (const row of measured) {
+        if (row.t === null || row.t < anchor) continue;
+        const wf = (row.t - anchor) / WEEK_MS;
+        const lo = Math.floor(wf);
+        const f = wf - lo;
+        const bl = bandBy.get(lo);
+        const bh = bandBy.get(lo + 1);
+        if (bl && (f === 0 || bh)) {
+          const hi = bh ?? bl;
+          row.values.__band = [lerp(bl.p25, hi.p25, f), lerp(bl.p75, hi.p75, f)];
+          row.values.__p50 = lerp(bl.p50, hi.p50, f);
+        }
+        const fl = boundaryBy.get(lo);
+        const fh = boundaryBy.get(lo + 1);
+        if (fl !== undefined && (f === 0 || fh !== undefined)) row.values.__boundary = lerp(fl, fh ?? fl, f);
+      }
     }
-    return Array.from(byOccasion.values())
-      .sort((a, b) => a.order - b.order)
-      .map((r) => ({ label: r.label, ...r.values }));
-  }, [scored, instrument, overlay, sessionAxis]);
+    const all = Array.from(byOccasion.values());
+    return (dateMode
+      ? all.filter((r) => r.t !== null).sort((a, b) => a.t! - b.t!)
+      : all.sort((a, b) => a.order - b.order)
+    ).map((r) => ({
+      label: r.label,
+      t: r.t,
+      __s: r.s,
+      __idx: r.idx,
+      __rids: r.rids,
+      __proj: r.projected,
+      ...r.values,
+    }));
+  }, [scored, instrument, overlay, dateMode, sessionLogs]);
 
   if (!scored.length)
     return <p className="text-sm" style={{ color: C.muted }}>{t("noScoredResponses")}</p>;
@@ -209,13 +339,16 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
   // prediction overlay is active (both shaded areas would be illegible).
   const bands = visibleScales.length === 1 && !overlay?.band ? visibleScales[0].normBands : undefined;
 
-  // Sudden gain/loss diamonds by occasion label (drawn at the shift's toSession).
-  const shiftAt = new Map<string, SuddenShift>();
-  if (overlay) for (const s of overlay.shifts) shiftAt.set(s.toSession === 0 ? "B" : `S${s.toSession}`, s);
+  // Sudden gain/loss diamonds at the shift's toSession — matched on the row's
+  // session number, or on its chronological measurement index for weeks-axis
+  // targets (whose shifts are computed on consecutive measurements).
+  const shiftByIndex = overlay?.shiftAxis === "index";
+  const shiftAt = new Map<number, SuddenShift>();
+  if (overlay) for (const s of overlay.shifts) shiftAt.set(s.toSession, s);
   // Alliance-rupture occasions (open diamonds; disjoint from shiftAt — the two
-  // marker families live on different scales).
-  const ruptureAt = new Set<string>();
-  if (ruptureOverlay) for (const r of ruptureOverlay.ruptures ?? []) ruptureAt.add(r.toSession === 0 ? "B" : `S${r.toSession}`);
+  // marker families live on different scales). Always session-axis.
+  const ruptureAt = new Set<number>();
+  if (ruptureOverlay) for (const r of ruptureOverlay.ruptures ?? []) ruptureAt.add(r.toSession);
 
   // RCI markers: only when a single scale with rci parameters is displayed.
   const rciScale: ScaleDef | undefined =
@@ -225,19 +358,21 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
     for (const role of roles) {
       const seriesKey = `${rciScale.key}|${role}`;
       for (const row of rows) {
-        const v = (row as Record<string, number | string>)[seriesKey];
+        const v = (row as Record<string, unknown>)[seriesKey];
         if (typeof v === "number") { baselines.set(seriesKey, v); break; }
       }
     }
   }
   const rciDot = (seriesKey: string, color: string) =>
-    function RciDot(props: { cx?: number; cy?: number; payload?: Record<string, number | string>; index?: number }) {
+    function RciDot(props: { cx?: number; cy?: number; payload?: Record<string, unknown>; index?: number }) {
       const { cx, cy, payload } = props;
       if (cx === undefined || cy === undefined || !payload) return <g key={`d${props.index}`} />;
       const v = payload[seriesKey];
       if (typeof v !== "number") return <g key={`d${props.index}`} />;
+      const sNum = typeof payload.__s === "number" ? payload.__s : null;
+      const iNum = typeof payload.__idx === "number" ? payload.__idx : null;
       // Alliance rupture: open amber diamond (the alliance scale's own marker).
-      if (typeof payload.label === "string" && ruptureAt.has(payload.label)) {
+      if (sNum !== null && ruptureAt.has(sNum)) {
         const d = 6.5;
         return (
           <polygon key={`d${props.index}`}
@@ -246,7 +381,8 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
         );
       }
       // Sudden gain/loss diamond takes precedence over the RCI triangle.
-      const shift = typeof payload.label === "string" ? shiftAt.get(payload.label) : undefined;
+      const shiftKey = shiftByIndex ? iNum : sNum;
+      const shift = shiftKey !== null ? shiftAt.get(shiftKey) : undefined;
       if (shift) {
         const fill = shift.kind === "gain" ? C.spruce : C.danger;
         const d = 6.5;
@@ -270,6 +406,20 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
       return <polygon key={`d${props.index}`} points={points} fill={fill} stroke="#fff" strokeWidth={1} />;
     };
 
+  // "Therapie beginnt" after the baseline (B) session.
+  const baselineIdx = rows.findIndex((r) => r.__s === 0 && r.__rids.length > 0);
+  const therapyStartRow = baselineIdx >= 0 ? rows.slice(baselineIdx + 1).find((r) => r.__rids.length > 0) : undefined;
+  const tipLabel = (row: Record<string, unknown>) => {
+    const tt = typeof row.t === "number" ? row.t : null;
+    const lbl = typeof row.label === "string" ? row.label : "";
+    const date = tt !== null ? fmtDate(new Date(tt)) : "";
+    const head = lbl && lbl !== date ? (date ? `${lbl} · ${date}` : lbl) : date;
+    return row.__proj ? `${head} (${t("projectedSession")})` : head;
+  };
+  // Measurement rhythm caption (date mode): spacing between measured occasions.
+  const rhythm = dateMode ? intervalStats(rows.filter((r) => r.__rids.length > 0 && r.t !== null).map((r) => r.t as number)) : null;
+  const clickable = !!onSelectOccasion;
+
   return (
     <div>
       <div className="flex flex-wrap gap-2 mb-3">
@@ -284,16 +434,25 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
           );
         })}
       </div>
-      <div style={{ width: "100%", height }}>
+      <div style={{ width: "100%", height, cursor: clickable ? "pointer" : undefined }}>
         <ResponsiveContainer>
-          <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
+          <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}
+            onClick={clickable ? (st: { activePayload?: { payload?: { __rids?: string[] } }[] } | null) => {
+              const rids = st?.activePayload?.[0]?.payload?.__rids;
+              if (rids && rids.length) onSelectOccasion!(rids);
+            } : undefined}>
             <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+            {dateMode ? (
+              <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} padding={{ left: 14, right: 14 }}
+                tickFormatter={(v: number) => fmtDateShort(v)} tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+            ) : (
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+            )}
             <YAxis
               domain={sharedRange ? [sharedRange.min, sharedRange.max] : ["auto", "auto"]}
               tick={{ fontSize: 11, fill: C.muted }} stroke={C.line}
             />
-            <Tooltip content={<ChartTip />} />
+            <Tooltip content={<ChartTip labelOf={tipLabel} />} />
             {bands?.map((b, i) => (
               <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
                 label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
@@ -316,8 +475,8 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
               <Line dataKey="__etr" name={t("etrCurve")} stroke={C.blue} strokeWidth={1.4}
                 strokeDasharray="2 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
             )}
-            {instrument.cadenceType === "every_session" && rows.length > 1 && rows[0].label === "B" && (
-              <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
+            {therapyStartRow && (
+              <ReferenceLine x={dateMode ? (therapyStartRow.t as number) : therapyStartRow.label} stroke={C.muted} strokeDasharray="4 4"
                 label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
             )}
             {visibleScales.flatMap((s) =>
@@ -345,9 +504,21 @@ export function TrajectoryChart({ instrument, responses, height = 280, initialSc
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {(rhythm || clickable) && (
+        <p className="text-xs mt-1 flex items-center gap-x-3 gap-y-1 flex-wrap" style={{ color: C.muted }}>
+          {rhythm && <span>{t("rhythmCaption", { median: rhythm.medianDays, min: rhythm.minDays, max: rhythm.maxDays })}</span>}
+          {clickable && <span>{t("chartClickHint")}</span>}
+        </p>
+      )}
       {overlay?.band && (
         <p className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{ color: C.muted }}>
           <span className="font-semibold" style={{ color: overlay.band.color ?? C.spruce }}>{overlay.band.label}</span>
+          {/* The reference may not reach the patient's measured weeks (thin
+              strata late in therapy) — say so instead of a silent empty band. */}
+          {!rows.some((r) => Array.isArray((r as Record<string, unknown>).__band)) && (
+            <span style={{ color: C.amber }}>{t("bandNoOverlap")}</span>
+          )}
+          {overlay.axis === "weeks" && <span>{t("bandWeeksNote")}</span>}
           {overlay.shifts.length > 0 && <span>◆ = {t("suddenShiftLegend")}</span>}
           {overlay.band.simulated && (
             <span className="font-bold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>
@@ -489,9 +660,12 @@ export function ScoreTable({ instrument, responses }: { instrument: InstrumentDe
 /// Clinic-wide overview: one line per patient, with switchable instrument,
 /// scale, and disorder-category filter (e.g. only eating-disorder patients'
 /// EDE-Q8 trajectories). Occasions are aligned across patients per cadence:
-/// sessions (B/S1…), waves (pre/zm/post/postF), or measurement index (M1…Mn)
-/// for periodic instruments — the legacy report convention. When the selected
-/// instrument+scale is a prediction target, the pooled clinic expected-course
+/// sessions (B/S1…, the dose axis — switchable to weeks), waves
+/// (pre/zm/post/postF), or — for date-cadenced instruments like the BDI-FS —
+/// whole WEEKS since therapy start (Batch 16; the former measurement-index
+/// alignment M1…Mn put a weekly patient's week 1 next to another patient's
+/// mid-therapy measurement). When the selected instrument+scale is a
+/// prediction target on the current axis, the pooled clinic expected-course
 /// band (p25–p75 + median) and failure boundary draw behind the patient lines.
 export function GlobalChart({ patients, instruments, courses }: {
   patients: Patient[];
@@ -516,6 +690,10 @@ export function GlobalChart({ patients, instruments, courses }: {
   const [scaleKey, setScaleKey] = useState<string | null>(null);
   const scale = inst?.scales.find((s) => s.key === scaleKey) ?? inst?.scales[0];
   const [cat, setCat] = useState<string>("all");
+  // Every-session instruments: sessions (dose, default) or weeks since start.
+  const [sessionXMode, setSessionXMode] = useState<"session" | "weeks">("session");
+  const xMode: "session" | "weeks" | "wave" =
+    inst?.cadenceType === "wave" ? "wave" : inst?.cadenceType === "every_session" ? sessionXMode : "weeks";
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setHidden((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -525,11 +703,11 @@ export function GlobalChart({ patients, instruments, courses }: {
   // category chips: stratification is a per-patient-baseline concept, and
   // category subsets of the reference cohort routinely fall below the
   // per-occasion minN — a per-category band would flicker in and out as
-  // filters change. Session-axis bands need the session-label axis; the
-  // index-axis target (BDI-FS) attaches to the M{n}/wave axis by position.
+  // filters change. A band draws only on its own axis: session courses in the
+  // session view, weeks courses (BDI-FS) in the weeks view.
   const course = courses?.find((c) => c.instrumentId === inst?.id && c.scaleKey === scale?.key);
-  const activeCourse =
-    course && (course.axis === "index" || inst?.cadenceType === "every_session") ? course : undefined;
+  const activeCourse = course && course.axis === xMode ? course : undefined;
+  const hiddenSessionCourse = course && course.axis === "session" && xMode === "weeks";
 
   const presentCategories = useMemo(
     () => DISORDER_CATEGORIES.filter((c) => patients.some((p) => p.disorderCategory === c)),
@@ -541,20 +719,27 @@ export function GlobalChart({ patients, instruments, courses }: {
     return patients
       .filter((p) => cat === "all" || p.disorderCategory === cat)
       .map((p) => {
-        const series = responsesFor(p, inst.id)
-          .filter((r) => typeof r.scores[scale.key] === "number")
-          .map((r) => ({ r, occ: occasionOf(inst, r) }))
-          .sort((a, b) => a.occ.order - b.occ.order)
-          // periodic instruments: align patients by measurement index (M1..Mn)
-          .map(({ r, occ }, idx) =>
-            inst.cadenceType === "every_session" || inst.cadenceType === "wave"
-              ? { value: r.scores[scale.key], label: occ.label, order: occ.order }
-              : { value: r.scores[scale.key], label: `M${idx + 1}`, order: idx },
-          );
+        const measured = responsesFor(p, inst.id).filter((r) => typeof r.scores[scale.key] === "number");
+        // Weeks axis: each patient's own day 0 (therapy start, else first
+        // measurement) — same rule as the analytics (time-axis.ts).
+        const anchor =
+          xMode === "weeks" ? seriesAnchor(p.treatmentStartAt, firstMeasurementAt(measured, inst.id, scale.key)) : null;
+        const series = measured
+          .map((r) => {
+            const at = Date.parse(r.occurredAt);
+            if (xMode === "weeks") {
+              const w = weeksSince(anchor ?? at, at);
+              return { value: r.scores[scale.key], label: `W${w}`, order: w, at };
+            }
+            const occ = occasionOf(inst, r);
+            return { value: r.scores[scale.key], label: occ.label, order: occ.order, at };
+          })
+          // Same-occasion duplicates (two measurements in one week): the later wins.
+          .sort((a, b) => a.order - b.order || a.at - b.at);
         return { p, series };
       })
       .filter((x) => x.series.length > 0);
-  }, [patients, inst, scale, cat]);
+  }, [patients, inst, scale, cat, xMode]);
 
   const rows = useMemo(() => {
     const byOccasion = new Map<string, { label: string; order: number; values: Record<string, number | [number, number]> }>();
@@ -566,47 +751,30 @@ export function GlobalChart({ patients, instruments, courses }: {
       }
     }
     if (activeCourse) {
-      if (activeCourse.axis === "session") {
-        // Cap the band at the last measured session — a 60-session reference
-        // horizon would dwarf the patient lines. Missing intermediate rows are
-        // created so the band stays continuous (patient lines connectNulls).
-        const maxOrder = Math.max(...Array.from(byOccasion.values()).map((r) => r.order));
-        const rowFor = (session: number) => {
-          const label = session === 0 ? "B" : `S${session}`;
-          let row = byOccasion.get(label);
-          if (!row) { row = { label, order: session, values: {} }; byOccasion.set(label, row); }
-          return row;
-        };
-        for (const p of activeCourse.points) {
-          if (p.session > maxOrder) continue;
-          const row = rowFor(p.session);
-          row.values.__band = [p.p25, p.p75];
-          row.values.__p50 = p.p50;
-        }
-        for (const b of activeCourse.failureBoundary) {
-          if (b.session > maxOrder) continue;
-          rowFor(b.session).values.__boundary = b.value;
-        }
-      } else {
-        // Index axis (BDI-FS): attach reference point i to the i-th existing
-        // occasion column — never synthesize labels (the axis may carry wave
-        // codes), and never extend beyond what patients have measured.
-        const ordered = Array.from(byOccasion.values()).sort((a, b) => a.order - b.order);
-        for (const p of activeCourse.points) {
-          const row = ordered[p.session];
-          if (!row) continue;
-          row.values.__band = [p.p25, p.p75];
-          row.values.__p50 = p.p50;
-        }
-        for (const b of activeCourse.failureBoundary) {
-          const row = ordered[b.session];
-          if (row) row.values.__boundary = b.value;
-        }
+      // Cap the band at the last measured occasion — a 60-session reference
+      // horizon would dwarf the patient lines. Missing intermediate rows are
+      // created so the band stays continuous (patient lines connectNulls).
+      const maxOrder = Math.max(...Array.from(byOccasion.values()).map((r) => r.order));
+      const rowFor = (session: number) => {
+        const label = activeCourse.axis === "weeks" ? `W${session}` : session === 0 ? "B" : `S${session}`;
+        let row = byOccasion.get(label);
+        if (!row) { row = { label, order: session, values: {} }; byOccasion.set(label, row); }
+        return row;
+      };
+      for (const p of activeCourse.points) {
+        if (p.session > maxOrder) continue;
+        const row = rowFor(p.session);
+        row.values.__band = [p.p25, p.p75];
+        row.values.__p50 = p.p50;
+      }
+      for (const b of activeCourse.failureBoundary) {
+        if (b.session > maxOrder) continue;
+        rowFor(b.session).values.__boundary = b.value;
       }
     }
     return Array.from(byOccasion.values())
       .sort((a, b) => a.order - b.order)
-      .map((r) => ({ label: r.label, ...r.values }));
+      .map((r) => ({ label: r.label, x: r.order, ...r.values }));
   }, [chartable, activeCourse]);
 
   if (!available.length)
@@ -629,6 +797,17 @@ export function GlobalChart({ patients, instruments, courses }: {
               {inst.scales.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </label>
+        )}
+        {inst.cadenceType === "every_session" && (
+          <div className="flex flex-wrap gap-1.5 pb-0.5" role="group" aria-label={t("xAxisLabel")}>
+            {(["session", "weeks"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setSessionXMode(m)} aria-pressed={sessionXMode === m}
+                className="rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: sessionXMode === m ? C.blue : C.surfaceAlt, color: sessionXMode === m ? "#fff" : C.muted, border: `1px solid ${sessionXMode === m ? C.blue : C.line}`, cursor: "pointer" }}>
+                {m === "session" ? t("axisSessions") : t("axisWeeks")}
+              </button>
+            ))}
+          </div>
         )}
         {presentCategories.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pb-0.5">
@@ -666,19 +845,24 @@ export function GlobalChart({ patients, instruments, courses }: {
             <ResponsiveContainer>
               <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
                 <CartesianGrid stroke={C.line} strokeDasharray="2 4" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+                {xMode === "weeks" ? (
+                  <XAxis dataKey="x" type="number" domain={[0, "dataMax"]} allowDecimals={false}
+                    tickFormatter={(w: number) => `${t("weekShort")}${w}`} tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+                ) : (
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} stroke={C.line} />
+                )}
                 <YAxis
                   domain={scale.range ? [scale.range.min, scale.range.max] : ["auto", "auto"]}
                   tick={{ fontSize: 11, fill: C.muted }} stroke={C.line}
                 />
-                <Tooltip content={<ChartTip />} />
+                <Tooltip content={<ChartTip labelOf={xMode === "weeks" ? (row) => t("weekN", { n: Number(row.x) }) : undefined} />} />
                 {/* Static norm bands are suppressed while the reference band is
                     drawn — two shaded areas are illegible (TrajectoryChart rule). */}
                 {!activeCourse && scale.normBands?.map((b, i) => (
                   <ReferenceArea key={b.label} y1={b.min} y2={b.max} fill={i % 2 ? C.spruce : C.amber} fillOpacity={0.05}
                     label={{ value: b.label, position: "insideTopRight", fontSize: 10, fill: C.muted }} />
                 ))}
-                {inst.cadenceType === "every_session" && rows.length > 1 && rows[0].label === "B" && (
+                {xMode === "session" && rows.length > 1 && rows[0].label === "B" && (
                   <ReferenceLine x={rows[1].label} stroke={C.muted} strokeDasharray="4 4"
                     label={{ value: t("therapyBegins"), position: "insideTopLeft", fontSize: 10, fill: C.muted }} />
                 )}
@@ -712,7 +896,11 @@ export function GlobalChart({ patients, instruments, courses }: {
               )}
             </p>
           )}
-          <p className="text-xs mt-1" style={{ color: C.muted }}>{scale.label}{scale.range ? ` · ${scale.range.min}–${scale.range.max}` : ""}</p>
+          {hiddenSessionCourse && <p className="text-xs mt-1" style={{ color: C.muted }}>{t("bandSessionViewOnly")}</p>}
+          <p className="text-xs mt-1" style={{ color: C.muted }}>
+            {scale.label}{scale.range ? ` · ${scale.range.min}–${scale.range.max}` : ""}
+            {xMode === "weeks" ? ` · ${t("weeksAxisCaption")}` : ""}
+          </p>
         </>
       )}
     </div>
@@ -727,7 +915,13 @@ const inputSelectStyle: React.CSSProperties = {
 /// Cross-instrument summary strip: one pill per instrument with scored data —
 /// mini trend top-right, and the latest primary-scale value next to the fill
 /// bar it is normalized into (bar color = clinical goodness of the level).
-export function SummaryStrip({ patient, instruments }: { patient: Patient; instruments: InstrumentDef[] }) {
+export function SummaryStrip({ patient, instruments, onSelect }: {
+  patient: Patient;
+  instruments: InstrumentDef[];
+  /// Dossier: a pill click opens that instrument's latest answers.
+  onSelect?: (instrumentId: string) => void;
+}) {
+  const t = useT();
   const items = instruments
     .map((inst) => {
       const primary = inst.scales[0];
@@ -747,9 +941,12 @@ export function SummaryStrip({ patient, instruments }: { patient: Patient; instr
   if (!items.length) return null;
   return (
     <div className="flex flex-wrap gap-2">
-      {items.map(({ inst, primary, values, last, pct, goodness, higherIsBetter }) => (
-        <div key={inst.id} className="rounded-lg px-3 py-2" style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, minWidth: 150 }}
-          title={`${inst.name} — ${primary.label}`}>
+      {items.map(({ inst, primary, values, last, pct, goodness, higherIsBetter }) => {
+        const Tag = onSelect ? "button" : "div";
+        return (
+        <Tag key={inst.id} type={onSelect ? "button" : undefined} onClick={onSelect ? () => onSelect(inst.id) : undefined}
+          className="rounded-lg px-3 py-2 text-left" style={{ background: C.surfaceAlt, border: `1px solid ${C.line}`, minWidth: 150, cursor: onSelect ? "pointer" : undefined }}
+          title={onSelect ? `${inst.name} — ${primary.label} · ${t("openLatestAnswers")}` : `${inst.name} — ${primary.label}`}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold" style={{ color: C.ink }}>{inst.abbreviation}</span>
             {/* Glyph + signed change since the previous measurement. */}
@@ -765,8 +962,9 @@ export function SummaryStrip({ patient, instruments }: { patient: Patient; instr
             )}
             <span className="text-xs font-bold" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>{fmtScore(last)}</span>
           </div>
-        </div>
-      ))}
+        </Tag>
+        );
+      })}
     </div>
   );
 }

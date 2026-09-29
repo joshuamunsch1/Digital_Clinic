@@ -10,6 +10,37 @@ export function Card({ children, className = "", style = {} }: { children: React
   return <div className={`rounded-xl ${className}`} style={{ background: C.surface, border: `1px solid ${C.line}`, ...style }}>{children}</div>;
 }
 
+/// A dossier section that folds to a one-line summary (Batch 16). The header
+/// is the toggle; `summary` shows only while collapsed (the open body carries
+/// the detail), `right` (badges, counts) shows in both states. The wrapper
+/// carries the quick-nav anchor id.
+export function CollapsibleCard({ id, title, summary, right, open, onToggle, children }: {
+  id: string;
+  title: React.ReactNode;
+  summary?: React.ReactNode;
+  right?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const bodyId = `${id}-body`;
+  return (
+    <div id={id} style={{ scrollMarginTop: 56 }}>
+      <Card className="mb-4">
+        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={bodyId}
+          className="w-full flex items-center gap-x-3 gap-y-1 flex-wrap text-left px-5 py-4"
+          style={{ background: "none", border: "none", cursor: "pointer" }}>
+          <span className="text-xs font-bold" style={{ color: C.spruce, width: 10 }} aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{title}</h3>
+          {!open && summary && <span className="text-xs min-w-0" style={{ color: C.muted }}>{summary}</span>}
+          {right && <span className="ml-auto flex items-center gap-2">{right}</span>}
+        </button>
+        {open && <div id={bodyId} className="px-5 pb-5">{children}</div>}
+      </Card>
+    </div>
+  );
+}
+
 export function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
     <div className="mb-3">

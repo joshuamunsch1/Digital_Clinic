@@ -19,7 +19,9 @@ import { adherenceStats } from "@/lib/analytics/attendance";
 import { suggestNextSessionNumber } from "@/lib/session-numbers";
 import { recommendedInstrumentIds } from "@/lib/recommendations";
 import { patientFillable, populationMatches } from "./PatientHome";
-import { Card, Field, GhostButton, PrimaryButton, inputStyle } from "./ui";
+import { CollapsibleCard, Field, GhostButton, PrimaryButton, inputStyle } from "./ui";
+import { PlanEditor, channelLabel, planSummaryText } from "./PlanEditor";
+import type { PlanDispatchOutcome } from "@/lib/api-client";
 import { useLang, useT } from "./LangContext";
 
 const statusColor: Record<string, string> = {
@@ -554,7 +556,7 @@ function SendAfterSessionStep({ patient, instruments, configured, log, onDone, o
 /// The panel. Lists are always derived from props (never snapshotted into
 /// state): in MonitoringView the surrounding block does NOT remount on
 /// patientUpdated merges.
-export function SessionMonitoringPanel({ patient, instruments, therapists, user, configured, variant, onPatientUpdated, onStartManualEntry }: {
+export function SessionMonitoringPanel({ patient, instruments, therapists, user, configured, variant, onPatientUpdated, onStartManualEntry, expanded: expandedProp, onExpandedChange }: {
   patient: Patient;
   instruments: InstrumentDef[];
   therapists: Therapist[];
@@ -563,6 +565,11 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
   variant: "dossier" | "monitoring";
   onPatientUpdated: (p: Patient) => void;
   onStartManualEntry: (inst: InstrumentDef, ctx: { sessionNumber?: number }) => void;
+  /// Dossier variant: open state controlled by the dossier's section state
+  /// (quick-nav expand, "alle öffnen", persisted preference). Uncontrolled
+  /// (collapsed by default) when omitted.
+  expanded?: boolean;
+  onExpandedChange?: (open: boolean) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -570,7 +577,9 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
   const readOnly = patient.status === "archived";
   // Dossier variant: collapsed by default — the one-line summary carries the
   // essentials, the ledger + lists expand on demand.
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpandedState] = useState(false);
+  const expanded = expandedProp ?? expandedState;
+  const setExpanded = (v: boolean) => (onExpandedChange ? onExpandedChange(v) : setExpandedState(v));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showNewRequest, setShowNewRequest] = useState(false);
@@ -579,6 +588,15 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
   // the opt-in); the caseload view keeps each row compact behind a toggle.
   const [showLogForm, setShowLogForm] = useState(variant === "dossier");
   const [sendStep, setSendStep] = useState<SessionLogRecord | null>(null);
+  // Measurement plan (Batch 16): held sessions send the plan's every-session
+  // items automatically; the confirmation replaces the manual send step.
+  const planSessionItems = patient.plan.filter((i) => i.active && i.rhythm === "every_session");
+  const [dispatchPlan, setDispatchPlan] = useState(true);
+  const [planResult, setPlanResult] = useState<{
+    log: SessionLogRecord;
+    dispatched: PlanDispatchOutcome[];
+    paperDue: string[];
+  } | null>(null);
 
   // Log-session form.
   const [type, setType] = useState<string>("held");
@@ -661,17 +679,25 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
     setMsg(null);
     try {
       const num = type === "held" && sessionNumber.trim() !== "" ? Number(sessionNumber) : null;
+      const usePlan = type === "held" && planSessionItems.length > 0 && dispatchPlan;
       const r = await api.logSession(patient.id, {
         occurredAt: `${date}T12:00:00`,
         type,
         sessionNumber: num,
         conductedById: conductedById || null,
         note: note.trim() || undefined,
+        dispatchPlan: usePlan,
       });
       onPatientUpdated(r.patient);
       setNote("");
       setNumOverride(null);
-      if (type === "held") setSendStep(r.sessionLog);
+      setSendStep(null);
+      setPlanResult(null);
+      if (type !== "held") setMsg(t("logSaved"));
+      // With a plan the questionnaires already went out — confirm instead of
+      // asking. Without one, the manual send step stays the fallback.
+      else if (usePlan) setPlanResult({ log: r.sessionLog, dispatched: r.dispatched, paperDue: r.paperDue });
+      else if (planSessionItems.length === 0) setSendStep(r.sessionLog);
       else setMsg(t("logSaved"));
     } catch (e) {
       setMsg(`✗ ${(e as Error).message}`);
@@ -773,6 +799,11 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
 
   const body = (
     <>
+      {/* Standing measurement plan — set once; drives the automatic sends. */}
+      {(!readOnly || patient.plan.length > 0) && (
+        <PlanEditor patient={patient} instruments={instruments} configured={configured} readOnly={readOnly}
+          onPatientUpdated={onPatientUpdated} onStartManualEntry={onStartManualEntry} />
+      )}
       {/* Compact action row: the caseload view toggles the log form; the
           ad-hoc request form is a toggle on both surfaces. */}
       {!readOnly && (
@@ -817,7 +848,56 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
             </Field>
             <PrimaryButton small disabled={busy || !numValid} onClick={() => void saveLog()}>{t("logSave")}</PrimaryButton>
           </div>
+          {type === "held" && planSessionItems.length > 0 && (
+            <label className="flex items-center gap-2 text-xs mt-2" style={{ color: C.ink }}>
+              <input type="checkbox" checked={dispatchPlan} onChange={(e) => setDispatchPlan(e.target.checked)} />
+              {t("planDispatchCheckbox", {
+                list: planSessionItems
+                  .map((i) => `${instruments.find((x) => x.id === i.instrumentId)?.abbreviation ?? i.instrumentId} (${channelLabel(i.channel, t)})`)
+                  .join(", "),
+              })}
+            </label>
+          )}
         </>
+      )}
+
+      {planResult && !readOnly && (
+        <div className="rounded-lg p-3 mt-2" style={{ background: C.spruceSoft, border: `1px solid ${C.spruce}` }}>
+          <p className="text-sm font-bold" style={{ color: C.spruce }}>
+            {planResult.log.sessionNumber != null
+              ? t("planSentTitle", { n: planResult.log.sessionNumber })
+              : t("planSentTitleNoNum")}
+          </p>
+          {planResult.dispatched.map((d) => {
+            const abbrev = instruments.find((i) => i.id === d.instrumentId)?.abbreviation ?? d.instrumentId;
+            return (
+              <p key={d.instrumentId} className="text-xs mt-0.5" style={{ color: d.ok ? C.ink : C.danger }}>
+                {d.ok ? "✓" : "✗"} {abbrev} · {channelLabel(d.channel === "limesurvey" ? "limesurvey" : "in_app", t)}
+                {d.error ? ` — ${d.error}` : ""}
+                {d.warning ? ` — ⚠ ${d.warning}` : ""}
+              </p>
+            );
+          })}
+          {planResult.paperDue.map((id) => {
+            const inst = instruments.find((i) => i.id === id);
+            return (
+              <p key={id} className="text-xs mt-0.5 flex items-center gap-2" style={{ color: C.ink }}>
+                ✎ {inst?.abbreviation ?? id} · {t("planChannelPaper")}
+                {inst && (
+                  <button type="button" className="font-semibold"
+                    onClick={() => onStartManualEntry(inst, { sessionNumber: planResult.log.sessionNumber ?? undefined })}
+                    style={{ color: C.spruce, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                    {t("enterManually")}
+                  </button>
+                )}
+              </p>
+            );
+          })}
+          <div className="flex items-center gap-2 mt-2">
+            <GhostButton small onClick={() => { setShowNewRequest(true); setPlanResult(null); }}>{t("planMoreRequests")}</GhostButton>
+            <GhostButton small onClick={() => setPlanResult(null)}>{t("planDone")}</GhostButton>
+          </div>
+        </div>
       )}
 
       {showNewRequest && !readOnly && (
@@ -955,21 +1035,21 @@ export function SessionMonitoringPanel({ patient, instruments, therapists, user,
   }
 
   return (
-    <Card className="p-5 mb-4">
-      <button type="button" onClick={() => setExpanded(!expanded)} className="w-full flex items-center gap-3 flex-wrap text-left"
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
-        <h3 className="text-sm font-bold" style={{ color: C.spruce }}>{t("navMonitoring")}</h3>
-        <span className="text-xs" style={{ color: C.muted }}>
+    <CollapsibleCard
+      id="dossier-monitoring"
+      title={t("navMonitoring")}
+      open={expanded}
+      onToggle={() => setExpanded(!expanded)}
+      summary={
+        <>
           {patient.sessionLogs.length || patient.invitations.length
             ? t("panelSummary", { sessions: patient.sessionLogs.length, open: openCount })
             : t("logSummaryEmpty")}
           {adh.completionRate !== null && ` · ${t("adherenceReturn")} ${pct(adh.completionRate)}`}
-        </span>
-        <span className="ml-auto text-xs font-semibold" style={{ color: C.spruce }}>
-          {expanded ? `▴ ${t("panelHide")}` : `▸ ${t("panelShow")}`}
-        </span>
-      </button>
-      {expanded && body}
-    </Card>
+          {` · ${planSummaryText(patient.plan, instruments, t)}`}
+        </>
+      }>
+      {body}
+    </CollapsibleCard>
   );
 }

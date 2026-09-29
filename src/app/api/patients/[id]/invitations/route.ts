@@ -3,11 +3,9 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { PATIENT_INCLUDE, patientFromRow } from "@/lib/serialize";
-import { addParticipant, inviteParticipant, limesurveyConfig, surveyUrl } from "@/lib/limesurvey";
-import { nextReminderAfter } from "@/lib/reminders";
-import { loadInstrument } from "@/lib/server-instruments";
-import { hasFullWording, isFillable } from "@/lib/instruments/types";
+import { createDispatch, prepareDispatch } from "@/lib/server-dispatch";
 import { therapistScoped } from "@/lib/access";
+import type { InvitationContext } from "@/lib/types";
 
 /// A positive integer or null (schedule fields are optional and validated).
 const posInt = (v: unknown): number | null =>
@@ -29,13 +27,15 @@ async function persistPatientEmail(patientId: string, current: string | null, ne
   return null;
 }
 
-/// Create a questionnaire invitation for a patient.
+/// Create a questionnaire invitation for a patient (the manual send forms).
 /// channel "limesurvey" (default): registers the patient as a LimeSurvey
 /// participant and sends the invitation e-mail through LimeSurvey's mailer.
 /// channel "in_app": creates a pending task the patient sees and fills in this
 /// tool — no LimeSurvey, no e-mail; only fully-worded instruments qualify.
 /// Optional remindEveryDays/maxReminders set up automatic periodic reminders
-/// (sent by the sweep — LimeSurvey channel only).
+/// (sent by the sweep — LimeSurvey channel only). The creation itself lives in
+/// src/lib/server-dispatch.ts, shared with the measurement plan's automatic
+/// sends.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s || (s.role !== "director" && s.role !== "therapist"))
@@ -70,132 +70,34 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "invalid_session_log" }, { status: 400 });
   }
 
-  const context: Record<string, unknown> = {};
+  const context: InvitationContext = {};
   if (body.wave) context.wave = body.wave;
   if (body.sessionNumber !== undefined) context.sessionNumber = body.sessionNumber;
 
-  if (channel === "in_app") {
-    const inst = await loadInstrument(body.instrumentId);
-    if (!inst) return NextResponse.json({ error: "unknown instrument" }, { status: 400 });
-    if (inst.def.instrumentType !== "likert_battery" || !isFillable(inst.def) || !hasFullWording(inst.def))
-      return NextResponse.json(
-        { error: `instrument '${inst.def.id}' cannot be filled in-app (item wording not available) — send it via LimeSurvey or enter it manually` },
-        { status: 400 },
-      );
-    // Optional override: a changed address is the patient's new login e-mail.
-    const email = body.email?.trim() || patient.email;
-    const emailErr = body.email?.trim()
-      ? await persistPatientEmail(patient.id, patient.email, body.email.trim())
-      : null;
-    if (emailErr) return emailErr;
-    await prisma.questionnaireInvitation.create({
-      data: {
-        patientId: patient.id,
-        instrumentId: inst.def.id,
-        respondentRole: "self", // the patient fills it in their own portal
-        email: email ?? "",
-        channel: "in_app",
-        context: JSON.stringify(context),
-        sessionLogId,
-        remindEveryDays,
-        maxReminders,
-      },
-    });
-    const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-    return NextResponse.json({
-      patient: patientFromRow(updated!),
-      // warning only — the task shows up once the patient can log in
-      warning: email ? undefined : "the patient has no login e-mail yet, so they cannot see the task",
-    });
-  }
+  // Instrument/channel validation (in-app wording, LimeSurvey config + survey
+  // link) BEFORE any e-mail change is persisted.
+  const prep = await prepareDispatch(body.instrumentId, channel, channel === "limesurvey" ? body.surveyId : undefined);
+  if (!prep.ok) return NextResponse.json({ error: prep.error }, { status: prep.status });
 
-  const cfg = limesurveyConfig();
-  if (!cfg)
-    return NextResponse.json(
-      { error: "LimeSurvey is not configured (set LIMESURVEY_URL / LIMESURVEY_USERNAME / LIMESURVEY_PASSWORD). Use CSV import as the manual fallback — see docs/limesurvey-integration.md." },
-      { status: 503 },
-    );
-
-  const instrument = await prisma.instrument.findUnique({ where: { id: body.instrumentId } });
-  if (!instrument) return NextResponse.json({ error: "unknown instrument" }, { status: 400 });
-
-  if (body.surveyId && body.surveyId !== instrument.limesurveySurveyId) {
-    await prisma.instrument.update({ where: { id: instrument.id }, data: { limesurveySurveyId: body.surveyId } });
-  }
-  const surveyId = body.surveyId || instrument.limesurveySurveyId;
-  if (!surveyId)
-    return NextResponse.json(
-      { error: `instrument '${instrument.id}' is not linked to a LimeSurvey survey yet — provide its survey id` },
-      { status: 400 },
-    );
-
-  const email = body.email?.trim() || patient.email;
-  if (!email) return NextResponse.json({ error: "the patient has no e-mail address on file" }, { status: 400 });
-  const emailErr = body.email?.trim()
-    ? await persistPatientEmail(patient.id, patient.email, body.email.trim())
-    : null;
+  // Optional override: a changed address is the patient's new login e-mail.
+  const override = body.email?.trim();
+  const email = override || patient.email;
+  if (channel === "limesurvey" && !email)
+    return NextResponse.json({ error: "the patient has no e-mail address on file" }, { status: 400 });
+  const emailErr = override ? await persistPatientEmail(patient.id, patient.email, override) : null;
   if (emailErr) return emailErr;
 
-  const invitation = await prisma.questionnaireInvitation.create({
-    data: {
-      patientId: patient.id,
-      instrumentId: instrument.id,
-      respondentRole: body.respondentRole ?? instrument.raterRole,
-      email,
-      surveyId,
-      context: JSON.stringify(context),
-      sessionLogId,
-      remindEveryDays,
-      maxReminders,
-    },
+  const result = await createDispatch(prep, {
+    patient,
+    email,
+    respondentRole: body.respondentRole,
+    context,
+    sessionLogId,
+    remindEveryDays,
+    maxReminders,
   });
-
-  // Two steps, persisted separately ON PURPOSE. add_participants creates the
-  // token in LimeSurvey; invite_participants sends the mail through LimeSurvey's
-  // mailer and is the step that fails when SMTP is misconfigured. Storing the
-  // token only after a successful send would strand that participant: the token
-  // exists in LimeSurvey but not here, so sync/notify could never match the
-  // response and the therapist would have to re-send. Persist the token first —
-  // a failed mail then leaves a usable link the therapist can hand over, and a
-  // response that arrives anyway is still imported.
-  try {
-    const [firstname, ...rest] = patient.name.split(" ");
-    const participant = await addParticipant(surveyId, { email, firstname, lastname: rest.join(" ") || firstname });
-    await prisma.questionnaireInvitation.update({
-      where: { id: invitation.id },
-      data: {
-        token: participant.token,
-        tokenId: participant.tid,
-        url: surveyUrl(cfg.url, surveyId, participant.token),
-      },
-    });
-    try {
-      await inviteParticipant(surveyId, participant.tid);
-      const sentAt = new Date();
-      await prisma.questionnaireInvitation.update({
-        where: { id: invitation.id },
-        data: {
-          status: "invited",
-          sentAt,
-          nextReminderAt: remindEveryDays ? nextReminderAfter(remindEveryDays, sentAt) : null,
-          lastError: null,
-        },
-      });
-    } catch (e) {
-      // Token kept, status "created" -> still an OPEN invitation, so the sweep
-      // and "Sync now" keep watching it and the link stays valid.
-      await prisma.questionnaireInvitation.update({
-        where: { id: invitation.id },
-        data: { lastError: `Einladung nicht versendet: ${(e as Error).message}` },
-      });
-    }
-  } catch (e) {
-    await prisma.questionnaireInvitation.update({
-      where: { id: invitation.id },
-      data: { status: "error", lastError: (e as Error).message },
-    });
-  }
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
   const updated = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
-  return NextResponse.json({ patient: patientFromRow(updated!) });
+  return NextResponse.json({ patient: patientFromRow(updated!), warning: result.warning });
 }

@@ -4,7 +4,8 @@ import { getSession } from "@/lib/auth";
 import { staffNetworkGuard } from "@/lib/network";
 import { exportPatientArchive, type ArchiveExportResult } from "@/lib/archive-export";
 import { PATIENT_INCLUDE, patientForSession } from "@/lib/serialize";
-import { therapistScoped } from "@/lib/access";
+import { isClinicalRole, therapistScoped } from "@/lib/access";
+import { ensureDefaultPlan } from "@/lib/server-plan";
 import {
   DIPS_INSTRUMENT_ID,
   DISORDER_CATEGORIES,
@@ -53,6 +54,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (s.role === "patient" && s.id !== params.id)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Allow-list: the patient (self), clinical staff, and admin (lite view via
+  // patientForSession). Interns and any future role are refused.
+  if (s.role !== "patient" && s.role !== "admin" && !isClinicalRole(s.role))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
   const p = await prisma.patient.findUnique({ where: { id: params.id }, include: PATIENT_INCLUDE });
@@ -66,7 +71,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
-  if (!s || s.role === "patient") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Allow-list: clinical staff + admin (assignment only, checked per action).
+  if (!s || (s.role !== "admin" && !isClinicalRole(s.role))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
   const body = (await req.json()) as {
@@ -169,6 +175,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         ...(existing.treatmentStartAt ? {} : { treatmentStartAt: new Date() }),
       },
     });
+    // Therapy starts → the default measurement plan (Batch 16) so the session
+    // questionnaires go out automatically from the first logged session on.
+    await ensureDefaultPlan(params.id);
   } else if (body.action === "caseCharacteristics") {
     // Structured intake predictors (§4.3) — merge-write so partial saves never
     // erase previously coded fields.

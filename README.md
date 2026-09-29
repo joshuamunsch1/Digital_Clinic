@@ -42,6 +42,7 @@ demo accounts, also listed behind "Show demo accounts" on the login page):
 | Clinic director | `margrit.steiner@linden-clinic.ch` | `director2026` |
 | Administrator | `kurt.iseli@linden-clinic.ch` | `admin2026` |
 | Therapists | `anna.keller@` / `lukas.brunner@` / `sofia.ricci@linden-clinic.ch` | `therapist2026` |
+| Intern (Praktikantin) | `lea.graf@linden-clinic.ch` | `intern2026` |
 | Patients (all 8) | e.g. `mara.vogel@example.org`, `tim.berger@example.org` | `patient2026` |
 
 New patients can **self-register** from the login page (name, e-mail,
@@ -67,7 +68,13 @@ four, as `anna.keller@` only her two.
   record), `therapist` (their caseload), `director` (everything, incl. the
   clinic-wide questionnaire-scores matrix), `admin` (**assignment only**: sees
   patient lists, registration status and the disorder-category chip, can
-  assign therapists — but never scores, trajectories, diagnoses or DIPS).
+  assign therapists — but never scores, trajectories, diagnoses or DIPS),
+  `intern` (**paper-form data entry only**: looks a patient up by research
+  code — e.g. `A00001` — and types in paper questionnaires; never sees names,
+  contact data, scores or diagnoses; can delete own entries for 24 h). The
+  director creates/deactivates intern logins on the dashboard. Clinical API
+  routes gate on an allow-list (`isClinicalRole` in `src/lib/access.ts`), so a
+  role added later is refused by default.
 - **Archive**: the director or the assigned therapist can *conclude* a
   treatment ("Behandlung abschließen & archivieren", optionally recording the
   outcome — regular completion vs. dropout, the treatment-end label from
@@ -129,7 +136,8 @@ Three paths, all ending in the same scored `ResponseInstance`:
 
 1. **In-app** — patients fill out instruments whose full wording is stored
    (the session check-in); therapists can type in paper forms ("manual entry")
-   for any verified instrument.
+   for any verified instrument, and **interns** can do the same by patient code
+   without seeing the patient's identity.
 2. **LimeSurvey, automated** — set `LIMESURVEY_URL` / `LIMESURVEY_USERNAME` /
    `LIMESURVEY_PASSWORD` and therapists can send personal survey links and
    reminders from a patient's page; completed responses are pulled back and
@@ -137,6 +145,22 @@ Three paths, all ending in the same scored `ResponseInstance`:
    Setup conventions and API details: **`docs/limesurvey-integration.md`**.
 3. **LimeSurvey, manual** — export responses as CSV (question codes as
    headers) and upload them on the patient's page.
+
+**Measurement plan ("Messplan").** Each patient has a standing plan, set once
+(a default — the every-session PSTB/SBKJ-P + PHQ-4, in-app — is created when
+the diagnosis starts therapy): per questionnaire a rhythm (*every session* or
+*every N weeks*) and a channel (in-app, LimeSurvey or paper). Logging a held
+session sends the every-session items automatically (no second click); the
+background sweep sends due interval items; paper items are shown as due for
+manual/intern entry. Licensed instruments without stored wording (BDI-FS)
+can only go via LimeSurvey or paper. The app itself sends no e-mail: in-app
+tasks appear when the patient logs in.
+
+**Time axes.** Session-wise measures (PSTB, PHQ-4) keep the *session* as their
+analytic axis (the expected-course band is per session) but the dossier draws
+them on a calendar axis by default ("Datum | Sitzung" toggle). Date-cadenced
+instruments (BDI-FS) are aligned by **weeks since therapy start**, both in the
+charts and in the reference band (`src/lib/analytics/time-axis.ts`).
 
 ## Scripts
 
@@ -229,7 +253,13 @@ All endpoints require a session cookie except `POST /api/auth`,
 | `PUT /api/patients/:id/assessment` | Resend stored FHIR to the relay |
 | `POST /api/patients/:id/responses` | Submit one questionnaire (scored server-side) |
 | `POST /api/patients/:id/import` | Upload a LimeSurvey CSV export for this patient |
-| `POST /api/patients/:id/invitations` | Create + send a LimeSurvey invitation |
+| `POST /api/patients/:id/invitations` | Create + send a LimeSurvey invitation or in-app task |
+| `POST /api/patients/:id/plan` | Measurement plan `{ action: "add" \| "update" \| "remove" \| "applyDefaults", … }` |
+| `POST /api/patients/:id/session-log` | Log a session; held sessions auto-send the plan's every-session items |
+| `GET /api/entry/lookup?code=` | Intern entry: patient code → entry context (no identity, no scores) |
+| `POST /api/entry` / `GET /api/entry` | Intern entry: submit a paper form by code / own recent entries |
+| `DELETE /api/entry/:id` | Intern entry: delete an own entry within 24 h |
+| `GET/POST/PATCH /api/staff` | Director: list / create / (de)activate intern accounts |
 | `PATCH /api/invitations/:id` | `{ action: "remind" }` |
 | `POST /api/limesurvey/sync` | Poll LimeSurvey for completed responses |
 | `GET/POST /api/limesurvey/notify` | Completion ping (survey end-URL / webhook) |

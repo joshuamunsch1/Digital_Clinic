@@ -105,6 +105,40 @@ async function main() {
   console.log("\n✓ authenticated (session key obtained)");
 
   try {
+    // Global mail settings = the SENDING mailbox, the same for every patient.
+    // get_site_settings needs a superadmin; the SMTP password is never requested.
+    const setting = async (name: string): Promise<string | null> => {
+      const v = await rpc<unknown>("get_site_settings", [key, name]).catch(() => null);
+      return typeof v === "string" ? v : null;
+    };
+    const [method, host, ssl, user, sender, senderName] = await Promise.all(
+      ["emailmethod", "emailsmtphost", "emailsmtpssl", "emailsmtpuser", "siteadminemail", "siteadminname"].map(setting),
+    );
+    if (method === null) {
+      console.log("\n? mail settings: not readable with this account (needs superadmin)");
+    } else {
+      // LimeSurvey stores the encryption buttons as "" / "ssl" / "tls" and labels
+      // them "Off (unsafe)" / "SSL/TLS" / "StartTLS" (globalsettings/_email.php).
+      const sslLabel = ssl === "ssl" ? "SSL/TLS" : ssl === "tls" ? "StartTLS" : "Off";
+      console.log("\nMail settings (global — the SENDING mailbox, same for every patient):");
+      console.log(`  method     : ${method}`);
+      if (method === "smtp") {
+        console.log(`  smtp host  : ${host || "(empty)"}`);
+        console.log(`  encryption : ${sslLabel}`);
+        console.log(`  smtp user  : ${user || "(none)"}`);
+      }
+      console.log(`  sender     : ${senderName || ""} <${sender || "(empty)"}>`);
+      const port = (host ?? "").split(":")[1];
+      if (/^mailpit(:|$)/.test(host ?? ""))
+        console.log("  -> Mailpit test sink: every mail lands at http://localhost:8025, none reaches a real inbox");
+      if (port === "587" && ssl !== "tls")
+        console.log("  ! port 587 expects encryption 'StartTLS'");
+      if (port === "465" && ssl !== "ssl")
+        console.log("  ! port 465 expects encryption 'SSL/TLS'");
+      if (user && sender && user.includes("@") && user.toLowerCase() !== sender.toLowerCase())
+        console.log("  ! sender differs from the SMTP login — most providers reject or rewrite that; make them the same");
+    }
+
     const surveys = await rpc<Array<Record<string, string>>>("list_surveys", [key, username]);
     const visibleIds = Array.isArray(surveys) ? surveys.map((s) => String(s.sid)) : [];
     if (!Array.isArray(surveys) || !surveys.length) {

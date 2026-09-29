@@ -21,7 +21,7 @@ const MAX_COLS = 24;
 
 const RAMP_LO = [0xfb, 0xf3, 0xf1]; // near-white tint of C.danger
 const RAMP_HI = [0x9c, 0x4a, 0x3c]; // C.danger
-function heatColor(severity01: number): string {
+export function heatColor(severity01: number): string {
   const k = Math.min(1, Math.max(0, severity01));
   return `#${RAMP_LO.map((lo, i) => Math.round(lo + (RAMP_HI[i] - lo) * k)
     .toString(16)
@@ -45,11 +45,14 @@ export interface HeatCell {
   title?: string;
 }
 
-export function HeatGrid({ rows, cols, cellOf, footnote }: {
+export function HeatGrid({ rows, cols, cellOf, footnote, onColClick, colClickTitle }: {
   rows: HeatRow[];
   cols: HeatCol[];
   cellOf: (rowKey: string, colKey: string) => HeatCell;
   footnote?: React.ReactNode;
+  /// Column headers become buttons (item heatmap → that response's answers).
+  onColClick?: (colKey: string) => void;
+  colClickTitle?: string;
 }) {
   const t = useT();
   const capped = cols.length > MAX_COLS;
@@ -64,12 +67,20 @@ export function HeatGrid({ rows, cols, cellOf, footnote }: {
             minWidth: 150 + shown.length * 34,
           }}>
           <div style={{ position: "sticky", left: 0, zIndex: 2, background: C.surface, borderBottom: `1px solid ${C.line}` }} />
-          {shown.map((c) => (
-            <div key={c.key} className="text-xs px-1 py-1 text-center font-semibold"
-              style={{ color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap", overflow: "hidden" }}>
-              {c.label}
-            </div>
-          ))}
+          {shown.map((c) =>
+            onColClick ? (
+              <button key={c.key} type="button" onClick={() => onColClick(c.key)} title={colClickTitle}
+                className="text-xs px-1 py-1 text-center font-semibold"
+                style={{ color: C.spruce, background: "none", border: "none", borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap", overflow: "hidden", cursor: "pointer", textDecoration: "underline dotted" }}>
+                {c.label}
+              </button>
+            ) : (
+              <div key={c.key} className="text-xs px-1 py-1 text-center font-semibold"
+                style={{ color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap", overflow: "hidden" }}>
+                {c.label}
+              </div>
+            ),
+          )}
           {rows.map((r) => (
             <React.Fragment key={r.key}>
               <div className="text-xs px-2 py-1" title={r.title ?? r.label}
@@ -130,9 +141,10 @@ function responseColumns(instrument: InstrumentDef, responses: ResponseRecord[],
 /// Item × occasion heatmap: WHICH answers drive the scale scores. Colors use
 /// the scoring engine's recode (reverse items flipped into the owning scale's
 /// direction); the cell text stays the stored raw answer.
-export function ItemHeatmap({ instrument, responses }: {
+export function ItemHeatmap({ instrument, responses, onSelectResponse }: {
   instrument: InstrumentDef;
   responses: ResponseRecord[];
+  onSelectResponse?: (responseId: string) => void;
 }) {
   const t = useT();
   const { lang } = useLang();
@@ -158,7 +170,11 @@ export function ItemHeatmap({ instrument, responses }: {
       title: item ? `${item.text ?? item.label}: ${display}` : undefined,
     };
   };
-  return <HeatGrid rows={rows} cols={cols} cellOf={cellOf} footnote={t("itemHeatmapNote")} />;
+  return (
+    <HeatGrid rows={rows} cols={cols} cellOf={cellOf} footnote={t("itemHeatmapNote")}
+      colClickTitle={t("openAnswersHint")}
+      onColClick={onSelectResponse ? (key) => { const r = byKey.get(key); if (r) onSelectResponse(r.id); } : undefined} />
+  );
 }
 
 /// Scale × occasion profile — surfaces the analytically dormant process
