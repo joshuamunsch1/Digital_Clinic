@@ -4,7 +4,7 @@ import { C } from "@/lib/theme";
 import { tr, type Lang } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { MODULES } from "@/lib/dips/schema";
-import { gridRows, isVisible } from "@/lib/dips/engine";
+import { effectiveAnswers, gridRows, isVisible } from "@/lib/dips/engine";
 import { toFHIR } from "@/lib/dips/fhir";
 import type { DipsModule, Item } from "@/lib/dips/types";
 import type { ModuleAnswers, Patient } from "@/lib/types";
@@ -86,7 +86,7 @@ function ModuleSummary({ mod, m }: { mod: DipsModule; m: ModuleAnswers }) {
             const sev = m[`${grid!.id}_${r.key}_sev`];
             return (
               <span key={r.key} className="text-xs px-2 py-1 rounded-full" style={{ background: C.surfaceAlt, color: C.ink }}>
-                {tr(r.label, lang)}{sev != null && <span style={{ color: C.spruce, fontWeight: 700 }}> · {sev as React.ReactNode}</span>}
+                {(r.specify && String(m[`${grid!.id}_${r.key}_spec`] ?? "").trim()) || tr(r.label, lang)}{sev != null && <span style={{ color: C.spruce, fontWeight: 700 }}> · {sev as React.ReactNode}</span>}
               </span>
             );
           })}
@@ -100,7 +100,9 @@ export function DipsSummary({ patient }: { patient: Patient }) {
   const t = useT();
   const { lang } = useLang();
   const dips = patient.dips!;
-  const answers = useMemo(() => dips.answers || {}, [dips.answers]);
+  // The record is shown as the interview stands (see effectiveModule): older
+  // records may still carry answers under questions the skip logic hides.
+  const answers = useMemo(() => effectiveAnswers(dips.answers || {}), [dips.answers]);
   const entered = MODULES.filter((mod) => mod.enter(answers[mod.id] || {}));
   const langName =
     dips.lang === "de" ? t("langNameDe") : dips.lang === "fr" ? t("langNameFr") : dips.lang === "en" ? t("langNameEn") : dips.lang;

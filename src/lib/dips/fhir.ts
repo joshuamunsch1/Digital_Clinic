@@ -2,7 +2,7 @@ import { tr } from "../i18n";
 import type { Lang } from "../i18n";
 import type { Demographics, DipsAnswers, ModuleAnswers } from "../types";
 import { inkIsEmpty, inkKey, inkToSvg, parseInk, toBase64 } from "../ink";
-import { gridRows, isVisible } from "./engine";
+import { effectiveModule, gridRows, isVisible } from "./engine";
 import { MODULES } from "./schema";
 import type { Item } from "./types";
 
@@ -12,6 +12,7 @@ export const DIPS_QUESTIONNAIRE_URI =
 interface FhirAnswer {
   valueBoolean?: boolean;
   valueInteger?: number;
+  valueDecimal?: number;
   valueString?: string;
   valueAttachment?: { contentType: string; data: string };
 }
@@ -69,11 +70,13 @@ function answersForItem(item: Item, m: ModuleAnswers): FhirAnswer[] {
       ans.push(...inkAnswer(m, `${item.id}_text`));
       return ans;
     }
-    case "number_label":
-      return v !== undefined && v !== null && String(v).trim() !== "" && Number.isFinite(Number(v))
-        ? [{ valueInteger: Number(v) }]
-        : [];
+    case "number_label": {
+      if (v === undefined || v === null || String(v).trim() === "" || !Number.isFinite(Number(v))) return [];
+      const n = Number(v);
+      return [Number.isInteger(n) ? { valueInteger: n } : { valueDecimal: n }];
+    }
     case "date":
+    case "text":
       return v ? [{ valueString: String(v) }] : [];
     case "textarea": {
       const ans: FhirAnswer[] = v ? [{ valueString: String(v) }] : [];
@@ -105,6 +108,9 @@ function fhirItemsForModuleItem(item: Item, m: ModuleAnswers): FhirItem[] {
       .filter((r) => m[`${item.id}_${r.key}_primary`] != null)
       .map((r) => {
         const answer: FhirAnswer[] = [{ valueBoolean: m[`${item.id}_${r.key}_primary`] === "yes" }];
+        // "Andere"/free animal rows: what the interviewer specified.
+        const spec = r.specify ? String(m[`${item.id}_${r.key}_spec`] ?? "").trim() : "";
+        if (spec) answer.push({ valueString: spec });
         const sub: FhirItem[] = [];
         (item.cols ?? []).forEach((c) => {
           const val = m[`${item.id}_${r.key}_${c.key}`];
@@ -129,8 +135,10 @@ export function toFHIR(subject: FhirSubject, record: FhirRecord): QuestionnaireR
   // screen ("no" on the entry questions) is a documented rule-out, which a
   // receiving system must be able to distinguish from "not asked". Only
   // modules with no answers at all are omitted.
+  // Exported from the effective answers: nothing recorded under an item the
+  // skip logic hides (or under a checklist row answered "no") leaves the app.
   const groups: FhirItem[] = MODULES.flatMap((mod) => {
-    const m = answers[mod.id] || {};
+    const m = effectiveModule(mod, answers[mod.id] || {});
     const children = mod.sections
       .flatMap((s) => s.items)
       .filter((it) => isVisible(it, m))

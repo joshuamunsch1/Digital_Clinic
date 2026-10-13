@@ -443,7 +443,7 @@ export const DIPS_INTAKE: InstrumentDef = {
   items: [], // rendered by the src/lib/dips engine; answers stored per module
   scales: [], // no repeated-measures scales — a one-time diagnostic screening
   sourceNotes:
-    "Adapted from DIPS Open Access (Margraf et al., 2021) — the ANXIETY modules only (panic/agoraphobia/social/specific phobia/GAD/separation); the full DIPS-OA additionally covers depression, OCD, PTSD, somatic, eating and substance sections not implemented here. Therapist-administered (clinician respondent). Rendered by the dedicated structured-interview engine (src/lib/dips), not the generic likert renderer; the completed interview is stored as a ResponseInstance with the FHIR QuestionnaireResponse in meta.",
+    "Follows the ANXIETY section of DIPS Open Access 1.2 (Margraf, Cwik, von Brachel, Suppiger & Schneider, 2021; doi 10.46586/rub.172.149; CC BY-NC-ND 4.0) — panic/agoraphobia/social/specific phobia/GAD/separation; item numbers, starred items, skip rules and the item-to-criterion mapping were checked against the Interviewleitfaden and Protokollbogen, wording is condensed. The full DIPS additionally covers bipolar, depressive, OCD, trauma, somatic, eating, sleep, substance and further sections not implemented here. Therapist-administered (clinician respondent); an adult interview — minors belong in the Kinder-DIPS. Rendered by the dedicated structured-interview engine (src/lib/dips), not the generic likert renderer; the completed interview is stored as a ResponseInstance with the FHIR QuestionnaireResponse in meta.",
 };
 
 // PHQ-4 (Patient Health Questionnaire-4): ultra-brief anxiety+depression

@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { C } from "@/lib/theme";
 import { tr, T, type Lang } from "@/lib/i18n";
 import { MODULES } from "@/lib/dips/schema";
-import { allComplete, isVisible, screeningAnswered } from "@/lib/dips/engine";
+import { effectiveAnswers, effectiveModule, isVisible, moduleComplete, screeningAnswered } from "@/lib/dips/engine";
 import type { DipsModule } from "@/lib/dips/types";
 import type { DipsAnswers, ModuleAnswers } from "@/lib/types";
 import { Card, GhostButton, PrimaryButton } from "./ui";
@@ -17,7 +17,11 @@ export interface DipsSubmission {
   completedAt: string;
 }
 
-export function ModuleBlock({ mod, index, m, set, lang }: { mod: DipsModule; index: number; m: ModuleAnswers; set: SetFn; lang: Lang }) {
+export function ModuleBlock({ mod, index, m: raw, set, lang }: { mod: DipsModule; index: number; m: ModuleAnswers; set: SetFn; lang: Lang }) {
+  // Everything is read from the effective answers: what was entered under a
+  // question the skip logic has since hidden stays in the form state (so a
+  // corrected mis-click restores it) but must not steer the interview.
+  const m = effectiveModule(mod, raw);
   const visSections = mod.sections
     .map((s) => ({ s, items: s.items.filter((it) => isVisible(it, m)) }))
     .filter((x) => x.items.length);
@@ -28,6 +32,9 @@ export function ModuleBlock({ mod, index, m, set, lang }: { mod: DipsModule; ind
       <div className="flex items-center gap-2 mb-1">
         <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: C.spruceSoft, color: C.spruce }}>{index}</span>
         <h3 className="lc-display text-base" style={{ color: C.ink }}>{tr(mod.title, lang)}</h3>
+        {entered && !moduleComplete(mod, m) && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.amberSoft, color: C.amber }}>{tr(T.incomplete, lang)}</span>
+        )}
       </div>
       {visSections.map(({ s, items }, si) => (
         <div key={s.id} className={si === 0 ? "" : "mt-4 pt-4"} style={si === 0 ? {} : { borderTop: `1px solid ${C.line}` }}>
@@ -56,12 +63,21 @@ export function DipsForm({ heading, intro, submitLabel, busy, onSubmit, onCancel
 }) {
   const [lang, setLang] = useState<Lang>("de");
   const [answers, setAnswers] = useState<DipsAnswers>(() => Object.fromEntries(MODULES.map((mod) => [mod.id, {}])));
-  const setFor = (modId: string): SetFn => (key, val) => setAnswers((prev) => ({ ...prev, [modId]: { ...prev[modId], [key]: val } }));
-  const ready = allComplete(answers);
+  const [touched, setTouched] = useState(false);
+  const setFor = (modId: string): SetFn => (key, val) => {
+    setTouched(true);
+    setAnswers((prev) => ({ ...prev, [modId]: { ...prev[modId], [key]: val } }));
+  };
+  const open = MODULES.filter((mod) => !moduleComplete(mod, answers[mod.id] || {}));
+  const ready = open.length === 0;
   const someSkipped = MODULES.some((mod) => {
     const m = answers[mod.id] || {};
-    return mod.sections.flatMap((s) => s.items).some((it) => it.showIf && !it.showIf(m) && it.code);
+    return screeningAnswered(mod, m) && !mod.enter(effectiveModule(mod, m));
   });
+  // An interview takes the better part of an hour — don't drop it on a stray click.
+  const cancel = () => {
+    if (!touched || window.confirm(tr(T.discardInterview, lang))) onCancel();
+  };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -75,11 +91,16 @@ export function DipsForm({ heading, intro, submitLabel, busy, onSubmit, onCancel
 
       {someSkipped && <p className="text-xs mb-3" style={{ color: C.muted }}>ℹ︎ {tr(T.skipNote, lang)}</p>}
       <div className="flex gap-3 items-center flex-wrap">
-        <PrimaryButton disabled={!ready || busy} onClick={() => onSubmit({ lang, answers, completedAt: new Date().toISOString() })}>
+        {/* Submitted without the leftovers of hidden questions (effectiveAnswers). */}
+        <PrimaryButton disabled={!ready || busy} onClick={() => onSubmit({ lang, answers: effectiveAnswers(answers), completedAt: new Date().toISOString() })}>
           {submitLabel ?? tr(T.submit, lang)}
         </PrimaryButton>
-        <GhostButton onClick={onCancel}>{tr(T.back, lang)}</GhostButton>
-        {!ready && <span className="text-xs" style={{ color: C.muted }}>{tr(T.answerAll, lang)}</span>}
+        <GhostButton onClick={cancel}>{tr(T.back, lang)}</GhostButton>
+        {!ready && (
+          <span className="text-xs" style={{ color: C.muted }}>
+            {tr(T.answerAll, lang)} {tr(T.incompleteModules, lang)} {open.map((mod) => tr(mod.title, lang)).join(" · ")}
+          </span>
+        )}
       </div>
       <p className="text-xs mt-3" style={{ color: C.muted }}>{tr(T.required, lang)}</p>
     </div>

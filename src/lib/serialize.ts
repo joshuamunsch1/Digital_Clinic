@@ -320,7 +320,9 @@ export function patientFromRow(p: PatientRow): Patient {
   const responses = [...p.responses].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
   );
-  const dipsRow = responses.find((r) => r.instrumentId === DIPS_INSTRUMENT_ID);
+  // intake_once keeps a single DIPS row; should a replaced one ever linger,
+  // the most recent interview is the record.
+  const dipsRow = responses.filter((r) => r.instrumentId === DIPS_INSTRUMENT_ID).pop();
   return {
     id: p.id,
     name: p.name,

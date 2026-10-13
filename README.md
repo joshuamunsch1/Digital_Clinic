@@ -249,8 +249,10 @@ All endpoints require a session cookie except `POST /api/auth`,
 | `POST /api/patients` | Register a patient manually (director/admin; optional e-mail + demographics) |
 | `GET /api/patients/:id` | One patient (responses, scores, invitations) |
 | `PATCH /api/patients/:id` | `{ action: "assign" \| "diagnose" \| "contact" \| "archive" \| "unarchive", … }` |
-| `POST /api/patients/:id/assessment` | Submit DIPS intake → FHIR → ResponseInstance |
-| `PUT /api/patients/:id/assessment` | Resend stored FHIR to the relay |
+| `POST /api/patients/:id/assessment` | Submit the demographics intake (patient or clinical staff) |
+| `POST /api/patients/:id/dips` | Therapist-administered DIPS interview → validated → FHIR → ResponseInstance (staff only) |
+| `GET /api/patients/:id/dips/export` | Download the stored DIPS interview as JSON (staff only) |
+| `PUT /api/patients/:id/assessment` | Resend the stored DIPS FHIR payload to the relay (clinical staff, own caseload) |
 | `POST /api/patients/:id/responses` | Submit one questionnaire (scored server-side) |
 | `POST /api/patients/:id/import` | Upload a LimeSurvey CSV export for this patient |
 | `POST /api/patients/:id/invitations` | Create + send a LimeSurvey invitation or in-app task |
@@ -355,11 +357,24 @@ This scaffold is intentionally minimal. Before any real-world use:
 
 ## Attribution
 
-The intake content is adapted from **DIPS Open Access** (Margraf, Cwik,
-von Brachel, Suppiger & Schneider, 2021) for demonstration — the ANXIETY
-modules only (the full DIPS-OA also covers depression, OCD, PTSD, somatic,
-eating and substance sections). Since the Batch 8 workflow change it is
-administered by the therapist (clinician respondent), and since 2026-08-24 it
-records the DIPS-convention clinician severity rating (0–8) per module. The
-adaptation is not a validated instrument, and its mechanical ICD-10 proposals
-are decision support for the clinician, never automatic diagnoses.
+The diagnostic interview follows the ANXIETY section of **DIPS Open Access
+1.2** (Margraf, Cwik, von Brachel, Suppiger & Schneider, 2021; Mental Health
+Research and Treatment Center, Ruhr-Universität Bochum,
+doi [10.46586/rub.172.149](https://doi.org/10.46586/rub.172.149)) — the full
+DIPS also covers bipolar, depressive, obsessive-compulsive, trauma, somatic,
+eating, sleep, substance and further sections that are not implemented here.
+Item numbers, starred (indispensable) items, skip rules and the mapping of
+items to DSM-5 criteria were checked against the Interviewleitfaden (pp. 18–77)
+and the Protokollbogen (pp. 297–311); see the header comments of
+`src/lib/dips/schema.ts` and `src/lib/dips/diagnosis.ts` for what deliberately
+differs (condensed wording, ICD-10 instead of the DSM-5 code set, the
+criteria for minors — the DIPS Open Access is the adult interview; children
+and adolescents belong in the Kinder-DIPS). It is administered by the therapist
+and records the 0–8 severity rating of each diagnosis. The mechanical ICD-10
+proposals are decision support for the clinician, never automatic diagnoses.
+
+**Licence — to clear before any real use:** the DIPS Open Access is published
+under CC BY-NC-ND 4.0 (attribution, non-commercial, *no derivatives*). A
+condensed, partly translated, software-embedded version of one section is an
+adaptation, which that licence does not cover on its own — ask the authors
+(RUB Bochum) for permission, or reproduce the original wording unchanged.

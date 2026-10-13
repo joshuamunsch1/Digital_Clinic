@@ -43,12 +43,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ patient: patientForSession(updated!, s.role) });
 }
 
-// Resend a stored submission to the FHIR relay.
+// Resend a stored DIPS interview to the FHIR relay. Clinical staff only, on
+// their own caseload: the route used to accept ANY session, so a signed-in
+// patient could trigger the relay for — and read back — another patient's record.
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const s = getSession();
   if (!s) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!isClinicalRole(s.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const restricted = staffNetworkGuard(s, req);
   if (restricted) return restricted;
+  const patient = await prisma.patient.findUnique({ where: { id: params.id }, select: { therapistId: true } });
+  if (!patient) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!therapistScoped(s, patient)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const row = await prisma.responseInstance.findFirst({
     where: { patientId: params.id, instrumentId: DIPS_INSTRUMENT_ID },
   });

@@ -45,7 +45,7 @@ function DipsGrid({ item, m, set, lang }: { item: Item; m: ModuleAnswers; set: S
     <div>
       <p className="text-sm" style={{ color: C.ink }}>
         {item.code && <span className="font-bold mr-2" style={{ color: C.spruce }}>{item.code}</span>}
-        {tr(item.q, lang)}<span style={{ color: C.amber }}> *</span>
+        {tr(item.q, lang)}{item.req ? <span style={{ color: C.amber }}> *</span> : null}
       </p>
       {item.note && <p className="text-xs mt-1 mb-1" style={{ color: C.muted }}>{tr(item.note, lang)}</p>}
       <p className="text-xs mb-3" style={{ color: C.muted }}>{tr(T.sev03, lang)}</p>
@@ -60,6 +60,10 @@ function DipsGrid({ item, m, set, lang }: { item: Item; m: ModuleAnswers; set: S
                 return (
                   <div key={r.key} className="rounded-lg px-3 py-2" style={{ background: C.surfaceAlt }}>
                     <p className="text-sm mb-2" style={{ color: C.ink }}>{tr(r.label, lang)}</p>
+                    {r.specify && (
+                      <input style={{ ...inputStyle, maxWidth: 320, marginBottom: 8 }} maxLength={200} placeholder={tr(T.specify, lang)}
+                        value={(m[`${item.id}_${r.key}_spec`] as string) || ""} onChange={(e) => set(`${item.id}_${r.key}_spec`, e.target.value)} />
+                    )}
                     <div className="flex flex-wrap items-end gap-4">
                       <div>
                         <span className="text-xs block mb-1" style={{ color: C.muted }}>{tr(item.primaryLabel, lang)}</span>
@@ -128,6 +132,8 @@ export function DipsItem({ item, m, set, lang }: { item: Item; m: ModuleAnswers;
         <InkControl value={m[inkKey(item.id)] as string | undefined} onChange={(s) => set(inkKey(item.id), s)} lang={lang} />
       </div>
     );
+  if (item.type === "text")
+    return <div>{q}<input style={{ ...inputStyle, marginTop: 8 }} maxLength={200} placeholder={tr(T.optional, lang)} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} /></div>;
   if (item.type === "date")
     return <div>{q}<input style={{ ...inputStyle, maxWidth: 220, marginTop: 8 }} placeholder={tr(T.monthYearPlaceholder, lang)} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} /></div>;
   if (item.type === "monthyear_range")
@@ -147,7 +153,7 @@ export function DipsItem({ item, m, set, lang }: { item: Item; m: ModuleAnswers;
     return (
       <div>{q}
         <div className="flex items-center gap-2 mt-2">
-          <input type="number" min="0" style={{ ...inputStyle, maxWidth: 110 }} value={(v as string) || ""} onChange={(e) => set(item.id, e.target.value)} />
+          <input type="number" min="0" max={item.max} style={{ ...inputStyle, maxWidth: 110 }} value={v == null ? "" : String(v)} onChange={(e) => set(item.id, e.target.value)} />
           <span className="text-xs" style={{ color: C.muted }}>{tr(item.unit, lang)}</span>
         </div>
       </div>

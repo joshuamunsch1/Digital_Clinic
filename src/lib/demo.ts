@@ -180,25 +180,33 @@ export const SDQ_SERIES: { wave: string; daysAgo: number; role: string; answers:
 export type DipsModuleId = "panic" | "agora" | "social" | "phobia" | "gad" | "sep";
 const DIPS_MODULE_IDS: DipsModuleId[] = ["panic", "agora", "social", "phobia", "gad", "sep"];
 
-/// Clinically coherent positive interview blocks. No demo patient needs a
-/// positive separation-anxiety module, so "sep" has no fixture.
+/// Checklist rows answered "Nein" — a conducted interview codes every row.
+const rowsNo = (grid: string, keys: string[]): ModuleAnswers =>
+  Object.fromEntries(keys.map((k) => [`${grid}_${k}_primary`, "no"]));
+
+/// Clinically coherent positive interview blocks: complete interviews as the
+/// form would submit them (every starred item answered, nothing under a
+/// skipped question — tests/dips-diagnosis.test.ts validates them against the
+/// schema). No demo patient needs a positive separation-anxiety module, so
+/// "sep" has no fixture.
 const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
   panic: {
-    "1.1": "yes", "1.1_text": "Im Supermarkt und beim Autofahren", "1.2": "yes", "1.3_from": "11/2025", "1.3_to": "—",
+    "1.1": "yes", "1.1_text": "Im Supermarkt und beim Autofahren",
     "2.1": "Oft ganz plötzlich, auch zu Hause", "2.2": "yes", "2.2_unexpected": true, "3": "yes", "4": "05/2026",
     symptoms_s1_primary: "yes", symptoms_s1_sev: 3, symptoms_s2_primary: "yes", symptoms_s2_sev: 2, symptoms_s3_primary: "yes", symptoms_s3_sev: 2,
     symptoms_s4_primary: "yes", symptoms_s4_sev: 3, symptoms_s5_primary: "no", symptoms_s6_primary: "yes", symptoms_s6_sev: 2, symptoms_s7_primary: "no",
     symptoms_s8_primary: "yes", symptoms_s8_sev: 2, symptoms_s9_primary: "no", symptoms_s10_primary: "yes", symptoms_s10_sev: 3, symptoms_s11_primary: "yes", symptoms_s11_sev: 3,
     symptoms_s12_primary: "no", symptoms_s13_primary: "yes", symptoms_s13_sev: 1, "6": "6",
     "7": "yes", "8.1": "no", "8.2": "yes", "8.3": "yes", "8.4": "no", "9": "yes", "9_text": "Vermeide volle Läden", "10": "yes", "10_text": "Supermärkte, Autobahn",
-    cog: "Enge Räume, Herzklopfen nach Kaffee", cope: "Atmen, nach draußen gehen", subst1: "no", subst2: "no", organic: "no",
+    cog: "Enge Räume, Herzklopfen nach Kaffee", cope: "Atmen, nach draußen gehen", subst1: "no", organic: "no",
     onset_age: "28", hist1: "yes", hist1_text: "Stress bei der Arbeit", hist2: "yes", hist2_text: "Hohe Belastung im Beruf",
     impact_impair: 6, impact_distress: 7, clinsev_sev: 6, earlier: "no",
   },
-  // ≥ 2 of 5 situation categories at clinical level (transport, enclosed, crowds).
+  // Three of the five situation areas (transport, enclosed places, crowds).
   agora: {
     "1.1": "yes", "1.1_text": "Einkaufszentren, Bus und Bahn, Menschenmengen",
-    "1.2": "yes", "1.3": "yes", companion: "yes",
+    "1.2": "yes", "1.2_text": "Schwindel, Ohnmacht", "1.3": "yes", companion: "yes", companion_text: "Partner",
+    ...rowsNo("grid", ["car", "ship", "fly", "park", "market", "bridge", "cinema", "lift", "tunnel", "alonehome", "queue", "outside"]),
     grid_bus_primary: "yes", grid_bus_sev: 2, grid_bus_avoid: "yes",
     grid_train_primary: "yes", grid_train_sev: 2, grid_train_avoid: "no",
     grid_shops_primary: "yes", grid_shops_sev: 3, grid_shops_avoid: "yes",
@@ -206,61 +214,65 @@ const DIPS_POSITIVE: Partial<Record<DipsModuleId, ModuleAnswers>> = {
     "4": "yes", safety: "yes", safety_text: "Notfalltropfen und Handy immer dabei",
     cog: "Angst, ohnmächtig zu werden und nicht rechtzeitig wegzukommen",
     cope: "Verlässt die Situation, wartet draußen",
-    approp: "no", subst1: "no", subst2: "no", organic: "no",
+    approp: "no", subst1: "no", organic: "no",
     onset_age: "24", dur6: "yes", hist1: "no", hist2: "yes", hist2_text: "Umzug und Stellenwechsel",
     impact_impair: 5, impact_distress: 5, clinsev_sev: 5, earlier: "no",
   },
   social: {
     "1.1": "yes", "1.1_text": "Referate in der Schule, Gespräche mit Unbekannten",
-    "1.2": "yes", "1.3": "yes",
+    "1.2": "yes", "1.3": "yes", "2.1": "yes", "2.1_text": "Meldet sich krank, vermeidet Referate",
+    ...rowsNo("grid", ["meet", "eat", "toilet", "talkfam", "perform", "write", "date", "authority", "assert", "assert2", "startconv", "keepconv", "examwritten"]),
     grid_speak_primary: "yes", grid_speak_sev: 3, grid_speak_avoid: "yes",
     grid_examoral_primary: "yes", grid_examoral_sev: 3, grid_examoral_avoid: "yes",
     grid_talkstranger_primary: "yes", grid_talkstranger_sev: 2, grid_talkstranger_avoid: "no",
     grid_party_primary: "yes", grid_party_sev: 2, grid_party_avoid: "yes",
-    "4.2": "yes", "6": "yes",
+    "4.1": "seit der Oberstufe", "4.2": "yes", "6": "yes", "7": "no", "11": "no",
     cog: "Angst, sich zu blamieren; alle würden es merken",
-    cope: "Meldet sich krank, vermeidet Referate",
-    approp: "no", subst1: "no", subst2: "no", organic: "no",
-    onset_age: "13", hist1: "yes", hist1_text: "Bloßstellung vor der Klasse",
+    approp: "no", subst1: "no", organic: "no",
+    hist1: "yes", hist1_text: "Bloßstellung vor der Klasse",
     hist2: "no", impact_impair: 5, impact_distress: 6, clinsev_sev: 5, earlier: "no",
   },
   phobia: {
     "1.1": "yes", "1.1_text": "Spinnen — schon beim Anblick von Bildern",
-    grid_animal1_primary: "yes", grid_animal1_sev: 3, grid_animal1_avoid: "yes",
-    "3": "yes",
+    ...rowsNo("grid", ["heights", "storms", "water", "blood", "injection", "draw", "planes", "elevators", "enclosed", "dental", "choke", "vomit", "infect"]),
+    grid_animal1_primary: "yes", grid_animal1_spec: "Spinnen", grid_animal1_sev: 3, grid_animal1_avoid: "yes",
     cog: "Die Spinne könnte plötzlich auf mich zukommen",
-    cope: "Betritt Keller und Estrich nur nach Kontrolle durch andere",
-    approp: "no", subst1: "no", subst2: "no", organic: "no",
-    onset_age: "9", dur6: "yes", hist1: "no", hist2: "no",
+    "3": "yes", "4.2": "yes", "4.3": "no",
+    approp: "no", subst1: "no", organic: "no",
+    since: "seit der Kindheit", dur6: "yes", hist1: "no", hist2: "no",
     impact_impair: 4, impact_distress: 6, clinsev_sev: 4, earlier: "no",
   },
-  // Screening + uncontrollability + ≥ 3 of 6 accompanying symptoms.
+  // Screening + uncontrollability + four worry domains + four accompanying symptoms.
   gad: {
     "1.1": "yes", "1.2": "Arbeit, Gesundheit der Eltern, Finanzen, Alltagskleinigkeiten", "1.3": "yes",
+    ...rowsNo("worries", ["ownhealth", "otherhealth", "social", "society"]),
     worries_family_primary: "yes", worries_family_expr: 2, worries_family_unc: 2,
     worries_work_primary: "yes", worries_work_expr: 3, worries_work_unc: 3,
     worries_finance_primary: "yes", worries_finance_expr: 2, worries_finance_unc: 2,
     worries_minor_primary: "yes", worries_minor_expr: 2, worries_minor_unc: 3,
+    "5": "60",
+    ...rowsNo("symptoms", ["fatigue", "irritable"]),
     symptoms_restless_primary: "yes", symptoms_restless_sev: 2, symptoms_restless_maj: "yes",
     symptoms_concentration_primary: "yes", symptoms_concentration_sev: 2, symptoms_concentration_maj: "yes",
     symptoms_tension_primary: "yes", symptoms_tension_sev: 3, symptoms_tension_maj: "yes",
     symptoms_sleep_primary: "yes", symptoms_sleep_sev: 2, symptoms_sleep_maj: "yes",
     cog: "Die Sorgen beginnen oft schon beim Aufwachen",
     cope: "Rückversicherung bei der Familie, Listen schreiben",
-    subst1: "no", subst2: "no", organic: "no",
-    onset_age: "19", hist1: "no", hist2: "yes", hist2_text: "Prüfungsphase im Studium",
+    subst1: "no", organic: "no",
+    since: "2021", hist1: "no", hist2: "yes", hist2_text: "Prüfungsphase im Studium",
     impact_impair: 5, impact_distress: 6, clinsev_sev: 5, earlier: "yes", earlier_text: "2022, mehrere Monate",
   },
 };
 
-/// Screening answered "no" for every module entry question — the module was
-/// asked but not entered (keys per src/lib/dips/schema.ts screening predicates).
+/// Screening answered "no" for every module entry question (current phase and
+/// "jemals") — the module was asked but not entered (keys per the screening
+/// predicates in src/lib/dips/schema.ts).
 const DIPS_NEGATIVE: Record<DipsModuleId, ModuleAnswers> = {
   panic: { "1.1": "no", "1.2": "no" },
   agora: { "1.1": "no", "1.4": "no" },
   social: { "1.1": "no", "1.4": "no" },
   phobia: { "1.1": "no", "1.2": "no" },
-  gad: { "1.1": "no" },
+  gad: { "1.1": "no", "1.4": "no" },
   sep: { "1.1": "no", "1.3": "no" },
 };
 

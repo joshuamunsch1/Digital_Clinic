@@ -445,6 +445,64 @@ has NO patients. `DataEntryView` = intern home; director `StaffInternsCard`
 (`/api/staff`, intern role only). Dossier header "Code kopieren". Demo intern
 Lea Graf `lea.graf@linden-clinic.ch` / `intern2026`. 227 tests.
 
+**Batch 17 (2026-10-12)**: **DIPS checked against the official DIPS Open Access
+1.2** (Margraf et al. 2021, doi 10.46586/rub.172.149 — Interviewleitfaden
+pp. 18–77, Protokollbogen pp. 297–311; the PDF's text layer is garbled, read it
+as page images). This SUPERSEDES the Batch 8/15 "manual not verifiable" caveat
+for structure and criterion mapping. **Skip logic**: `effectiveModule`/
+`effectiveAnswers` in `engine.ts` drop every answer under an item the skip
+logic hides (fixpoint) and the follow-up ratings of a "Nein" checklist row —
+the form keeps such leftovers in state (a corrected mis-click restores them)
+but form visibility, completeness, evaluation, summary and FHIR all read the
+effective answers; lifetime branches additionally require 1.1 === "no" (a
+stale 1.4/1.5 used to keep agoraphobia/social entered). **Schema** (`schema.ts`):
+`code` = official item number, `req` = official star; ids stayed stable
+(phobia id "3" = *4.1; sep id "4.1" = the 4-week child question, a clinic
+addition coded "KJ", NOT a DIPS item). Tail is built from `TailOptions.codes`/
+`starred` per module and sorted by code (substance rule-out starred only for
+panic/social/GAD, organic for panic/agora/social/GAD, impairment everywhere but
+panic); `subst2` only after `subst1` yes; organic examples per the manual.
+Checklists are `req` (the UI always showed the star, the engine never enforced
+it), starred follow-up columns (`GridCol.req`: Vermeidung, Mehrzahl der Tage)
+too; `GridRow.specify` = "Andere"/Tier rows with free text, exempt from
+completeness. New items: panic 1.2 only after 1.1 no; agora 1.7, 2.1 req,
+"Andere" rows, 8.1, **"Allein zu Hause" back in Geschlossene Räume (official
+3.15 — Batch 15's nonCore group removed)**; social *2.1/*2.2, 1.7, *4.1, *7,
+*11, assert split in two, other rows; phobia *4.2–*4.5, 5.1, other rows; GAD
+lifetime branch 1.4–1.7, 4.1–4.3, *5 (% of day), other worry rows; sep 1.5,
+since, *7 appropriateness. New item type `text`. **Rules** (`diagnosis.ts`,
+Protokollbogen margin mapping): appropriateness (`approp === "no"`) is a
+CRITERION for agora/social/phobia/sep (was a caveat); distress criterion =
+impairment OR distress ≥ 4 and is no longer overridden by the severity rating
+(the 0–8 ratings are interviewer ratings, not patient self-ratings) — the
+severity rating is its own criterion when given (0–3 subclinical blocks) and
+only stands in for impact on records without impact ratings; **panic disorder
+has NO distress criterion** (item 17 unstarred); a ticked situation counts
+unless explicitly rated < 2 without avoidance (rating is optional);
+agoraphobia gained the avoid/companion/endure criterion; social D = 2.1 ∨ 2.2
+(checklist fallback for older records); phobia B = 4.1 ∨ 4.2
+[clinician-confirm], subtype in the suggested text; GAD needs ≥ 2 worry
+domains and ≥ 3 symptoms with "at least some" on most days (Batch 15's
+per-symptom exclusion was stricter than DSM-5/DIPS), has a currency criterion;
+cross-module differential caveats. Still this engine's own choices, documented
+in the file headers: ICD-10 WHO/GM codes (the Protokollbogen prints DSM-5's
+F40.00/F40.10/F40.2xx and gives panic + agoraphobia separately), the minors'
+criteria (DIPS-OA is the ADULT interview → Kinder-DIPS), SEV_CLINICAL.
+**Server**: `dips/validate.ts` — POST `.../dips` rejects unknown keys/invalid
+values (400 `invalid_answers`) and incomplete interviews (400
+`dips_incomplete`), stores effective answers only, writes the new record
+before deleting the old; `patientFromRow` takes the latest DIPS row. **Security
+fix**: `PUT .../assessment` (relay resend) accepted ANY session — a patient
+could read back another patient's record; now clinical role + caseload scoped.
+UI: incomplete-module badge + "Noch offen" list, confirm before discarding a
+started interview, stale "Selbstbericht-Screening" disclaimer corrected. Demo
+fixtures are complete schema-valid interviews (re-seed to refresh stored demo
+records; old ones still evaluate). NOT done: no draft persistence (a page
+reload loses a running interview), second specific phobia, certainty rating
+(0–100), unstarred items social 8 / GAD 2.x. ⚠ Licence: DIPS-OA is CC BY-NC-ND
+4.0 — a condensed/translated adaptation needs the authors' permission (README).
+243 tests.
+
 ## Reference documents
 
 1. **`docs/legacy-system-reference.md`** — factual writeup of how the real clinic

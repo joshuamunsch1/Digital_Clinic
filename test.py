@@ -1,14 +1,31 @@
-coins = [1,2,5]
-num = 11
+matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
-dp = [1000 for i in range(num)]
+dp = [[1 for j in range(len(matrix[0]))] for i in range(len(matrix))]
+longest = 0
 
-for coin in coins:
-    dp[coin] = 1
+def memo(x,y):
+    if x > 0 and matrix[y][x-1] > matrix[y][x]:
+        dp[y][x] = max(dp[y][x],memo(x-1,y) + 1)
 
-for i in range(num):
-    for coin in coins:
-        if i + 1 - coin >= 0 and dp[i+1-coin] != 1000:
-            dp[i] = min(dp[i+1-coin] + 1, dp[i])
+    if x < len(matrix[0])-1 and matrix[y][x+1] > matrix[y][x]:
+        dp[y][x] = max(dp[y][x], memo(x+1,y) + 1)
 
-print(dp[-1])
+    if y > 0 and matrix[y-1][x] > matrix[y][x]:
+        dp[y][x] = max(dp[y][x], memo(x,y-1) + 1)
+
+    if y < len(matrix)-1 and matrix[y+1][x] > matrix[y][x]:
+        dp[y][x] = max(dp[y][x], memo(x,y+1) + 1)
+
+    return dp[y][x] 
+
+
+for i in range(len(matrix)):
+    for j in range(len(matrix[0])):
+        if dp[i][j] != 1:
+            continue
+        memo(j,i)        
+
+    for row in dp:
+        print(row)
+
+    print('')
